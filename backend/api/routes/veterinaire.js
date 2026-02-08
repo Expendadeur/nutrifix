@@ -192,6 +192,11 @@ router.get('/animaux', authenticate, authorize('veterinaire'), async (req, res) 
             type_animal
         } = req.query;
 
+        // Convertir en nombres pour éviter l'erreur ER_WRONG_ARGUMENTS
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        const offset = (pageNum - 1) * limitNum;
+
         let sql = `
             SELECT 
                 a.*,
@@ -234,10 +239,8 @@ router.get('/animaux', authenticate, authorize('veterinaire'), async (req, res) 
         sql += ' GROUP BY a.id';
         sql += ' ORDER BY a.statut_sante DESC, a.date_naissance DESC';
 
-        // Pagination
-        const offset = (parseInt(page) - 1) * parseInt(limit);
-        sql += ' LIMIT ? OFFSET ?';
-        params.push(parseInt(limit), offset);
+        // Utiliser des nombres directement dans la requête au lieu de placeholders
+        sql += ` LIMIT ${limitNum} OFFSET ${offset}`;
 
         const animaux = await db.query(sql, params);
 
@@ -284,9 +287,9 @@ router.get('/animaux', authenticate, authorize('veterinaire'), async (req, res) 
             data: animaux,
             pagination: {
                 total: countResult.total,
-                page: parseInt(page),
-                limit: parseInt(limit),
-                pages: Math.ceil(countResult.total / limit)
+                page: pageNum,
+                limit: limitNum,
+                pages: Math.ceil(countResult.total / limitNum)
             }
         });
     } catch (error) {
@@ -406,6 +409,11 @@ router.get('/animaux/:id/historique', authenticate, authorize('veterinaire'), as
         const animalId = parseInt(req.params.id);
         const { page = 1, limit = 20 } = req.query;
 
+        // Convertir en nombres
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        const offset = (pageNum - 1) * limitNum;
+
         const sql = `
             SELECT 
                 ss.*,
@@ -422,11 +430,10 @@ router.get('/animaux/:id/historique', authenticate, authorize('veterinaire'), as
             LEFT JOIN utilisateurs u ON ss.id_technicien = u.id
             WHERE ss.id_animal = ?
             ORDER BY ss.date_intervention DESC
-            LIMIT ? OFFSET ?
+            LIMIT ${limitNum} OFFSET ${offset}
         `;
 
-        const offset = (parseInt(page) - 1) * parseInt(limit);
-        const historique = await db.query(sql, [animalId, parseInt(limit), offset]);
+        const historique = await db.query(sql, [animalId]);
 
         // Count total
         const countSql = `
@@ -441,9 +448,9 @@ router.get('/animaux/:id/historique', authenticate, authorize('veterinaire'), as
             data: historique,
             pagination: {
                 total: countResult.total,
-                page: parseInt(page),
-                limit: parseInt(limit),
-                pages: Math.ceil(countResult.total / limit)
+                page: pageNum,
+                limit: limitNum,
+                pages: Math.ceil(countResult.total / limitNum)
             }
         });
     } catch (error) {
@@ -468,6 +475,11 @@ router.get('/interventions', authenticate, authorize('veterinaire'), async (req,
             search,
             id_animal
         } = req.query;
+
+        // Convertir en nombres
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        const offset = (pageNum - 1) * limitNum;
 
         let sql = `
             SELECT 
@@ -538,11 +550,7 @@ router.get('/interventions', authenticate, authorize('veterinaire'), async (req,
         }
 
         sql += ' ORDER BY ss.date_intervention DESC';
-
-        // Pagination
-        const offset = (parseInt(page) - 1) * parseInt(limit);
-        sql += ' LIMIT ? OFFSET ?';
-        params.push(parseInt(limit), offset);
+        sql += ` LIMIT ${limitNum} OFFSET ${offset}`;
 
         const interventions = await db.query(sql, params);
 
@@ -603,9 +611,9 @@ router.get('/interventions', authenticate, authorize('veterinaire'), async (req,
             data: interventions,
             pagination: {
                 total: countResult.total,
-                page: parseInt(page),
-                limit: parseInt(limit),
-                pages: Math.ceil(countResult.total / limit)
+                page: pageNum,
+                limit: limitNum,
+                pages: Math.ceil(countResult.total / limitNum)
             }
         });
     } catch (error) {
@@ -854,7 +862,7 @@ router.put('/interventions/:id', authenticate, authorize('veterinaire'), async (
         // Toujours mettre à jour la date de modification
         fields.push('date_modification = NOW()');
 
-        if (fields.length === 0) {
+        if (fields.length === 1) { // Seulement date_modification
             return res.status(400).json({
                 success: false,
                 message: 'Aucune donnée à mettre à jour.'
@@ -1134,6 +1142,671 @@ router.get('/statistiques', authenticate, authorize('veterinaire'), async (req, 
         res.status(500).json({
             success: false,
             message: 'Erreur lors de la récupération des statistiques.'
+        });
+    }
+});
+
+// ==================== GESTION DES SALAIRES ====================
+
+// Obtenir l'historique des salaires du vétérinaire
+router.get('/salaires/historique', authenticate, authorize('veterinaire'), async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { page = 1, limit = 12, annee, statut } = req.query;
+
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        const offset = (pageNum - 1) * limitNum;
+
+        let sql = `
+            SELECT 
+                s.*,
+                CASE 
+                    WHEN s.mois = 1 THEN 'Janvier'
+                    WHEN s.mois = 2 THEN 'Février'
+                    WHEN s.mois = 3 THEN 'Mars'
+                    WHEN s.mois = 4 THEN 'Avril'
+                    WHEN s.mois = 5 THEN 'Mai'
+                    WHEN s.mois = 6 THEN 'Juin'
+                    WHEN s.mois = 7 THEN 'Juillet'
+                    WHEN s.mois = 8 THEN 'Août'
+                    WHEN s.mois = 9 THEN 'Septembre'
+                    WHEN s.mois = 10 THEN 'Octobre'
+                    WHEN s.mois = 11 THEN 'Novembre'
+                    WHEN s.mois = 12 THEN 'Décembre'
+                END as mois_nom,
+                val.nom_complet as validateur_nom
+            FROM salaires s
+            LEFT JOIN utilisateurs val ON s.valide_par = val.id
+            WHERE s.id_utilisateur = ?
+        `;
+        const params = [userId];
+
+        if (annee) {
+            sql += ' AND s.annee = ?';
+            params.push(parseInt(annee));
+        }
+
+        if (statut) {
+            sql += ' AND s.statut_paiement = ?';
+            params.push(statut);
+        }
+
+        sql += ' ORDER BY s.annee DESC, s.mois DESC';
+        sql += ` LIMIT ${limitNum} OFFSET ${offset}`;
+
+        const salaires = await db.query(sql, params);
+
+        // Count total
+        let countSql = `
+            SELECT COUNT(*) as total
+            FROM salaires
+            WHERE id_utilisateur = ?
+        `;
+        const countParams = [userId];
+
+        if (annee) {
+            countSql += ' AND annee = ?';
+            countParams.push(parseInt(annee));
+        }
+
+        if (statut) {
+            countSql += ' AND statut_paiement = ?';
+            countParams.push(statut);
+        }
+
+        const [countResult] = await db.query(countSql, countParams);
+
+        res.status(200).json({
+            success: true,
+            data: salaires,
+            pagination: {
+                total: countResult.total,
+                page: pageNum,
+                limit: limitNum,
+                pages: Math.ceil(countResult.total / limitNum)
+            }
+        });
+    } catch (error) {
+        console.error('Get salaires historique error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors de la récupération de l\'historique des salaires.'
+        });
+    }
+});
+
+// Obtenir les détails d'un salaire spécifique
+router.get('/salaires/:id', authenticate, authorize('veterinaire'), async (req, res) => {
+    try {
+        const salaireId = parseInt(req.params.id);
+        const userId = req.userId;
+
+        const sql = `
+            SELECT 
+                s.*,
+                CASE 
+                    WHEN s.mois = 1 THEN 'Janvier'
+                    WHEN s.mois = 2 THEN 'Février'
+                    WHEN s.mois = 3 THEN 'Mars'
+                    WHEN s.mois = 4 THEN 'Avril'
+                    WHEN s.mois = 5 THEN 'Mai'
+                    WHEN s.mois = 6 THEN 'Juin'
+                    WHEN s.mois = 7 THEN 'Juillet'
+                    WHEN s.mois = 8 THEN 'Août'
+                    WHEN s.mois = 9 THEN 'Septembre'
+                    WHEN s.mois = 10 THEN 'Octobre'
+                    WHEN s.mois = 11 THEN 'Novembre'
+                    WHEN s.mois = 12 THEN 'Décembre'
+                END as mois_nom,
+                calc.nom_complet as calcule_par_nom,
+                val.nom_complet as valide_par_nom,
+                u.nom_complet as employe_nom,
+                u.matricule as employe_matricule,
+                d.nom as departement_nom
+            FROM salaires s
+            LEFT JOIN utilisateurs calc ON s.calcul_par = calc.id
+            LEFT JOIN utilisateurs val ON s.valide_par = val.id
+            JOIN utilisateurs u ON s.id_utilisateur = u.id
+            LEFT JOIN departements d ON u.id_departement = d.id
+            WHERE s.id = ?
+            AND s.id_utilisateur = ?
+        `;
+
+        const [salaire] = await db.query(sql, [salaireId, userId]);
+
+        if (!salaire) {
+            return res.status(404).json({
+                success: false,
+                message: 'Salaire non trouvé.'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: salaire
+        });
+    } catch (error) {
+        console.error('Get salaire details error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors de la récupération des détails du salaire.'
+        });
+    }
+});
+
+// Demander le paiement d'un salaire
+router.post('/salaires/:id/demander-paiement', authenticate, authorize('veterinaire'), async (req, res) => {
+    try {
+        const salaireId = parseInt(req.params.id);
+        const userId = req.userId;
+
+        // Vérifier que le salaire existe et appartient à l'utilisateur
+        const checkSql = `
+            SELECT s.*, u.nom_complet, u.email
+            FROM salaires s
+            JOIN utilisateurs u ON s.id_utilisateur = u.id
+            WHERE s.id = ?
+            AND s.id_utilisateur = ?
+        `;
+        const [salaire] = await db.query(checkSql, [salaireId, userId]);
+
+        if (!salaire) {
+            return res.status(404).json({
+                success: false,
+                message: 'Salaire non trouvé.'
+            });
+        }
+
+        // Vérifier que le salaire n'est pas déjà payé
+        if (salaire.statut_paiement === 'payé') {
+            return res.status(400).json({
+                success: false,
+                message: 'Ce salaire a déjà été payé.'
+            });
+        }
+
+        // Vérifier qu'une demande n'existe pas déjà
+        const checkDemandeSql = `
+            SELECT id FROM demandes_paiement_salaire
+            WHERE id_salaire = ?
+            AND statut = 'en_attente'
+        `;
+        const [demandeExistante] = await db.query(checkDemandeSql, [salaireId]);
+
+        if (demandeExistante) {
+            return res.status(400).json({
+                success: false,
+                message: 'Une demande de paiement est déjà en attente pour ce salaire.'
+            });
+        }
+
+        // Créer la demande de paiement
+        const insertSql = `
+            INSERT INTO demandes_paiement_salaire (
+                id_salaire,
+                id_employe,
+                mois,
+                annee,
+                montant,
+                statut,
+                commentaire
+            ) VALUES (?, ?, ?, ?, ?, 'en_attente', ?)
+        `;
+
+        const commentaire = req.body.commentaire || `Demande de paiement pour le salaire de ${salaire.mois}/${salaire.annee}`;
+
+        await db.execute(insertSql, [
+            salaireId,
+            userId,
+            salaire.mois,
+            salaire.annee,
+            salaire.salaire_net,
+            commentaire
+        ]);
+
+        // Mettre à jour le salaire
+        await db.execute(
+            'UPDATE salaires SET demande_paiement_envoyee = 1, date_demande_paiement = NOW() WHERE id = ?',
+            [salaireId]
+        );
+
+        // Créer une notification pour le manager/admin
+        await db.execute(
+            `INSERT INTO notifications (
+                id_utilisateur,
+                type_notification,
+                titre,
+                message,
+                priorite,
+                type_reference,
+                id_reference
+            ) SELECT 
+                id,
+                'paiement',
+                'Demande de paiement de salaire',
+                ?,
+                'haute',
+                'demande_paiement',
+                ?
+            FROM utilisateurs
+            WHERE role IN ('admin', 'manager')
+            AND statut = 'actif'
+            LIMIT 1`,
+            [
+                `${salaire.nom_complet} a demandé le paiement de son salaire de ${salaire.mois}/${salaire.annee} (${salaire.salaire_net} FBU)`,
+                salaireId
+            ]
+        );
+
+        res.status(201).json({
+            success: true,
+            message: 'Demande de paiement envoyée avec succès.'
+        });
+
+    } catch (error) {
+        console.error('Demande paiement error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors de l\'envoi de la demande de paiement.'
+        });
+    }
+});
+
+// Confirmer la réception d'un salaire payé
+router.post('/salaires/:id/confirmer-reception', authenticate, authorize('veterinaire'), async (req, res) => {
+    try {
+        const salaireId = parseInt(req.params.id);
+        const userId = req.userId;
+        const { code_verification } = req.body;
+
+        // Vérifier que le salaire existe et appartient à l'utilisateur
+        const checkSql = `
+            SELECT * FROM salaires
+            WHERE id = ?
+            AND id_utilisateur = ?
+        `;
+        const [salaire] = await db.query(checkSql, [salaireId, userId]);
+
+        if (!salaire) {
+            return res.status(404).json({
+                success: false,
+                message: 'Salaire non trouvé.'
+            });
+        }
+
+        // Vérifier que le salaire est marqué comme payé
+        if (salaire.statut_paiement !== 'payé') {
+            return res.status(400).json({
+                success: false,
+                message: 'Ce salaire n\'a pas encore été payé.'
+            });
+        }
+
+        // Vérifier que la réception n'a pas déjà été confirmée
+        if (salaire.confirme_reception) {
+            return res.status(400).json({
+                success: false,
+                message: 'La réception de ce salaire a déjà été confirmée.'
+            });
+        }
+
+        // Si un code de vérification est fourni, le vérifier
+        if (code_verification) {
+            const verifSql = `
+                SELECT * FROM codes_verification_salaire
+                WHERE id_salaire = ?
+                AND id_utilisateur = ?
+                AND code_verification = ?
+                AND date_expiration > NOW()
+                AND utilise = 0
+            `;
+            const [codeVerif] = await db.query(verifSql, [salaireId, userId, code_verification]);
+
+            if (!codeVerif) {
+                // Incrémenter les tentatives échouées
+                await db.execute(
+                    `UPDATE codes_verification_salaire 
+                     SET tentatives_echouees = tentatives_echouees + 1
+                     WHERE id_salaire = ? AND id_utilisateur = ?`,
+                    [salaireId, userId]
+                );
+
+                return res.status(400).json({
+                    success: false,
+                    message: 'Code de vérification invalide ou expiré.'
+                });
+            }
+
+            // Marquer le code comme utilisé
+            await db.execute(
+                `UPDATE codes_verification_salaire 
+                 SET utilise = 1, date_utilisation = NOW()
+                 WHERE id = ?`,
+                [codeVerif.id]
+            );
+        }
+
+        // Créer la confirmation de réception
+        const insertSql = `
+            INSERT INTO confirmations_reception_salaire (
+                id_salaire,
+                id_utilisateur,
+                mois,
+                annee,
+                montant,
+                code_verification_utilise,
+                confirme,
+                date_confirmation,
+                methode_confirmation
+            ) VALUES (?, ?, ?, ?, ?, ?, 1, NOW(), ?)
+        `;
+
+        await db.execute(insertSql, [
+            salaireId,
+            userId,
+            salaire.mois,
+            salaire.annee,
+            salaire.salaire_net,
+            code_verification || null,
+            code_verification ? 'code_email' : 'manuel'
+        ]);
+
+        // Mettre à jour le salaire
+        await db.execute(
+            'UPDATE salaires SET confirme_reception = 1, date_confirmation_reception = NOW() WHERE id = ?',
+            [salaireId]
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Réception du salaire confirmée avec succès.'
+        });
+
+    } catch (error) {
+        console.error('Confirmer reception error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors de la confirmation de réception.'
+        });
+    }
+});
+
+// Obtenir la liste des paiements reçus
+router.get('/paiements/recus', authenticate, authorize('veterinaire'), async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { page = 1, limit = 20, annee } = req.query;
+
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        const offset = (pageNum - 1) * limitNum;
+
+        let sql = `
+            SELECT 
+                s.id,
+                s.mois,
+                s.annee,
+                CASE 
+                    WHEN s.mois = 1 THEN 'Janvier'
+                    WHEN s.mois = 2 THEN 'Février'
+                    WHEN s.mois = 3 THEN 'Mars'
+                    WHEN s.mois = 4 THEN 'Avril'
+                    WHEN s.mois = 5 THEN 'Mai'
+                    WHEN s.mois = 6 THEN 'Juin'
+                    WHEN s.mois = 7 THEN 'Juillet'
+                    WHEN s.mois = 8 THEN 'Août'
+                    WHEN s.mois = 9 THEN 'Septembre'
+                    WHEN s.mois = 10 THEN 'Octobre'
+                    WHEN s.mois = 11 THEN 'Novembre'
+                    WHEN s.mois = 12 THEN 'Décembre'
+                END as mois_nom,
+                s.salaire_brut,
+                s.salaire_net,
+                s.date_paiement,
+                s.mode_paiement,
+                s.reference_paiement,
+                s.confirme_reception,
+                s.date_confirmation_reception,
+                DATEDIFF(CURDATE(), s.date_paiement) as jours_depuis_paiement
+            FROM salaires s
+            WHERE s.id_utilisateur = ?
+            AND s.statut_paiement = 'payé'
+        `;
+        const params = [userId];
+
+        if (annee) {
+            sql += ' AND s.annee = ?';
+            params.push(parseInt(annee));
+        }
+
+        sql += ' ORDER BY s.annee DESC, s.mois DESC';
+        sql += ` LIMIT ${limitNum} OFFSET ${offset}`;
+
+        const paiements = await db.query(sql, params);
+
+        // Count total
+        let countSql = `
+            SELECT COUNT(*) as total
+            FROM salaires
+            WHERE id_utilisateur = ?
+            AND statut_paiement = 'payé'
+        `;
+        const countParams = [userId];
+
+        if (annee) {
+            countSql += ' AND annee = ?';
+            countParams.push(parseInt(annee));
+        }
+
+        const [countResult] = await db.query(countSql, countParams);
+
+        res.status(200).json({
+            success: true,
+            data: paiements,
+            pagination: {
+                total: countResult.total,
+                page: pageNum,
+                limit: limitNum,
+                pages: Math.ceil(countResult.total / limitNum)
+            }
+        });
+    } catch (error) {
+        console.error('Get paiements recus error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors de la récupération des paiements reçus.'
+        });
+    }
+});
+
+// Obtenir la liste des paiements en attente (non réglés)
+router.get('/paiements/en-attente', authenticate, authorize('veterinaire'), async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { page = 1, limit = 20 } = req.query;
+
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        const offset = (pageNum - 1) * limitNum;
+
+        const sql = `
+            SELECT 
+                s.id,
+                s.mois,
+                s.annee,
+                CASE 
+                    WHEN s.mois = 1 THEN 'Janvier'
+                    WHEN s.mois = 2 THEN 'Février'
+                    WHEN s.mois = 3 THEN 'Mars'
+                    WHEN s.mois = 4 THEN 'Avril'
+                    WHEN s.mois = 5 THEN 'Mai'
+                    WHEN s.mois = 6 THEN 'Juin'
+                    WHEN s.mois = 7 THEN 'Juillet'
+                    WHEN s.mois = 8 THEN 'Août'
+                    WHEN s.mois = 9 THEN 'Septembre'
+                    WHEN s.mois = 10 THEN 'Octobre'
+                    WHEN s.mois = 11 THEN 'Novembre'
+                    WHEN s.mois = 12 THEN 'Décembre'
+                END as mois_nom,
+                s.salaire_brut,
+                s.salaire_net,
+                s.statut_paiement,
+                s.date_calcul,
+                s.demande_paiement_envoyee,
+                s.date_demande_paiement,
+                DATEDIFF(CURDATE(), s.date_calcul) as jours_en_attente,
+                d.statut as statut_demande,
+                d.date_demande as date_demande_paiement
+            FROM salaires s
+            LEFT JOIN demandes_paiement_salaire d ON s.id = d.id_salaire
+            WHERE s.id_utilisateur = ?
+            AND s.statut_paiement IN ('calculé', 'reporté')
+            ORDER BY s.annee DESC, s.mois DESC
+            LIMIT ${limitNum} OFFSET ${offset}
+        `;
+
+        const paiements = await db.query(sql, [userId]);
+
+        // Count total
+        const countSql = `
+            SELECT COUNT(*) as total
+            FROM salaires
+            WHERE id_utilisateur = ?
+            AND statut_paiement IN ('calculé', 'reporté')
+        `;
+        const [countResult] = await db.query(countSql, [userId]);
+
+        res.status(200).json({
+            success: true,
+            data: paiements,
+            pagination: {
+                total: countResult.total,
+                page: pageNum,
+                limit: limitNum,
+                pages: Math.ceil(countResult.total / limitNum)
+            }
+        });
+    } catch (error) {
+        console.error('Get paiements en attente error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors de la récupération des paiements en attente.'
+        });
+    }
+});
+
+// ==================== STATISTIQUES D'INTERVENTIONS ====================
+
+// Obtenir le nombre de jours d'intervention par mois
+router.get('/statistiques/interventions-mensuelles', authenticate, authorize('veterinaire'), async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { annee = new Date().getFullYear() } = req.query;
+
+        const sql = `
+            SELECT 
+                MONTH(date_intervention) as mois,
+                CASE 
+                    WHEN MONTH(date_intervention) = 1 THEN 'Janvier'
+                    WHEN MONTH(date_intervention) = 2 THEN 'Février'
+                    WHEN MONTH(date_intervention) = 3 THEN 'Mars'
+                    WHEN MONTH(date_intervention) = 4 THEN 'Avril'
+                    WHEN MONTH(date_intervention) = 5 THEN 'Mai'
+                    WHEN MONTH(date_intervention) = 6 THEN 'Juin'
+                    WHEN MONTH(date_intervention) = 7 THEN 'Juillet'
+                    WHEN MONTH(date_intervention) = 8 THEN 'Août'
+                    WHEN MONTH(date_intervention) = 9 THEN 'Septembre'
+                    WHEN MONTH(date_intervention) = 10 THEN 'Octobre'
+                    WHEN MONTH(date_intervention) = 11 THEN 'Novembre'
+                    WHEN MONTH(date_intervention) = 12 THEN 'Décembre'
+                END as mois_nom,
+                COUNT(DISTINCT DATE(date_intervention)) as jours_intervention,
+                COUNT(*) as nombre_interventions,
+                COUNT(DISTINCT id_animal) as animaux_traites,
+                SUM(CASE WHEN type_intervention = 'vaccination' THEN 1 ELSE 0 END) as vaccinations,
+                SUM(CASE WHEN type_intervention = 'traitement' THEN 1 ELSE 0 END) as traitements,
+                SUM(CASE WHEN type_intervention = 'consultation' THEN 1 ELSE 0 END) as consultations,
+                SUM(CASE WHEN type_intervention = 'chirurgie' THEN 1 ELSE 0 END) as chirurgies,
+                COALESCE(SUM(cout_intervention), 0) as cout_total
+            FROM suivis_sanitaires
+            WHERE id_technicien = ?
+            AND YEAR(date_intervention) = ?
+            GROUP BY MONTH(date_intervention)
+            ORDER BY MONTH(date_intervention)
+        `;
+
+        const statistiques = await db.query(sql, [userId, parseInt(annee)]);
+
+        // Calculer les totaux annuels
+        const totalSql = `
+            SELECT 
+                COUNT(DISTINCT DATE(date_intervention)) as total_jours,
+                COUNT(*) as total_interventions,
+                COUNT(DISTINCT id_animal) as total_animaux,
+                COALESCE(SUM(cout_intervention), 0) as cout_total_annuel
+            FROM suivis_sanitaires
+            WHERE id_technicien = ?
+            AND YEAR(date_intervention) = ?
+        `;
+
+        const [totaux] = await db.query(totalSql, [userId, parseInt(annee)]);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                par_mois: statistiques,
+                totaux: totaux,
+                annee: parseInt(annee)
+            }
+        });
+    } catch (error) {
+        console.error('Get interventions mensuelles error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors de la récupération des statistiques d\'interventions.'
+        });
+    }
+});
+
+// Obtenir les jours d'intervention pour un mois spécifique
+router.get('/statistiques/jours-intervention/:mois/:annee', authenticate, authorize('veterinaire'), async (req, res) => {
+    try {
+        const userId = req.userId;
+        const mois = parseInt(req.params.mois);
+        const annee = parseInt(req.params.annee);
+
+        const sql = `
+            SELECT 
+                DATE(date_intervention) as date,
+                COUNT(*) as nombre_interventions,
+                COUNT(DISTINCT id_animal) as animaux_traites,
+                GROUP_CONCAT(DISTINCT type_intervention) as types_interventions,
+                COALESCE(SUM(cout_intervention), 0) as cout_total_jour
+            FROM suivis_sanitaires
+            WHERE id_technicien = ?
+            AND MONTH(date_intervention) = ?
+            AND YEAR(date_intervention) = ?
+            GROUP BY DATE(date_intervention)
+            ORDER BY DATE(date_intervention)
+        `;
+
+        const jours = await db.query(sql, [userId, mois, annee]);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                jours: jours,
+                mois: mois,
+                annee: annee,
+                total_jours: jours.length
+            }
+        });
+    } catch (error) {
+        console.error('Get jours intervention error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors de la récupération des jours d\'intervention.'
         });
     }
 });
