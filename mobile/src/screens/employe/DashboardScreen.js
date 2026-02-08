@@ -1,5 +1,5 @@
-// frontend/src/screens/employe/DashboardScreen.js - CORRIGÉ COMPLET
-import React, { useState, useEffect, useRef,useCallback } from 'react';
+// frontend/src/screens/employe/DashboardScreen.js - VERSION AMÉLIORÉE RESPONSIVE
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   ScrollView,
@@ -12,7 +12,8 @@ import {
   RefreshControl,
   Animated,
   StatusBar,
-  Dimensions
+  Dimensions,
+  useWindowDimensions
 } from 'react-native';
 import {
   Card,
@@ -31,6 +32,9 @@ const DashboardScreen = ({ navigation }) => {
   const [dashboardData, setDashboardData] = useState(null);
   const [profileData, setProfileData] = useState(null);
   const [carteData, setCarteData] = useState(null);
+  
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768; // Détection tablette/desktop
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -66,7 +70,7 @@ const DashboardScreen = ({ navigation }) => {
       console.log('📡 Headers construits avec token');
       return {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}` // ✅ CORRIGÉ: Ajout de "Bearer "
+        'Authorization': `Bearer ${token}`
       };
     } catch (error) {
       console.error('Erreur récupération token:', error);
@@ -87,7 +91,6 @@ const DashboardScreen = ({ navigation }) => {
         fetch(`${API_URL}/employe-inss/carte`, { headers })
       ]);
 
-      // ✅ DASHBOARD - AJOUTER VÉRIFICATION STATUS
       if (dashboardRes.status === 'fulfilled') {
         const response = dashboardRes.value;
         
@@ -117,7 +120,6 @@ const DashboardScreen = ({ navigation }) => {
         });
       }
 
-      // ✅ PROFIL - AJOUTER VÉRIFICATION STATUS
       if (profileRes.status === 'fulfilled') {
         const response = profileRes.value;
         
@@ -149,7 +151,6 @@ const DashboardScreen = ({ navigation }) => {
         }
       }
 
-      // ✅ CARTE - AJOUTER VÉRIFICATION STATUS
       if (carteRes.status === 'fulfilled') {
         const response = carteRes.value;
         
@@ -207,7 +208,6 @@ const DashboardScreen = ({ navigation }) => {
         body: JSON.stringify({ latitude: 0, longitude: 0 })
       });
       
-      // ✅ AJOUTER VÉRIFICATION STATUS
       if (response.status === 401) {
         console.error('❌ 401 - Token expiré');
         Alert.alert('Erreur', 'Session expirée');
@@ -245,7 +245,6 @@ const DashboardScreen = ({ navigation }) => {
         body: JSON.stringify({ latitude: 0, longitude: 0 })
       });
       
-      // ✅ AJOUTER VÉRIFICATION STATUS
       if (response.status === 401) {
         console.error('❌ 401 - Token expiré');
         Alert.alert('Erreur', 'Session expirée');
@@ -356,7 +355,7 @@ const DashboardScreen = ({ navigation }) => {
                 )}
               </View>
 
-              {/* Infos - FOND BLANC POUR VISIBILITÉ */}
+              {/* Infos */}
               <View style={styles.infoColumn}>
                 <View style={styles.infoWhiteBox}>
                   <Text style={styles.employeeName} numberOfLines={2}>{carte.nom_complet}</Text>
@@ -365,7 +364,6 @@ const DashboardScreen = ({ navigation }) => {
                   
                   <View style={styles.infoDivider} />
                   
-                  {/* Détails avec icônes */}
                   <View style={styles.detailsList}>
                     <View style={styles.detailRow}>
                       <MaterialIcons name="badge" size={12} color="#2563EB" />
@@ -572,10 +570,31 @@ const DashboardScreen = ({ navigation }) => {
       showsVerticalScrollIndicator={false}
     >
       {renderHeader()}
-      {renderDigitalCard()}
-      {renderAttendanceSection()}
-      {renderQuickStats()}
-      {renderQuickActions()}
+      
+      {/* LAYOUT RESPONSIVE: Sur tablette/desktop, disposition en 2 colonnes */}
+      {isTablet ? (
+        <View style={styles.tabletLayout}>
+          {/* Colonne Gauche: Carte */}
+          <View style={styles.leftColumn}>
+            {renderDigitalCard()}
+          </View>
+          
+          {/* Colonne Droite: Reste du contenu */}
+          <View style={styles.rightColumn}>
+            {renderAttendanceSection()}
+            {renderQuickStats()}
+            {renderQuickActions()}
+          </View>
+        </View>
+      ) : (
+        /* LAYOUT MOBILE: Disposition verticale normale */
+        <>
+          {renderDigitalCard()}
+          {renderAttendanceSection()}
+          {renderQuickStats()}
+          {renderQuickActions()}
+        </>
+      )}
     </ScrollView>
   );
 };
@@ -585,6 +604,22 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 30 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F3F4F6' },
   loadingText: { marginTop: 16, fontSize: 16, color: '#6B7280', fontWeight: '500' },
+  
+  // LAYOUT RESPONSIVE TABLET/DESKTOP
+  tabletLayout: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    gap: 16,
+    alignItems: 'flex-start',
+  },
+  leftColumn: {
+    width: 400,
+  },
+  rightColumn: {
+    flex: 1,
+    gap: 16,
+  },
+  
   section: { paddingHorizontal: 16, marginBottom: 16 },
 
   // Header
