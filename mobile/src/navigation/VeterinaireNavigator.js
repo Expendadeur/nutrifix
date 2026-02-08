@@ -29,6 +29,9 @@ const VeterinaireNavigator = ({ onLogout }) => {
                         case 'Interventions':
                             iconName = focused ? 'clipboard' : 'clipboard-outline';
                             break;
+                        case 'Salaires':
+                            iconName = focused ? 'cash' : 'cash-outline';
+                            break;
                         case 'Profil':
                             iconName = focused ? 'person' : 'person-outline';
                             break;
