@@ -1,0 +1,569 @@
+/* web/src/pages/LoginPage.css */
+
+/* Container principal */
+.login-container {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #2ec189 0%, #048f49 50%, #0f8a61 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Animation de fond */
+.login-container::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(
+        circle,
+        rgba(255, 255, 255, 0.1) 0%,
+        transparent 70%
+    );
+    animation: rotate 30s linear infinite;
+}
+
+.login-container::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 200px;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.1), transparent);
+}
+
+@keyframes rotate {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Container de chargement */
+.loading-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #2E86C1 0%, #3498DB 50%, #5DADE2 100%);
+}
+
+/* Wrapper */
+.login-wrapper {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 500px;
+}
+
+/* Header */
+.login-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.logo-circle {
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 20px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(10px);
+    animation: pulse 3s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    }
+    50% {
+        transform: scale(1.05);
+        box-shadow: 0 12px 48px rgba(0, 0, 0, 0.2);
+    }
+}
+
+.login-title {
+    color: #FFF !important;
+    font-weight: 700 !important;
+    font-size: 2.5rem !important;
+    letter-spacing: 3px !important;
+    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.2);
+    margin-bottom: 10px !important;
+}
+
+.login-subtitle {
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-weight: 300 !important;
+    font-size: 1.1rem !important;
+}
+
+/* Card */
+.login-card {
+    padding: 40px 35px !important;
+    border-radius: 20px !important;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3) !important;
+    background: #FFFFFF !important;
+    backdrop-filter: blur(10px);
+}
+
+/* Tabs */
+.login-tabs {
+    margin-bottom: 30px !important;
+    border-bottom: 2px solid #ECF0F1 !important;
+}
+
+.login-tabs .MuiTab-root {
+    font-weight: 600 !important;
+    font-size: 0.95rem !important;
+    text-transform: none !important;
+    min-height: 60px !important;
+    transition: all 0.3s ease !important;
+}
+
+.login-tabs .MuiTab-root:hover {
+    background-color: rgba(46, 134, 193, 0.05);
+}
+
+.login-tabs .MuiTab-root.Mui-selected {
+    color: #2E86C1 !important;
+}
+
+.login-tabs .MuiTabs-indicator {
+    background-color: #2E86C1 !important;
+    height: 3px !important;
+    border-radius: 3px 3px 0 0 !important;
+}
+
+/* Form container */
+.login-form-container {
+    margin-top: 25px;
+}
+
+.login-form-container .MuiTextField-root {
+    margin-bottom: 20px !important;
+}
+
+.login-form-container .MuiOutlinedInput-root {
+    border-radius: 12px !important;
+    transition: all 0.3s ease !important;
+}
+
+.login-form-container .MuiOutlinedInput-root:hover {
+    background-color: #F8F9FA;
+}
+
+.login-form-container .MuiOutlinedInput-root.Mui-focused {
+    background-color: #FFF;
+}
+
+.login-form-container .MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline {
+    border-color: #2E86C1 !important;
+    border-width: 2px !important;
+}
+
+/* Options */
+.login-options {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px !important;
+    margin-top: 15px !important;
+}
+
+.login-options .MuiFormControlLabel-root {
+    margin: 0 !important;
+}
+
+.forgot-password-link {
+    color: #2E86C1 !important;
+    text-decoration: none !important;
+    font-weight: 600 !important;
+    font-size: 0.875rem !important;
+    transition: all 0.3s ease !important;
+    cursor: pointer !important;
+}
+
+.forgot-password-link:hover {
+    color: #1F5F8B !important;
+    text-decoration: underline !important;
+}
+
+/* Buttons */
+.login-button {
+    background: linear-gradient(135deg, #2E86C1 0%, #3498DB 100%) !important;
+    color: #FFF !important;
+    padding: 14px !important;
+    font-size: 1rem !important;
+    font-weight: 600 !important;
+    border-radius: 12px !important;
+    text-transform: none !important;
+    box-shadow: 0 6px 20px rgba(46, 134, 193, 0.3) !important;
+    transition: all 0.3s ease !important;
+    margin-top: 10px !important;
+}
+
+.login-button:hover {
+    background: linear-gradient(135deg, #1F5F8B 0%, #2E86C1 100%) !important;
+    box-shadow: 0 8px 28px rgba(46, 134, 193, 0.4) !important;
+    transform: translateY(-2px);
+}
+
+.login-button:active {
+    transform: translateY(0);
+    box-shadow: 0 4px 12px rgba(46, 134, 193, 0.3) !important;
+}
+
+.login-button:disabled {
+    background: #BDC3C7 !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+/* Separator */
+.separator {
+    margin: 30px 0 !important;
+}
+
+.separator .MuiDivider-root {
+    border-color: #ECF0F1 !important;
+}
+
+/* Biometric button */
+.biometric-button {
+    color: #2E86C1 !important;
+    border-color: #2E86C1 !important;
+    padding: 14px !important;
+    font-size: 1rem !important;
+    font-weight: 600 !important;
+    border-radius: 12px !important;
+    text-transform: none !important;
+    border-width: 2px !important;
+    transition: all 0.3s ease !important;
+}
+
+.biometric-button:hover {
+    background-color: rgba(46, 134, 193, 0.08) !important;
+    border-color: #1F5F8B !important;
+    border-width: 2px !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(46, 134, 193, 0.2);
+}
+
+.biometric-button:active {
+    transform: translateY(0);
+}
+
+/* QR Container */
+.qr-container {
+    text-align: center;
+    padding: 50px 20px;
+}
+
+.qr-icon {
+    font-size: 120px !important;
+    color: #BDC3C7 !important;
+    margin-bottom: 25px !important;
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-15px);
+    }
+}
+
+.qr-title {
+    color: #2C3E50 !important;
+    font-weight: 600 !important;
+    margin-bottom: 15px !important;
+}
+
+.qr-description {
+    color: #7F8C8D !important;
+    margin-bottom: 35px !important;
+    line-height: 1.6 !important;
+    padding: 0 20px;
+}
+
+.qr-button {
+    background: linear-gradient(135deg, #2E86C1 0%, #3498DB 100%) !important;
+    color: #FFF !important;
+    padding: 14px 35px !important;
+    font-size: 1rem !important;
+    font-weight: 600 !important;
+    border-radius: 12px !important;
+    text-transform: none !important;
+    box-shadow: 0 6px 20px rgba(46, 134, 193, 0.3) !important;
+    transition: all 0.3s ease !important;
+}
+
+.qr-button:hover {
+    background: linear-gradient(135deg, #1F5F8B 0%, #2E86C1 100%) !important;
+    box-shadow: 0 8px 28px rgba(46, 134, 193, 0.4) !important;
+    transform: translateY(-2px);
+}
+
+/* Footer */
+.login-footer {
+    text-align: center;
+    margin-top: 35px;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.login-footer p {
+    margin: 5px 0 !important;
+    font-weight: 300;
+}
+
+/* Error styles */
+.MuiFormHelperText-root.Mui-error {
+    color: #E74C3C !important;
+    font-weight: 500 !important;
+    margin-left: 14px !important;
+}
+
+.MuiOutlinedInput-root.Mui-error .MuiOutlinedInput-notchedOutline {
+    border-color: #E74C3C !important;
+}
+
+/* Checkbox */
+.MuiCheckbox-root.Mui-checked {
+    color: #2E86C1 !important;
+}
+
+/* Snackbar Alerts */
+.MuiAlert-filledSuccess {
+    background-color: #2ECC71 !important;
+}
+
+.MuiAlert-filledError {
+    background-color: #E74C3C !important;
+}
+
+.MuiAlert-filledWarning {
+    background-color: #F39C12 !important;
+}
+
+.MuiAlert-filledInfo {
+    background-color: #3498DB !important;
+}
+
+/* Dialog */
+.MuiDialog-paper {
+    border-radius: 15px !important;
+}
+
+.MuiDialogTitle-root {
+    background: linear-gradient(135deg, #2E86C1 0%, #3498DB 100%);
+    color: #FFF !important;
+    font-weight: 600 !important;
+}
+
+.MuiDialogContent-root {
+    padding: 24px !important;
+}
+
+.MuiDialogActions-root {
+    padding: 16px 24px !important;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .login-card {
+        padding: 30px 25px !important;
+    }
+
+    .login-title {
+        font-size: 2rem !important;
+    }
+
+    .logo-circle {
+        width: 100px;
+        height: 100px;
+    }
+
+    .login-tabs .MuiTab-root {
+        font-size: 0.85rem !important;
+        min-height: 50px !important;
+    }
+
+    .qr-icon {
+        font-size: 100px !important;
+    }
+
+    .qr-container {
+        padding: 40px 15px;
+    }
+
+    .login-options {
+        flex-direction: column;
+        gap: 15px;
+        align-items: flex-start;
+    }
+}
+
+@media (max-width: 480px) {
+    .login-container {
+        padding: 10px;
+    }
+
+    .login-card {
+        padding: 25px 20px !important;
+    }
+
+    .login-title {
+        font-size: 1.75rem !important;
+        letter-spacing: 2px !important;
+    }
+
+    .login-subtitle {
+        font-size: 0.95rem !important;
+    }
+
+    .logo-circle {
+        width: 90px;
+        height: 90px;
+    }
+
+    .login-tabs .MuiTab-root {
+        font-size: 0.75rem !important;
+        padding: 8px 12px !important;
+    }
+
+    .qr-container {
+        padding: 30px 10px;
+    }
+
+    .qr-icon {
+        font-size: 80px !important;
+    }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    .login-card {
+        background: #2C3E50 !important;
+        color: #ECF0F1 !important;
+    }
+
+    .login-form-container .MuiOutlinedInput-root {
+        color: #ECF0F1 !important;
+    }
+
+    .login-form-container .MuiOutlinedInput-notchedOutline {
+        border-color: #34495E !important;
+    }
+
+    .login-form-container .MuiOutlinedInput-root:hover {
+        background-color: #34495E !important;
+    }
+
+    .login-form-container .MuiInputLabel-root {
+        color: #BDC3C7 !important;
+    }
+
+    .login-form-container .MuiInputLabel-root.Mui-focused {
+        color: #2E86C1 !important;
+    }
+
+    .qr-title {
+        color: #ECF0F1 !important;
+    }
+
+    .qr-description {
+        color: #BDC3C7 !important;
+    }
+
+    .login-options .MuiFormControlLabel-label {
+        color: #ECF0F1 !important;
+    }
+}
+
+/* Animations personnalisées */
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* Loading spinner */
+.MuiCircularProgress-root {
+    color: #FFF !important;
+}
+
+.MuiCircularProgress-colorPrimary {
+    color: #2E86C1 !important;
+}
+
+/* Focus visible */
+.MuiButtonBase-root:focus-visible {
+    outline: 2px solid #2E86C1;
+    outline-offset: 2px;
+}
+
+/* Scrollbar personnalisé */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(46, 134, 193, 0.5);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(46, 134, 193, 0.7);
+}
+
+/* Print styles */
+@media print {
+    .login-container {
+        display: none;
+    }
+}

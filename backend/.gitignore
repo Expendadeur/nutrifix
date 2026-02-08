@@ -1,0 +1,14 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn.lock
+
+# Environment variables
+.env
+
+# Uploads (fichiers lourds)
+uploads/
+
+# OS / Editor
+.DS_Store
+.vscode/
