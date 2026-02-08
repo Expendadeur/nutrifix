@@ -36,17 +36,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 
 // Configuration de l'API
-const API_BASE_URL = __DEV__ 
+const API_BASE_URL = __DEV__
   ? Platform.select({
-      ios: 'http://localhost:5000',
-      android: 'http://10.0.2.2:5000',
-      default: 'http://localhost:5000'
-    })
+    ios: 'http://localhost:5000',
+    android: 'http://10.0.2.2:5000',
+    default: 'http://localhost:5000'
+  })
   : 'https://your-production-api.com';
 
-const ProfilScreen = ({ navigation,route,onLogout }) => {
+const ProfilScreen = ({ navigation, route, onLogout }) => {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  
+
   // Responsive
   const isTablet = windowWidth >= 768;
   const isLargeScreen = windowWidth >= 1024;
@@ -194,7 +194,7 @@ const ProfilScreen = ({ navigation,route,onLogout }) => {
       console.error('Erreur changement mot de passe:', error);
       Alert.alert(
         'Erreur',
-        error.response?.data?.message || 
+        error.response?.data?.message ||
         'Impossible de modifier le mot de passe. Vérifiez votre mot de passe actuel.'
       );
     } finally {
@@ -202,20 +202,20 @@ const ProfilScreen = ({ navigation,route,onLogout }) => {
     }
   };
 
-const handleLogout = async () => {
+  const handleLogout = async () => {
     console.log('Déconnexion initiée');
-    
+
     try {
       // Nettoyer le stockage local
       await AsyncStorage.clear();
       console.log('Storage nettoyé');
-      
+
       // Fermer le dialog
       //setShowLogoutDialog(false);
-      
+
       // Notification de succès
       //showNotification('Déconnexion réussie', 'success');
-      
+
       // Appeler la fonction de déconnexion du parent
       setTimeout(() => {
         if (onLogout && typeof onLogout === 'function') {
@@ -229,11 +229,11 @@ const handleLogout = async () => {
           );
         }
       }, 1000);
-      
+
     } catch (error) {
       console.error('❌ Erreur déconnexion:', error);
       //showNotification('Erreur lors de la déconnexion', 'error');
-      
+
       Alert.alert(
         'Erreur',
         'Une erreur est survenue lors de la déconnexion.'
@@ -245,25 +245,39 @@ const handleLogout = async () => {
   const markNotificationAsRead = async (notificationId) => {
     try {
       const config = await getAxiosConfig();
-      
+
       await axios.put(
         `${API_BASE_URL}/api/veterinaire/notifications/${notificationId}/read`,
         {},
         config
       );
-      
+
       loadUserData();
     } catch (error) {
       console.error('Erreur marquage notification:', error);
     }
   };
 
-  // Layout responsive
-  const getResponsiveLayout = () => {
-    if (isExtraLargeScreen) return 'three-column';
-    if (isLargeScreen) return 'two-column';
-    return 'single-column';
-  };
+  // Helpers responsive
+  const getResponsiveValue = useCallback((values) => {
+    const {
+      mobile = 15,
+      mobileLarge,
+      tablet,
+      laptop,
+      desktop,
+      desktopLarge
+    } = values;
+
+    switch (getResponsiveLayout()) {
+      case 'three-column':
+        return desktopLarge ?? desktop ?? laptop ?? tablet ?? mobileLarge ?? mobile;
+      case 'two-column':
+        return tablet ?? mobileLarge ?? mobile;
+      default:
+        return mobile;
+    }
+  }, [getResponsiveLayout]);
 
   // === COMPOSANTS DE RENDU === //
 
@@ -274,137 +288,109 @@ const handleLogout = async () => {
       isTablet && styles.headerTablet
     ]}>
       <View style={styles.headerContent}>
-        <View style={styles.profileImageContainer}>
-          <Avatar.Image
-            size={isTablet ? 100 : 80}
-            source={{ 
-              uri: userData?.photo_identite || 'https://via.placeholder.com/100?text=User' 
-            }}
-            style={styles.avatar}
-          />
-          <Badge
-            style={styles.onlineBadge}
-            size={isTablet ? 20 : 16}
-          >
-            ✓
-          </Badge>
-        </View>
-        
-        <View style={[
-          styles.profileInfo,
-          isTablet && styles.profileInfoTablet
-        ]}>
-          <Text style={[
-            styles.userName,
-            isTablet && styles.userNameTablet
-          ]}>
-            {userData?.nom_complet || 'Utilisateur'}
-          </Text>
-          <Text style={[
-            styles.userRole,
-            isTablet && styles.userRoleTablet
-          ]}>
-            Vétérinaire • {userData?.role || 'Employé'}
-          </Text>
-          <Text style={styles.userMatricule}>
-            Matricule: {userData?.matricule || 'N/A'}
-          </Text>
-          
-          <View style={styles.userTags}>
-            {userData?.type_employe && (
-              <Chip
-                icon="briefcase"
-                style={styles.userChip}
-                textStyle={styles.userChipText}
-                compact
-              >
-                {userData.type_employe}
-              </Chip>
-            )}
-            {userData?.departement_nom && (
-              <Chip
-                icon="domain"
-                style={styles.userChip}
-                textStyle={styles.userChipText}
-                compact
-              >
-                {userData.departement_nom}
-              </Chip>
-            )}
+        <View style={styles.profileImageWrapper}>
+          <View style={styles.avatarContainer}>
+            <Avatar.Image
+              size={isTablet ? 120 : 90}
+              source={{
+                uri: userData?.photo_identite || 'https://via.placeholder.com/120?text=User'
+              }}
+              style={styles.avatar}
+            />
+            <View style={styles.onlineIndicator} />
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.qrButton}
-          onPress={() => setQrModalVisible(true)}
-        >
-          <MaterialCommunityIcons name="qrcode" size={28} color="#3498DB" />
-        </TouchableOpacity>
+        <View style={styles.profileMainInfo}>
+          <View style={styles.nameRow}>
+            <Text style={styles.userName}>
+              {userData?.nom_complet || 'Utilisateur'}
+            </Text>
+            <TouchableOpacity
+              style={styles.qrIconBadge}
+              onPress={() => setQrModalVisible(true)}
+            >
+              <MaterialCommunityIcons name="qrcode-scan" size={24} color="#3498DB" />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.userProfessionalTitle}>
+            Docteur Vétérinaire • {userData?.type_employe || 'Titulaire'}
+          </Text>
+
+          <View style={styles.metaRow}>
+            <View style={styles.metaItem}>
+              <MaterialCommunityIcons name="card-account-details-outline" size={16} color="#7F8C8D" />
+              <Text style={styles.metaText}>{userData?.matricule || 'VET-000'}</Text>
+            </View>
+            <View style={styles.metaItem}>
+              <MaterialCommunityIcons name="domain" size={16} color="#7F8C8D" />
+              <Text style={styles.metaText}>{userData?.departement_nom || 'Service Elevage'}</Text>
+            </View>
+          </View>
+
+          <View style={styles.headerActions}>
+            <Chip
+              icon="calendar-account"
+              style={styles.statusChip}
+              textStyle={styles.statusChipText}
+            >
+              En poste
+            </Chip>
+            <Chip
+              icon="star"
+              style={styles.loyaltyChip}
+              textStyle={styles.loyaltyChipText}
+            >
+              Vétérinaire Senior
+            </Chip>
+          </View>
+        </View>
       </View>
     </View>
   );
 
   // Cartes de statistiques
   const renderStatsCards = () => {
-    const layout = getResponsiveLayout();
-    
     return (
-      <View style={[
-        styles.statsContainer,
-        isTablet && styles.statsContainerTablet
-      ]}>
-        <Card style={[
-          styles.statCard,
-          layout === 'three-column' && styles.statCardThird,
-          layout === 'two-column' && styles.statCardHalf
-        ]}>
+      <View style={styles.statsContainer}>
+        <Card style={styles.statCard}>
           <Card.Content>
             <View style={styles.statContent}>
-              <View style={[styles.statIcon, { backgroundColor: '#3498DB' }]}>
-                <MaterialCommunityIcons name="calendar-check" size={28} color="#FFF" />
+              <View style={[styles.statIcon, { backgroundColor: '#EFF6FF' }]}>
+                <MaterialCommunityIcons name="calendar-check" size={24} color="#3B82F6" />
               </View>
               <View style={styles.statInfo}>
                 <Text style={styles.statValue}>{stats?.jours_presence || 0}</Text>
-                <Text style={styles.statLabel}>Jours présence</Text>
-                <Text style={styles.statSubLabel}>Ce mois-ci</Text>
+                <Text style={styles.statLabel}>Présence (jours)</Text>
               </View>
             </View>
           </Card.Content>
         </Card>
 
-        <Card style={[
-          styles.statCard,
-          layout === 'three-column' && styles.statCardThird,
-          layout === 'two-column' && styles.statCardHalf
-        ]}>
+        <Card style={styles.statCard}>
           <Card.Content>
             <View style={styles.statContent}>
-              <View style={[styles.statIcon, { backgroundColor: '#2ECC71' }]}>
-                <MaterialCommunityIcons name="medical-bag" size={28} color="#FFF" />
+              <View style={[styles.statIcon, { backgroundColor: '#ECFDF5' }]}>
+                <MaterialCommunityIcons name="medical-bag" size={24} color="#10B981" />
               </View>
               <View style={styles.statInfo}>
                 <Text style={styles.statValue}>{stats?.interventions_mois || 0}</Text>
                 <Text style={styles.statLabel}>Interventions</Text>
-                <Text style={styles.statSubLabel}>Ce mois-ci</Text>
               </View>
             </View>
           </Card.Content>
         </Card>
 
-        <Card style={[
-          styles.statCard,
-          layout === 'three-column' && styles.statCardThird,
-          layout === 'two-column' && styles.statCardHalf
-        ]}>
+        <Card style={styles.statCard}>
           <Card.Content>
             <View style={styles.statContent}>
-              <View style={[styles.statIcon, { backgroundColor: '#F39C12' }]}>
-                <MaterialCommunityIcons name="beach" size={28} color="#FFF" />
+              <View style={[styles.statIcon, { backgroundColor: '#FFF7ED' }]}>
+                <MaterialCommunityIcons name="beach" size={24} color="#F97316" />
               </View>
               <View style={styles.statInfo}>
                 <Text style={styles.statValue}>{stats?.solde_conges || 0}</Text>
-                <Text style={styles.statLabel}>Jours de congé</Text>
-                <Text style={styles.statSubLabel}>Disponibles</Text>
+                <Text style={styles.statLabel}>Solde Congés</Text>
               </View>
             </View>
           </Card.Content>
@@ -417,55 +403,40 @@ const handleLogout = async () => {
   const renderInformationsPersonnelles = () => (
     <Card style={styles.card}>
       <Card.Content>
-        <View style={styles.cardTitleRow}>
-          <MaterialCommunityIcons name="account-circle" size={24} color="#3498DB" />
-          <Title style={styles.cardTitle}>Informations personnelles</Title>
+        <View style={styles.cardHeader}>
+          <View style={styles.cardTitleRow}>
+            <MaterialCommunityIcons name="account-details-outline" size={24} color="#3B82F6" />
+            <Title style={styles.cardTitle}>Informations Personnelles</Title>
+          </View>
         </View>
 
-        <Divider style={styles.sectionDivider} />
-
-        <View style={[
-          styles.infoGrid,
-          isTablet && styles.infoGridTablet
-        ]}>
-          <View style={[
-            styles.infoItem,
-            isTablet && styles.infoItemHalf
-          ]}>
-            <MaterialIcons name="email" size={22} color="#7F8C8D" />
+        <View style={styles.infoGrid}>
+          <View style={styles.infoItem}>
+            <MaterialIcons name="alternate-email" size={20} color="#94A3B8" />
             <View style={styles.infoText}>
-              <Text style={styles.infoLabel}>Email</Text>
+              <Text style={styles.infoLabel}>Email Professionnel</Text>
               <Text style={styles.infoValue}>{userData?.email || 'Non renseigné'}</Text>
             </View>
           </View>
 
-          <View style={[
-            styles.infoItem,
-            isTablet && styles.infoItemHalf
-          ]}>
-            <MaterialIcons name="phone" size={22} color="#7F8C8D" />
+          <View style={styles.infoItem}>
+            <MaterialIcons name="phone-iphone" size={20} color="#94A3B8" />
             <View style={styles.infoText}>
               <Text style={styles.infoLabel}>Téléphone</Text>
               <Text style={styles.infoValue}>{userData?.telephone || 'Non renseigné'}</Text>
             </View>
           </View>
 
-          <View style={[
-            styles.infoItem,
-            isTablet && styles.infoItemHalf
-          ]}>
-            <MaterialIcons name="location-on" size={22} color="#7F8C8D" />
+          <View style={styles.infoItem}>
+            <MaterialIcons name="map" size={20} color="#94A3B8" />
             <View style={styles.infoText}>
-              <Text style={styles.infoLabel}>Adresse</Text>
+              <Text style={styles.infoLabel}>Adresse de Résidence</Text>
               <Text style={styles.infoValue}>{userData?.adresse || 'Non renseignée'}</Text>
             </View>
           </View>
 
-          <View style={[
-            styles.infoItem,
-            isTablet && styles.infoItemHalf
-          ]}>
-            <MaterialIcons name="work" size={22} color="#7F8C8D" />
+          <View style={styles.infoItem}>
+            <MaterialIcons name="event-available" size={20} color="#94A3B8" />
             <View style={styles.infoText}>
               <Text style={styles.infoLabel}>Date d'embauche</Text>
               <Text style={styles.infoValue}>
@@ -473,35 +444,6 @@ const handleLogout = async () => {
               </Text>
             </View>
           </View>
-
-          {userData?.numero_cnss && (
-            <View style={[
-              styles.infoItem,
-              isTablet && styles.infoItemHalf
-            ]}>
-              <MaterialCommunityIcons name="card-account-details" size={22} color="#7F8C8D" />
-              <View style={styles.infoText}>
-                <Text style={styles.infoLabel}>Numéro CNSS</Text>
-                <Text style={styles.infoValue}>{userData.numero_cnss}</Text>
-              </View>
-            </View>
-          )}
-
-          {userData?.compte_bancaire && (
-            <View style={[
-              styles.infoItem,
-              isTablet && styles.infoItemHalf
-            ]}>
-              <MaterialCommunityIcons name="bank" size={22} color="#7F8C8D" />
-              <View style={styles.infoText}>
-                <Text style={styles.infoLabel}>Compte bancaire</Text>
-                <Text style={styles.infoValue}>
-                  {userData.nom_banque ? `${userData.nom_banque} - ` : ''}
-                  {userData.compte_bancaire}
-                </Text>
-              </View>
-            </View>
-          )}
         </View>
       </Card.Content>
     </Card>
@@ -513,67 +455,48 @@ const handleLogout = async () => {
       <Card.Content>
         <View style={styles.cardHeader}>
           <View style={styles.cardTitleRow}>
-            <MaterialCommunityIcons name="calendar-check" size={24} color="#2ECC71" />
-            <Title style={styles.cardTitle}>Historique de présence</Title>
+            <MaterialCommunityIcons name="calendar-clock-outline" size={24} color="#10B981" />
+            <Title style={styles.cardTitle}>Présences Récentes</Title>
           </View>
-          <Chip style={styles.headerChip} textStyle={{ color: '#FFF' }}>
-            {presences.length}
-          </Chip>
+          <Badge style={styles.headerChip}>{presences.length}</Badge>
         </View>
-
-        <Divider style={styles.sectionDivider} />
 
         {presences.length === 0 ? (
           <View style={styles.emptyState}>
-            <MaterialIcons name="calendar-today" size={50} color="#BDC3C7" />
-            <Text style={styles.emptyText}>Aucune présence enregistrée</Text>
+            <MaterialCommunityIcons name="calendar-blank" size={48} color="#E2E8F0" />
+            <Text style={styles.emptyText}>Aucun pointage ce mois</Text>
           </View>
         ) : (
-          <View style={styles.presenceList}>
+          <View style={[styles.presenceList, { marginTop: 16 }]}>
             {presences.slice(0, 5).map((presence, index) => {
               const date = new Date(presence.date);
-              
+
               return (
                 <View key={index} style={styles.presenceItem}>
                   <View style={styles.presenceDate}>
-                    <Text style={styles.presenceDateDay}>
-                      {date.getDate()}
-                    </Text>
-                    <Text style={styles.presenceDateMonth}>
-                      {getMonthName(date.getMonth())}
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.presenceInfo}>
-                    <View style={styles.presenceTime}>
-                      <MaterialIcons name="login" size={16} color="#2ECC71" />
-                      <Text style={styles.presenceTimeText}>
-                        {presence.heure_entree || '-'}
-                      </Text>
-                    </View>
-                    <View style={styles.presenceTime}>
-                      <MaterialIcons name="logout" size={16} color="#E74C3C" />
-                      <Text style={styles.presenceTimeText}>
-                        {presence.heure_sortie || '-'}
-                      </Text>
-                    </View>
+                    <Text style={styles.presenceDateDay}>{date.getDate()}</Text>
+                    <Text style={styles.presenceDateMonth}>{getMonthName(date.getMonth())}</Text>
                   </View>
 
-                  <View style={styles.presenceDuration}>
-                    <Text style={styles.durationText}>
-                      {presence.duree_travail || '-'}
+                  <View style={styles.presenceInfo}>
+                    <Text style={styles.presenceTimeText}>
+                      {presence.heure_entree || '--:--'} • {presence.heure_sortie || '--:--'}
                     </Text>
-                    <Chip
-                      style={[
-                        styles.presenceStatusChip,
-                        { backgroundColor: getPresenceStatusColor(presence.statut) }
-                      ]}
-                      textStyle={styles.presenceStatusText}
-                      compact
-                    >
-                      {presence.statut}
-                    </Chip>
+                    <Text style={[styles.infoLabel, { marginTop: 2 }]}>
+                      Total: {presence.duree_travail || '0h'}
+                    </Text>
                   </View>
+
+                  <Chip
+                    style={[
+                      styles.presenceStatusChip,
+                      { backgroundColor: getPresenceStatusColor(presence.statut) + '20' }
+                    ]}
+                    textStyle={{ color: getPresenceStatusColor(presence.statut), fontSize: 10, fontWeight: '700' }}
+                    compact
+                  >
+                    {presence.statut.toUpperCase()}
+                  </Chip>
                 </View>
               );
             })}
@@ -599,60 +522,43 @@ const handleLogout = async () => {
       <Card.Content>
         <View style={styles.cardHeader}>
           <View style={styles.cardTitleRow}>
-            <MaterialCommunityIcons name="beach" size={24} color="#F39C12" />
-            <Title style={styles.cardTitle}>Mes congés</Title>
+            <MaterialCommunityIcons name="palm-tree" size={24} color="#F97316" />
+            <Title style={styles.cardTitle}>Planning Congés</Title>
           </View>
-          <Chip
-            style={[styles.headerChip, { backgroundColor: '#2ECC71' }]}
-            textStyle={{ color: '#FFF' }}
-          >
-            {stats?.solde_conges || 0} jours
-          </Chip>
         </View>
-
-        <Divider style={styles.sectionDivider} />
 
         {conges.length === 0 ? (
           <View style={styles.emptyState}>
-            <MaterialCommunityIcons name="beach" size={50} color="#BDC3C7" />
-            <Text style={styles.emptyText}>Aucun congé enregistré</Text>
+            <MaterialCommunityIcons name="island" size={48} color="#E2E8F0" />
+            <Text style={styles.emptyText}>Aucun congé récent</Text>
           </View>
         ) : (
-          <View style={styles.congesList}>
+          <View style={{ marginTop: 16 }}>
             {conges.slice(0, 3).map((conge, index) => (
               <View key={index} style={styles.congeItem}>
                 <View style={[
                   styles.congeIcon,
-                  { backgroundColor: getCongeColor(conge.statut) + '20' }
+                  { backgroundColor: getCongeColor(conge.statut) + '15' }
                 ]}>
                   <MaterialCommunityIcons
                     name={getCongeIcon(conge.type_conge)}
-                    size={26}
+                    size={22}
                     color={getCongeColor(conge.statut)}
                   />
                 </View>
-                
+
                 <View style={styles.congeInfo}>
-                  <Text style={styles.congeType}>
-                    {conge.type_conge.replace('_', ' ')}
-                  </Text>
+                  <Text style={styles.congeType}>{conge.type_conge}</Text>
                   <Text style={styles.congeDates}>
-                    {formatDate(conge.date_debut)} → {formatDate(conge.date_fin)}
-                  </Text>
-                  <Text style={styles.congeDuration}>
-                    {conge.jours_demandes} jour{conge.jours_demandes > 1 ? 's' : ''}
+                    {formatDate(conge.date_debut)} au {formatDate(conge.date_fin)}
                   </Text>
                 </View>
 
                 <Chip
-                  style={[
-                    styles.congeStatusChip,
-                    { backgroundColor: getCongeColor(conge.statut) }
-                  ]}
-                  textStyle={styles.congeStatusText}
-                  compact
+                  style={{ backgroundColor: getCongeColor(conge.statut) + '20' }}
+                  textStyle={{ color: getCongeColor(conge.statut), fontSize: 10, fontWeight: '700' }}
                 >
-                  {getCongeStatusLabel(conge.statut)}
+                  {getCongeStatusLabel(conge.statut).toUpperCase()}
                 </Chip>
               </View>
             ))}
@@ -661,12 +567,11 @@ const handleLogout = async () => {
 
         <Button
           mode="contained"
-          icon="plus"
           onPress={() => navigation.navigate('DemandeConge')}
-          style={styles.actionButton}
-          labelStyle={styles.actionButtonLabel}
+          style={[styles.actionButton, { backgroundColor: '#3B82F6' }]}
+          icon="plus-circle"
         >
-          Demander un congé
+          Nouvelle Demande
         </Button>
       </Card.Content>
     </Card>
@@ -681,23 +586,19 @@ const handleLogout = async () => {
         <Card.Content>
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleRow}>
-              <MaterialCommunityIcons name="bell" size={24} color="#E67E22" />
-              <Title style={styles.cardTitle}>Notifications récentes</Title>
+              <MaterialCommunityIcons name="bell-ring-outline" size={24} color="#8B5CF6" />
+              <Title style={styles.cardTitle}>Alertes & Notifications</Title>
             </View>
-            {unreadCount > 0 && (
-              <Badge style={styles.notificationBadge}>{unreadCount}</Badge>
-            )}
+            {unreadCount > 0 && <Badge>{unreadCount}</Badge>}
           </View>
-
-          <Divider style={styles.sectionDivider} />
 
           {notifications.length === 0 ? (
             <View style={styles.emptyState}>
-              <MaterialIcons name="notifications-none" size={50} color="#BDC3C7" />
-              <Text style={styles.emptyText}>Aucune notification</Text>
+              <MaterialCommunityIcons name="bell-off-outline" size={48} color="#E2E8F0" />
+              <Text style={styles.emptyText}>Aucun message reçu</Text>
             </View>
           ) : (
-            <View style={styles.notificationsList}>
+            <View style={{ marginTop: 16 }}>
               {notifications.slice(0, 5).map((notification, index) => (
                 <TouchableOpacity
                   key={notification.id || index}
@@ -705,48 +606,28 @@ const handleLogout = async () => {
                     styles.notificationItem,
                     notification.statut === 'non_lu' && styles.notificationUnread
                   ]}
-                  onPress={() => {
-                    markNotificationAsRead(notification.id);
-                    
-                    // Navigation selon le type
-                    if (notification.type_reference === 'animal') {
-                      navigation.navigate('AnimalDetails', { 
-                        animalId: notification.id_reference 
-                      });
-                    } else if (notification.type_reference === 'intervention') {
-                      navigation.navigate('InterventionDetails', { 
-                        interventionId: notification.id_reference 
-                      });
-                    }
-                  }}
+                  onPress={() => markNotificationAsRead(notification.id)}
                   activeOpacity={0.7}
                 >
                   <View style={[
                     styles.notificationIcon,
-                    { backgroundColor: getNotificationColor(notification.type_notification) }
+                    { backgroundColor: getNotificationColor(notification.type_notification) + '20' }
                   ]}>
                     <MaterialIcons
                       name={getNotificationIcon(notification.type_notification)}
-                      size={22}
-                      color="#FFF"
+                      size={20}
+                      color={getNotificationColor(notification.type_notification)}
                     />
                   </View>
-                  
+
                   <View style={styles.notificationContent}>
                     <Text style={styles.notificationTitle} numberOfLines={1}>
                       {notification.titre}
-                    </Text>
-                    <Text style={styles.notificationMessage} numberOfLines={2}>
-                      {notification.message}
                     </Text>
                     <Text style={styles.notificationTime}>
                       {notification.time_ago}
                     </Text>
                   </View>
-
-                  {notification.statut === 'non_lu' && (
-                    <View style={styles.unreadDot} />
-                  )}
                 </TouchableOpacity>
               ))}
             </View>
@@ -758,7 +639,7 @@ const handleLogout = async () => {
               onPress={() => navigation.navigate('Notifications')}
               style={styles.viewAllButton}
             >
-              Voir toutes les notifications
+              Voir tout le centre d'aide
             </Button>
           )}
         </Card.Content>
@@ -860,7 +741,7 @@ const handleLogout = async () => {
           ]}>
             <View style={styles.modalHeader}>
               <Title>Changer le mot de passe</Title>
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => setPasswordModalVisible(false)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
@@ -873,9 +754,9 @@ const handleLogout = async () => {
                 mode="outlined"
                 label="Mot de passe actuel *"
                 value={passwordForm.currentPassword}
-                onChangeText={(text) => setPasswordForm(prev => ({ 
-                  ...prev, 
-                  currentPassword: text 
+                onChangeText={(text) => setPasswordForm(prev => ({
+                  ...prev,
+                  currentPassword: text
                 }))}
                 secureTextEntry
                 style={styles.input}
@@ -886,9 +767,9 @@ const handleLogout = async () => {
                 mode="outlined"
                 label="Nouveau mot de passe *"
                 value={passwordForm.newPassword}
-                onChangeText={(text) => setPasswordForm(prev => ({ 
-                  ...prev, 
-                  newPassword: text 
+                onChangeText={(text) => setPasswordForm(prev => ({
+                  ...prev,
+                  newPassword: text
                 }))}
                 secureTextEntry
                 style={styles.input}
@@ -899,9 +780,9 @@ const handleLogout = async () => {
                 mode="outlined"
                 label="Confirmer le mot de passe *"
                 value={passwordForm.confirmPassword}
-                onChangeText={(text) => setPasswordForm(prev => ({ 
-                  ...prev, 
-                  confirmPassword: text 
+                onChangeText={(text) => setPasswordForm(prev => ({
+                  ...prev,
+                  confirmPassword: text
                 }))}
                 secureTextEntry
                 style={styles.input}
@@ -921,7 +802,7 @@ const handleLogout = async () => {
                 >
                   Annuler
                 </Button>
-                
+
                 <Button
                   mode="contained"
                   onPress={handleChangePassword}
@@ -956,7 +837,7 @@ const handleLogout = async () => {
           ]}>
             <View style={styles.modalHeader}>
               <Title>Carte d'employé digitale</Title>
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => setQrModalVisible(false)}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
@@ -975,9 +856,9 @@ const handleLogout = async () => {
                 <View style={styles.employeeCardBody}>
                   <Avatar.Image
                     size={90}
-                    source={{ 
-                      uri: userData?.photo_identite || 
-                        'https://via.placeholder.com/90?text=Photo' 
+                    source={{
+                      uri: userData?.photo_identite ||
+                        'https://via.placeholder.com/90?text=Photo'
                     }}
                     style={styles.employeePhoto}
                   />
@@ -1033,7 +914,7 @@ const handleLogout = async () => {
   // === FONCTIONS UTILITAIRES === //
 
   const getPresenceStatusColor = (statut) => {
-    switch(statut) {
+    switch (statut) {
       case 'present': return '#2ECC71';
       case 'retard': return '#F39C12';
       case 'absent': return '#E74C3C';
@@ -1042,10 +923,10 @@ const handleLogout = async () => {
   };
 
   const getCongeIcon = (type) => {
-    switch(type) {
+    switch (type) {
       case 'annuel': return 'beach';
       case 'maladie': return 'hospital-box';
-      case 'maternite': 
+      case 'maternite':
       case 'paternite': return 'baby-carriage';
       case 'exceptionnel': return 'calendar-star';
       default: return 'calendar';
@@ -1053,7 +934,7 @@ const handleLogout = async () => {
   };
 
   const getCongeColor = (statut) => {
-    switch(statut) {
+    switch (statut) {
       case 'approuve': return '#2ECC71';
       case 'en_attente': return '#F39C12';
       case 'rejete': return '#E74C3C';
@@ -1062,7 +943,7 @@ const handleLogout = async () => {
   };
 
   const getCongeStatusLabel = (statut) => {
-    switch(statut) {
+    switch (statut) {
       case 'approuve': return 'Approuvé';
       case 'en_attente': return 'En attente';
       case 'rejete': return 'Rejeté';
@@ -1071,7 +952,7 @@ const handleLogout = async () => {
   };
 
   const getNotificationIcon = (type) => {
-    switch(type) {
+    switch (type) {
       case 'alerte_sanitaire': return 'warning';
       case 'vaccination': return 'vaccines';
       case 'intervention': return 'medical-services';
@@ -1081,7 +962,7 @@ const handleLogout = async () => {
   };
 
   const getNotificationColor = (type) => {
-    switch(type) {
+    switch (type) {
       case 'alerte_sanitaire': return '#E74C3C';
       case 'vaccination': return '#F39C12';
       case 'intervention': return '#3498DB';
@@ -1092,7 +973,7 @@ const handleLogout = async () => {
 
   const formatDate = (dateString) => {
     if (!dateString) return '-';
-    
+
     const date = new Date(dateString);
     return date.toLocaleDateString('fr-FR', {
       day: '2-digit',
@@ -1120,6 +1001,12 @@ const handleLogout = async () => {
     );
   }
 
+  const getResponsiveLayout = () => {
+    if (isExtraLargeScreen) return 'three-column';
+    if (isLargeScreen) return 'two-column';
+    return 'single-column';
+  };
+
   const layout = getResponsiveLayout();
 
   return (
@@ -1127,50 +1014,71 @@ const handleLogout = async () => {
       <ScrollView
         style={styles.container}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
+          <RefreshControl
+            refreshing={refreshing}
             onRefresh={onRefresh}
             colors={['#3498DB']}
           />
         }
         showsVerticalScrollIndicator={false}
       >
-        {renderHeader()}
-        {renderStatsCards()}
+        <View style={styles.mainWrapper}>
+          {renderHeader()}
 
-        {/* Contenu en colonnes responsive */}
-        <View style={[
-          styles.contentContainer,
-          layout === 'two-column' && styles.contentContainerTwoColumn,
-          layout === 'three-column' && styles.contentContainerThreeColumn
-        ]}>
-          {/* Colonne gauche */}
           <View style={[
-            styles.column,
-            layout === 'two-column' && styles.columnHalf,
-            layout === 'three-column' && styles.columnThird
+            styles.mainContentContainer,
+            isTablet && styles.mainContentTablet
           ]}>
-            {renderInformationsPersonnelles()}
-            {renderPresences()}
-          </View>
+            {renderStatsCards()}
 
-          {/* Colonne milieu (large screens uniquement) */}
-          {layout === 'three-column' && (
-            <View style={styles.columnThird}>
-              {renderConges()}
-              {renderActionsMenu()}
+            {/* Layout Grid Adaptatif */}
+            <View style={[
+              styles.responsiveGrid,
+              layout === 'two-column' && styles.responsiveGridTwo,
+              layout === 'three-column' && styles.responsiveGridThree
+            ]}>
+
+              {/* Colonne 1: Infos & Présence */}
+              <View style={[
+                styles.gridColumn,
+                layout !== 'single-column' && styles.gridColumnCompact
+              ]}>
+                {renderInformationsPersonnelles()}
+                {renderPresences()}
+              </View>
+
+              {/* Colonne 2: Congés & Actions (ou suite de liste) */}
+              <View style={[
+                styles.gridColumn,
+                layout !== 'single-column' && styles.gridColumnCompact
+              ]}>
+                {renderConges()}
+                {layout === 'two-column' && renderActionsMenu()}
+                {layout === 'three-column' && renderNotifications()}
+              </View>
+
+              {/* Colonne 3: Notifications & Paramètres (Large Only) */}
+              {layout === 'three-column' && (
+                <View style={[styles.gridColumn, styles.gridColumnCompact]}>
+                  {renderActionsMenu()}
+                </View>
+              )}
+
+              {/* Pour mobile, Notifications et Menu à la fin */}
+              {layout === 'single-column' && (
+                <>
+                  {renderNotifications()}
+                  {renderActionsMenu()}
+                </>
+              )}
+
+              {/* Pour Tablet, Notifications à la fin de la 2ème col si pas déjà rendu */}
+              {layout === 'two-column' && (
+                <View style={[styles.gridColumn, styles.gridColumnCompact]}>
+                  {renderNotifications()}
+                </View>
+              )}
             </View>
-          )}
-
-          {/* Colonne droite */}
-          <View style={[
-            styles.column,
-            layout === 'two-column' && styles.columnHalf,
-            layout === 'three-column' && styles.columnThird
-          ]}>
-            {layout !== 'three-column' && renderConges()}
-            {renderNotifications()}
-            {layout !== 'three-column' && renderActionsMenu()}
           </View>
         </View>
 
@@ -1188,225 +1096,226 @@ const handleLogout = async () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F6FA',
+    backgroundColor: '#F8FAFC',
+  },
+  mainWrapper: {
+    paddingBottom: 40,
+  },
+  mainContentContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 20,
+  },
+  mainContentTablet: {
+    paddingHorizontal: 32,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F6FA',
+    backgroundColor: '#F8FAFC',
   },
   loadingText: {
     marginTop: 15,
     fontSize: 16,
-    color: '#7F8C8D',
+    color: '#64748B',
+    fontWeight: '500',
   },
 
-  // Header
+  // Header Redesign
   header: {
     backgroundColor: '#FFF',
-    paddingTop: Platform.OS === 'ios' ? 50 : 20,
-    paddingBottom: 20,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingBottom: 30,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#ECF0F1',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
+    borderBottomColor: '#F1F5F9',
   },
   headerTablet: {
     paddingHorizontal: 40,
-    paddingVertical: 30,
+    paddingVertical: 50,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  profileImageContainer: {
+  profileImageWrapper: {
+    marginRight: 20,
+  },
+  avatarContainer: {
     position: 'relative',
+    padding: 4,
+    borderRadius: 65,
+    backgroundColor: '#F1F5F9',
   },
   avatar: {
-    backgroundColor: '#ECF0F1',
+    backgroundColor: '#E2E8F0',
   },
-  onlineBadge: {
+  onlineIndicator: {
     position: 'absolute',
-    bottom: 2,
-    right: 2,
-    backgroundColor: '#2ECC71',
-    borderWidth: 2,
+    bottom: 8,
+    right: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#10B981',
+    borderWidth: 3,
     borderColor: '#FFF',
   },
-  profileInfo: {
+  profileMainInfo: {
     flex: 1,
-    marginLeft: 15,
   },
-  profileInfoTablet: {
-    marginLeft: 25,
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
   },
   userName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#2C3E50',
-  },
-  userNameTablet: {
     fontSize: 24,
+    fontWeight: '800',
+    color: '#0F172A',
+    flexShrink: 1,
   },
-  userRole: {
-    fontSize: 14,
-    color: '#7F8C8D',
-    marginTop: 4,
+  qrIconBadge: {
+    backgroundColor: '#EFF6FF',
+    padding: 8,
+    borderRadius: 12,
   },
-  userRoleTablet: {
+  userProfessionalTitle: {
     fontSize: 16,
+    fontWeight: '600',
+    color: '#3B82F6',
+    marginBottom: 8,
   },
-  userMatricule: {
-    fontSize: 12,
-    color: '#95A5A6',
-    marginTop: 4,
-  },
-  userTags: {
+  metaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginTop: 10,
-    gap: 6,
+    gap: 12,
+    marginBottom: 12,
   },
-  userChip: {
-    backgroundColor: '#ECF0F1',
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  userChipText: {
+  metaText: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  statusChip: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#D1FAE5',
+  },
+  statusChipText: {
+    color: '#059669',
     fontSize: 11,
+    fontWeight: '600',
   },
-  qrButton: {
-    padding: 8,
+  loyaltyChip: {
+    backgroundColor: '#F5F3FF',
+    borderColor: '#EDE9FE',
+  },
+  loyaltyChipText: {
+    color: '#7C3AED',
+    fontSize: 11,
+    fontWeight: '600',
   },
 
-  // Stats
+  // Stats Card Redesign
   statsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    padding: 15,
-    gap: 15,
-  },
-  statsContainerTablet: {
-    paddingHorizontal: 40,
+    gap: 16,
+    marginBottom: 24,
   },
   statCard: {
     flex: 1,
     minWidth: 150,
+    borderRadius: 16,
     backgroundColor: '#FFF',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
-  },
-  statCardHalf: {
-    width: '48%',
-    flex: 0,
-  },
-  statCardThird: {
-    width: '31%',
-    flex: 0,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
   },
   statContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 8,
   },
   statIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },
   statInfo: {
+    marginLeft: 12,
     flex: 1,
-    marginLeft: 15,
   },
   statValue: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#2C3E50',
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#1E293B',
   },
   statLabel: {
-    fontSize: 13,
-    color: '#7F8C8D',
-    marginTop: 2,
-  },
-  statSubLabel: {
-    fontSize: 11,
-    color: '#95A5A6',
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '600',
     marginTop: 2,
   },
 
-  // Content
-  contentContainer: {
-    padding: 15,
-  },
-  contentContainerTwoColumn: {
-    flexDirection: 'row',
-    paddingHorizontal: 40,
+  // Grid System
+  responsiveGrid: {
     gap: 20,
-    alignItems: 'flex-start',
   },
-  contentContainerThreeColumn: {
+  responsiveGridTwo: {
     flexDirection: 'row',
-    paddingHorizontal: 40,
-    gap: 20,
-    alignItems: 'flex-start',
+    flexWrap: 'wrap',
   },
-  column: {
+  responsiveGridThree: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  gridColumn: {
+    width: '100%',
+    gap: 20,
+  },
+  gridColumnCompact: {
     flex: 1,
-  },
-  columnHalf: {
-    width: '48%',
-    flex: 0,
-  },
-  columnThird: {
-    width: '31%',
-    flex: 0,
+    minWidth: 300,
   },
 
-  // Cards
+  // Card Content
   card: {
-    marginBottom: 20,
+    borderRadius: 20,
     backgroundColor: '#FFF',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
   },
   cardTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 5,
+    gap: 12,
   },
   cardTitle: {
-    fontSize: 17,
-    fontWeight: 'bold',
-    color: '#2C3E50',
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0F172A',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -1414,403 +1323,226 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerChip: {
-    backgroundColor: '#3498DB',
-  },
-  sectionDivider: {
-    marginVertical: 15,
-    backgroundColor: '#ECF0F1',
+    backgroundColor: '#3B82F6',
+    borderRadius: 8,
   },
 
-  // Infos
+  // Informations Personnelles List
   infoGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  infoGridTablet: {
-    gap: 10,
+    paddingVertical: 10,
   },
   infoItem: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    width: '100%',
-    paddingVertical: 12,
+    alignItems: 'center',
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#F8F9FA',
-  },
-  infoItemHalf: {
-    width: '50%',
-    borderRightWidth: 1,
-    borderRightColor: '#F8F9FA',
-    paddingRight: 10,
+    borderBottomColor: '#F1F5F9',
   },
   infoText: {
+    marginLeft: 16,
     flex: 1,
-    marginLeft: 12,
   },
   infoLabel: {
     fontSize: 12,
-    color: '#7F8C8D',
-    marginBottom: 4,
+    color: '#94A3B8',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
   },
   infoValue: {
-    fontSize: 14,
-    color: '#2C3E50',
+    fontSize: 15,
+    color: '#1E293B',
     fontWeight: '500',
   },
 
-  // Empty state
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#95A5A6',
-  },
-
-  // Presences
+  // Presence List
   presenceList: {
-    gap: 8,
+    gap: 12,
   },
   presenceItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 10,
+    padding: 14,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
   },
   presenceDate: {
-    width: 50,
+    backgroundColor: '#FFF',
+    padding: 8,
+    borderRadius: 12,
+    width: 60,
     alignItems: 'center',
-    marginRight: 15,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
   },
   presenceDateDay: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2C3E50',
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
   },
   presenceDateMonth: {
-    fontSize: 11,
-    color: '#7F8C8D',
+    fontSize: 10,
+    color: '#64748B',
+    fontWeight: '700',
     textTransform: 'uppercase',
-    marginTop: 2,
   },
   presenceInfo: {
     flex: 1,
-  },
-  presenceTime: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
+    marginLeft: 16,
   },
   presenceTimeText: {
-    fontSize: 13,
-    color: '#2C3E50',
-    marginLeft: 6,
-  },
-  presenceDuration: {
-    alignItems: 'flex-end',
-  },
-  durationText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#2C3E50',
-    marginBottom: 4,
+    color: '#475569',
+    fontWeight: '500',
   },
   presenceStatusChip: {
-    height: 22,
-  },
-  presenceStatusText: {
-    fontSize: 10,
-    color: '#FFF',
-    fontWeight: '600',
+    borderRadius: 8,
   },
 
-  // Congés
-  congesList: {
-    gap: 8,
-  },
+  // Conges
   congeItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 10,
+    padding: 14,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    marginBottom: 12,
   },
   congeIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 16,
   },
   congeInfo: {
     flex: 1,
   },
   congeType: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#2C3E50',
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1E293B',
     textTransform: 'capitalize',
   },
   congeDates: {
     fontSize: 12,
-    color: '#7F8C8D',
-    marginTop: 4,
-  },
-  congeDuration: {
-    fontSize: 11,
-    color: '#95A5A6',
+    color: '#64748B',
     marginTop: 2,
-  },
-  congeStatusChip: {
-    height: 24,
-  },
-  congeStatusText: {
-    fontSize: 10,
-    color: '#FFF',
-    fontWeight: '600',
   },
 
   // Notifications
-  notificationsList: {
-    gap: 8,
-  },
   notificationItem: {
     flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 10,
+    padding: 14,
+    backgroundColor: '#FFF',
+    borderRadius: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
   },
   notificationUnread: {
-    backgroundColor: '#EBF5FB',
-    borderLeftWidth: 3,
-    borderLeftColor: '#3498DB',
+    backgroundColor: '#F0F9FF',
+    borderColor: '#BAE6FD',
   },
   notificationIcon: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-  },
-  notificationContent: {
-    flex: 1,
+    marginRight: 16,
   },
   notificationTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#2C3E50',
-    marginBottom: 4,
-  },
-  notificationMessage: {
-    fontSize: 12,
-    color: '#7F8C8D',
-    lineHeight: 18,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
   },
   notificationTime: {
     fontSize: 11,
-    color: '#95A5A6',
+    color: '#94A3B8',
     marginTop: 4,
-  },
-  unreadDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#3498DB',
-    marginLeft: 8,
-  },
-  notificationBadge: {
-    backgroundColor: '#E74C3C',
-  },
-
-  // Menu
-  menuItem: {
-    paddingVertical: 4,
-  },
-  menuBadge: {
-    backgroundColor: '#E74C3C',
-    marginRight: 8,
   },
 
   // Buttons
   actionButton: {
-    marginTop: 15,
-    backgroundColor: '#3498DB',
-  },
-  actionButtonLabel: {
-    fontSize: 14,
-    fontWeight: '600',
+    borderRadius: 12,
+    marginTop: 10,
   },
   viewAllButton: {
-    marginTop: 10,
+    marginTop: 16,
   },
 
   // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContainer: {
     backgroundColor: '#FFF',
-    borderRadius: 12,
-    maxHeight: '90%',
-    width: '90%',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 8,
-      },
-    }),
-  },
-  modalContainerTablet: {
-    width: '70%',
-    maxWidth: 600,
+    borderRadius: 24,
+    width: '92%',
+    maxHeight: '85%',
+    overflow: 'hidden',
   },
   modalHeader: {
+    padding: 24,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    justifyContent: 'space-between',
     borderBottomWidth: 1,
-    borderBottomColor: '#ECF0F1',
+    borderBottomColor: '#F1F5F9',
   },
   modalContent: {
-    padding: 20,
-    maxHeight: 500,
-  },
-  input: {
-    marginBottom: 15,
-    backgroundColor: '#FFF',
-  },
-  passwordHint: {
-    fontSize: 12,
-    color: '#7F8C8D',
-    marginBottom: 20,
-    lineHeight: 18,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  modalCancelButton: {
-    flex: 1,
-    borderColor: '#95A5A6',
-  },
-  modalSubmitButton: {
-    flex: 1,
-    backgroundColor: '#3498DB',
+    padding: 24,
   },
 
-  // QR Modal
-  qrModalContent: {
-    padding: 20,
-    maxHeight: 600,
-  },
+  // QR Modal Card
   employeeCard: {
+    borderRadius: 24,
     backgroundColor: '#FFF',
-    borderRadius: 15,
-    borderWidth: 2,
-    borderColor: '#3498DB',
     overflow: 'hidden',
-    marginBottom: 20,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 6,
-      },
-      android: {
-        elevation: 5,
-      },
-    }),
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    marginBottom: 24,
   },
   employeeCardHeader: {
-    backgroundColor: '#3498DB',
-    padding: 20,
+    backgroundColor: '#3B82F6',
+    padding: 24,
     alignItems: 'center',
   },
   companyName: {
-    fontSize: 22,
-    fontWeight: 'bold',
     color: '#FFF',
-    marginTop: 10,
-  },
-  companySubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.9)',
-    marginTop: 4,
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: 1,
   },
   employeeCardBody: {
-    padding: 25,
+    padding: 32,
     alignItems: 'center',
   },
-  employeePhoto: {
-    marginBottom: 15,
-    borderWidth: 3,
-    borderColor: '#ECF0F1',
-  },
-  employeeName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#2C3E50',
-    textAlign: 'center',
-  },
-  employeeRole: {
-    fontSize: 15,
-    color: '#7F8C8D',
-    marginTop: 4,
-  },
-  employeeMatricule: {
-    fontSize: 13,
-    color: '#95A5A6',
-    marginTop: 4,
-    marginBottom: 25,
-  },
-  qrCodeContainer: {
-    padding: 20,
+  qrCodeWrapper: {
+    padding: 16,
     backgroundColor: '#FFF',
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#ECF0F1',
-  },
-  qrCodeInfo: {
-    fontSize: 12,
-    color: '#7F8C8D',
-    marginTop: 15,
-    textAlign: 'center',
-  },
-  employeeCardFooter: {
-    flexDirection: 'row',
-    backgroundColor: '#F8F9FA',
-    padding: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardFooterText: {
-    fontSize: 11,
-    color: '#7F8C8D',
-  },
-  modalCloseButton: {
-    borderColor: '#3498DB',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    marginTop: 24,
   },
 
-  // Spacing
   bottomSpacing: {
-    height: 30,
+    height: 40,
   },
 });
 

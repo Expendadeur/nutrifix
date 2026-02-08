@@ -8,6 +8,7 @@ import { StyleSheet, Platform, View, Text } from 'react-native';
 import AnimauxScreen from '../screens/veterinaire/AnimauxScreen';
 import DashboardScreen from '../screens/veterinaire/DashboardScreen';
 import InterventionsScreen from '../screens/veterinaire/InterventionsScreen';
+import SalairesScreen from '../screens/veterinaire/SalairesScreen';
 import ProfilScreen from '../screens/veterinaire/ProfilScreen';
 
 const Tab = createBottomTabNavigator();
@@ -90,6 +91,14 @@ const VeterinaireNavigator = ({ onLogout }) => {
                 options={{ 
                     title: 'Interventions',
                     tabBarLabel: 'Interventions',
+                }}
+            />
+            <Tab.Screen 
+                name="Salaires" 
+                component={SalairesScreen}
+                options={{ 
+                    title: 'Salaires',
+                    tabBarLabel: 'Salaires',
                 }}
             />
             

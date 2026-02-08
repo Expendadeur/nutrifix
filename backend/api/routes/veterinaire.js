@@ -1697,7 +1697,6 @@ router.get('/paiements/en-attente', authenticate, authorize('veterinaire'), asyn
 });
 
 // ==================== STATISTIQUES D'INTERVENTIONS ====================
-
 // Obtenir le nombre de jours d'intervention par mois
 router.get('/statistiques/interventions-mensuelles', authenticate, authorize('veterinaire'), async (req, res) => {
     try {
@@ -1732,7 +1731,7 @@ router.get('/statistiques/interventions-mensuelles', authenticate, authorize('ve
             FROM suivis_sanitaires
             WHERE id_technicien = ?
             AND YEAR(date_intervention) = ?
-            GROUP BY MONTH(date_intervention)
+            GROUP BY MONTH(date_intervention), mois_nom
             ORDER BY MONTH(date_intervention)
         `;
 
