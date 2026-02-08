@@ -262,7 +262,7 @@ async function calculerSoldeConges(userId) {
  * @desc    Récupérer les données du dashboard employé
  * @access  Private (Employé INSS)
  */
-router.get('/dashboard', authenticate, authorize(['employe_inss']), async (req, res) => {
+router.get('/dashboard', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     
@@ -372,7 +372,7 @@ router.get('/dashboard', authenticate, authorize(['employe_inss']), async (req, 
  * @desc    Récupérer le profil complet de l'employé
  * @access  Private (Employé INSS)
  */
-router.get('/profil', authenticate, authorize(['employe_inss']), async (req, res) => {
+router.get('/profil', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     
@@ -438,7 +438,7 @@ router.get('/profil', authenticate, authorize(['employe_inss']), async (req, res
  * @desc    Mettre à jour le profil de l'employé
  * @access  Private (Employé INSS)
  */
-router.put('/profil', authenticate, authorize(['employe_inss']), async (req, res) => {
+router.put('/profil', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     const {
@@ -508,7 +508,7 @@ router.put('/profil', authenticate, authorize(['employe_inss']), async (req, res
  */
 router.post('/conges/demande', 
   authenticate, 
-  authorize(['employe_inss']), 
+  authorize(['employe']), 
   upload.single('piece_jointe'),
   async (req, res) => {
     const connection = await db.getConnection();
@@ -653,7 +653,7 @@ router.post('/conges/demande',
  * @desc    Récupérer l'historique des demandes de congé
  * @access  Private (Employé INSS)
  */
-router.get('/conges', authenticate, authorize(['employe_inss']), async (req, res) => {
+router.get('/conges', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     const { statut, annee } = req.query;
@@ -701,7 +701,7 @@ router.get('/conges', authenticate, authorize(['employe_inss']), async (req, res
  * @desc    Récupérer le solde de congés
  * @access  Private (Employé INSS)
  */
-router.get('/conges/solde', authenticate, authorize(['employe_inss']), async (req, res) => {
+router.get('/conges/solde', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     const solde = await calculerSoldeConges(userId);
@@ -725,7 +725,7 @@ router.get('/conges/solde', authenticate, authorize(['employe_inss']), async (re
  * @desc    Récupérer les bulletins de salaire
  * @access  Private (Employé INSS)
  */
-router.get('/salaires', authenticate, authorize(['employe_inss']), async (req, res) => {
+router.get('/salaires', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     const { annee } = req.query;
@@ -785,7 +785,7 @@ router.get('/salaires', authenticate, authorize(['employe_inss']), async (req, r
  * @desc    Récupérer le détail d'un bulletin de salaire
  * @access  Private (Employé INSS)
  */
-router.get('/salaires/:id', authenticate, authorize(['employe_inss']), async (req, res) => {
+router.get('/salaires/:id', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     const salaireId = req.params.id;
@@ -846,7 +846,7 @@ router.get('/salaires/:id', authenticate, authorize(['employe_inss']), async (re
  * @desc    Récupérer l'historique des présences
  * @access  Private (Employé INSS)
  */
-router.get('/presences', authenticate, authorize(['employe_inss']), async (req, res) => {
+router.get('/presences', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     const { mois, annee } = req.query;
@@ -908,7 +908,7 @@ router.get('/presences', authenticate, authorize(['employe_inss']), async (req, 
  * @desc    Enregistrer un pointage d'entrée
  * @access  Private (Employé INSS)
  */
-router.post('/pointage/entree', authenticate, authorize(['employe_inss']), async (req, res) => {
+router.post('/pointage/entree', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     const { latitude, longitude } = req.body;
@@ -955,7 +955,7 @@ router.post('/pointage/entree', authenticate, authorize(['employe_inss']), async
  * @desc    Enregistrer un pointage de sortie
  * @access  Private (Employé INSS)
  */
-router.post('/pointage/sortie', authenticate, authorize(['employe_inss']), async (req, res) => {
+router.post('/pointage/sortie', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     const { latitude, longitude } = req.body;
@@ -1018,7 +1018,7 @@ router.post('/pointage/sortie', authenticate, authorize(['employe_inss']), async
  * @desc    Récupérer les notifications
  * @access  Private (Employé INSS)
  */
-router.get('/notifications', authenticate, authorize(['employe_inss']), async (req, res) => {
+router.get('/notifications', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     const { statut, limit = 20 } = req.query;
@@ -1059,7 +1059,7 @@ router.get('/notifications', authenticate, authorize(['employe_inss']), async (r
  * @desc    Marquer une notification comme lue
  * @access  Private (Employé INSS)
  */
-router.put('/notifications/:id/marquer-lu', authenticate, authorize(['employe_inss']), async (req, res) => {
+router.put('/notifications/:id/marquer-lu', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     const notificationId = req.params.id;
@@ -1093,7 +1093,7 @@ router.put('/notifications/:id/marquer-lu', authenticate, authorize(['employe_in
  */
 router.post('/salaires/:id/demander-paiement', 
   authenticate, 
-  authorize(['employe_inss']), 
+  authorize(['employe']), 
   async (req, res) => {
     const connection = await db.getConnection();
     
@@ -1198,7 +1198,7 @@ router.post('/salaires/:id/demander-paiement',
  */
 router.post('/salaires/:id/confirmer-reception', 
   authenticate, 
-  authorize(['employe_inss']), 
+  authorize(['employe']), 
   async (req, res) => {
     const connection = await db.getConnection();
     
@@ -1330,7 +1330,7 @@ router.post('/salaires/:id/confirmer-reception',
  */
 router.post('/salaires/:id/demander-code', 
   authenticate, 
-  authorize(['employe_inss']), 
+  authorize(['employe']), 
   async (req, res) => {
     try {
       const userId = req.user.id;
@@ -1391,7 +1391,7 @@ function getMoisNom(mois) {
  * @desc    Récupérer la carte digitale de l'employé
  * @access  Private (Employé INSS)
  */
-router.get('/carte', authenticate, authorize(['employe_inss']), async (req, res) => {
+router.get('/carte', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     
