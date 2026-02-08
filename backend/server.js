@@ -560,7 +560,7 @@ process.on('uncaughtException', (error) => {
 // ============================================
 // DÉMARRAGE DU SERVEUR
 // ============================================
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 11500;
 
 db.execute('SELECT 1')
     .then(() => {
@@ -570,7 +570,7 @@ db.execute('SELECT 1')
             console.log('='.repeat(50));
             console.log(`📍 Environnement: ${process.env.NODE_ENV}`);
             console.log(`🌐 Port: ${PORT}`);
-            console.log(`🔌 WebSocket: ${process.env.SOCKET_PORT || PORT}`);
+            console.log(`🔌 WebSocket: ${process.env.PORT || PORT}`);
             console.log(`💾 Base de données: ${process.env.DB_NAME}@${process.env.DB_HOST}`);
             console.log(`📁 Uploads: ${uploadPath}`);
             console.log(`🔐 CORS: ${allowedOrigins.length} origines autorisées`);
