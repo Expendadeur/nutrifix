@@ -45,10 +45,10 @@ const RootNavigator = ({ onLogout }) => {
     const initializeApp = async () => {
         try {
             console.log('🚀 === INITIALISATION ROOTNAVIGATOR ===');
-            
+
             await loadUserData();
             await initializeNotifications();
-            
+
             console.log('='.repeat(50));
         } catch (error) {
             console.error('❌ Erreur initialisation app:', error);
@@ -64,12 +64,12 @@ const RootNavigator = ({ onLogout }) => {
         try {
             const userData = await AsyncStorage.getItem('userData');
             const role = await AsyncStorage.getItem('userRole');
-            
+
             if (userData) {
                 const user = JSON.parse(userData);
                 setUserRole(role || user.role);
                 setUserName(user.nom || user.email);
-                
+
                 console.log('👤 Utilisateur chargé:', user.nom || user.email);
                 console.log('🎭 Rôle:', role || user.role);
             } else {
@@ -105,22 +105,22 @@ const RootNavigator = ({ onLogout }) => {
         try {
             console.log('\n🚪 === DÉCONNEXION DEPUIS ROOTNAVIGATOR ===');
             console.log('Utilisateur:', userName);
-            
+
             // Déconnecter via le service d'authentification
             await authService.logout();
-            
+
             // Nettoyer les notifications
             notificationService.cleanup();
-            
+
             console.log('✅ Services nettoyés');
-            
+
             // Appeler le callback du _layout.tsx pour retourner au LoginScreen
             if (onLogout) {
                 await onLogout();
             }
         } catch (error) {
             console.error('❌ Erreur déconnexion:', error);
-            
+
             // Forcer la déconnexion même en cas d'erreur
             if (onLogout) {
                 await onLogout();
@@ -178,7 +178,7 @@ const RootNavigator = ({ onLogout }) => {
     // NAVIGATION PAR RÔLE
     // ============================================
     return (
-        <Stack.Navigator 
+        <Stack.Navigator
             screenOptions={{ headerShown: false }}
             initialRouteName="MainApp"
         >
@@ -187,10 +187,10 @@ const RootNavigator = ({ onLogout }) => {
                 ============================================ */}
             <Stack.Screen name="MainApp">
                 {({ navigation, route }) => (
-                    <RoleNavigator 
+                    <RoleNavigator
                         navigation={navigation}
                         route={route}
-                        onLogout={handleLogout} 
+                        onLogout={handleLogout}
                     />
                 )}
             </Stack.Screen>
@@ -198,18 +198,18 @@ const RootNavigator = ({ onLogout }) => {
             {/* ============================================
                 ÉCRANS UTILITAIRES (accessibles via navigation)
                 ============================================ */}
-           
-            <Stack.Screen 
-                name="QRScanner" 
-                component={QRScannerScreen} 
+
+            <Stack.Screen
+                name="QRScanner"
+                component={QRScannerScreen}
             />
-            <Stack.Screen 
-                name="ForgotPassword" 
-                component={ForgotPasswordScreen} 
+            <Stack.Screen
+                name="ForgotPassword"
+                component={ForgotPasswordScreen}
             />
-            <Stack.Screen 
-                name="ChangePassword" 
-                component={ChangePasswordScreen} 
+            <Stack.Screen
+                name="ChangePassword"
+                component={ChangePasswordScreen}
             />
         </Stack.Navigator>
     );

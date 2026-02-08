@@ -65,6 +65,16 @@ const ProfilScreen = ({ navigation, route, onLogout }) => {
     solde_conges: 0
   });
 
+  // Helpers responsive (placés ici pour éviter "access before initialization")
+  const getResponsiveLayout = useCallback(() => {
+    if (isExtraLargeScreen) return 'three-column';
+    if (isLargeScreen) return 'two-column';
+    return 'single-column';
+  }, [isExtraLargeScreen, isLargeScreen]);
+
+  const layout = getResponsiveLayout();
+
+
   // Modals
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
   const [qrModalVisible, setQrModalVisible] = useState(false);
@@ -258,26 +268,6 @@ const ProfilScreen = ({ navigation, route, onLogout }) => {
     }
   };
 
-  // Helpers responsive
-  const getResponsiveValue = useCallback((values) => {
-    const {
-      mobile = 15,
-      mobileLarge,
-      tablet,
-      laptop,
-      desktop,
-      desktopLarge
-    } = values;
-
-    switch (getResponsiveLayout()) {
-      case 'three-column':
-        return desktopLarge ?? desktop ?? laptop ?? tablet ?? mobileLarge ?? mobile;
-      case 'two-column':
-        return tablet ?? mobileLarge ?? mobile;
-      default:
-        return mobile;
-    }
-  }, [getResponsiveLayout]);
 
   // === COMPOSANTS DE RENDU === //
 
@@ -309,40 +299,33 @@ const ProfilScreen = ({ navigation, route, onLogout }) => {
             <TouchableOpacity
               style={styles.qrIconBadge}
               onPress={() => setQrModalVisible(true)}
+              activeOpacity={0.7}
             >
-              <MaterialCommunityIcons name="qrcode-scan" size={24} color="#3498DB" />
+              <MaterialCommunityIcons name="qrcode-scan" size={24} color="#3B82F6" />
             </TouchableOpacity>
           </View>
 
           <Text style={styles.userProfessionalTitle}>
-            Docteur Vétérinaire • {userData?.type_employe || 'Titulaire'}
+            Docteur Vétérinaire
           </Text>
 
           <View style={styles.metaRow}>
             <View style={styles.metaItem}>
-              <MaterialCommunityIcons name="card-account-details-outline" size={16} color="#7F8C8D" />
-              <Text style={styles.metaText}>{userData?.matricule || 'VET-000'}</Text>
+              <MaterialCommunityIcons name="account-badge-outline" size={16} color="#64748B" />
+              <Text style={styles.metaText}>{userData?.role || 'Employé'}</Text>
             </View>
             <View style={styles.metaItem}>
-              <MaterialCommunityIcons name="domain" size={16} color="#7F8C8D" />
-              <Text style={styles.metaText}>{userData?.departement_nom || 'Service Elevage'}</Text>
+              <MaterialCommunityIcons name="domain" size={16} color="#64748B" />
+              <Text style={styles.metaText}>{userData?.departement_nom || 'Vétérinaire'}</Text>
             </View>
           </View>
 
           <View style={styles.headerActions}>
-            <Chip
-              icon="calendar-account"
-              style={styles.statusChip}
-              textStyle={styles.statusChipText}
-            >
-              En poste
+            <Chip style={styles.statusChip} textStyle={styles.statusChipText} compact>
+              ACTIF
             </Chip>
-            <Chip
-              icon="star"
-              style={styles.loyaltyChip}
-              textStyle={styles.loyaltyChipText}
-            >
-              Vétérinaire Senior
+            <Chip style={styles.loyaltyChip} textStyle={styles.loyaltyChipText} compact>
+              12 ANS
             </Chip>
           </View>
         </View>
@@ -350,54 +333,48 @@ const ProfilScreen = ({ navigation, route, onLogout }) => {
     </View>
   );
 
+
   // Cartes de statistiques
-  const renderStatsCards = () => {
-    return (
-      <View style={styles.statsContainer}>
-        <Card style={styles.statCard}>
-          <Card.Content>
-            <View style={styles.statContent}>
-              <View style={[styles.statIcon, { backgroundColor: '#EFF6FF' }]}>
-                <MaterialCommunityIcons name="calendar-check" size={24} color="#3B82F6" />
-              </View>
-              <View style={styles.statInfo}>
-                <Text style={styles.statValue}>{stats?.jours_presence || 0}</Text>
-                <Text style={styles.statLabel}>Présence (jours)</Text>
-              </View>
-            </View>
-          </Card.Content>
-        </Card>
+  const renderStatsCards = () => (
+    <View style={styles.statsContainer}>
+      <Card style={styles.statCard}>
+        <Card.Content style={styles.statContent}>
+          <View style={[styles.statIcon, { backgroundColor: '#EFF6FF' }]}>
+            <MaterialCommunityIcons name="calendar-check" size={26} color="#3B82F6" />
+          </View>
+          <View style={styles.statInfo}>
+            <Text style={styles.statValue}>{stats?.jours_presence || 0}</Text>
+            <Text style={styles.statLabel}>Jours présence</Text>
+          </View>
+        </Card.Content>
+      </Card>
 
-        <Card style={styles.statCard}>
-          <Card.Content>
-            <View style={styles.statContent}>
-              <View style={[styles.statIcon, { backgroundColor: '#ECFDF5' }]}>
-                <MaterialCommunityIcons name="medical-bag" size={24} color="#10B981" />
-              </View>
-              <View style={styles.statInfo}>
-                <Text style={styles.statValue}>{stats?.interventions_mois || 0}</Text>
-                <Text style={styles.statLabel}>Interventions</Text>
-              </View>
-            </View>
-          </Card.Content>
-        </Card>
+      <Card style={styles.statCard}>
+        <Card.Content style={styles.statContent}>
+          <View style={[styles.statIcon, { backgroundColor: '#ECFDF5' }]}>
+            <MaterialCommunityIcons name="medical-bag" size={26} color="#10B981" />
+          </View>
+          <View style={styles.statInfo}>
+            <Text style={styles.statValue}>{stats?.interventions_mois || 0}</Text>
+            <Text style={styles.statLabel}>Interventions</Text>
+          </View>
+        </Card.Content>
+      </Card>
 
-        <Card style={styles.statCard}>
-          <Card.Content>
-            <View style={styles.statContent}>
-              <View style={[styles.statIcon, { backgroundColor: '#FFF7ED' }]}>
-                <MaterialCommunityIcons name="beach" size={24} color="#F97316" />
-              </View>
-              <View style={styles.statInfo}>
-                <Text style={styles.statValue}>{stats?.solde_conges || 0}</Text>
-                <Text style={styles.statLabel}>Solde Congés</Text>
-              </View>
-            </View>
-          </Card.Content>
-        </Card>
-      </View>
-    );
-  };
+      <Card style={styles.statCard}>
+        <Card.Content style={styles.statContent}>
+          <View style={[styles.statIcon, { backgroundColor: '#FFF7ED' }]}>
+            <MaterialCommunityIcons name="palm-tree" size={26} color="#F97316" />
+          </View>
+          <View style={styles.statInfo}>
+            <Text style={styles.statValue}>{stats?.solde_conges || 0}</Text>
+            <Text style={styles.statLabel}>Solde Congés</Text>
+          </View>
+        </Card.Content>
+      </Card>
+    </View>
+  );
+
 
   // Informations personnelles
   const renderInformationsPersonnelles = () => (
@@ -482,7 +459,7 @@ const ProfilScreen = ({ navigation, route, onLogout }) => {
                     <Text style={styles.presenceTimeText}>
                       {presence.heure_entree || '--:--'} • {presence.heure_sortie || '--:--'}
                     </Text>
-                    <Text style={[styles.infoLabel, { marginTop: 2 }]}>
+                    <Text style={[styles.infoLabel, { fontSize: 11, marginTop: 2 }]}>
                       Total: {presence.duree_travail || '0h'}
                     </Text>
                   </View>
@@ -577,6 +554,7 @@ const ProfilScreen = ({ navigation, route, onLogout }) => {
     </Card>
   );
 
+
   // Notifications
   const renderNotifications = () => {
     const unreadCount = notifications.filter(n => n.statut === 'non_lu').length;
@@ -648,82 +626,76 @@ const ProfilScreen = ({ navigation, route, onLogout }) => {
   };
 
   // Menu paramètres
+  // Menu paramètres
   const renderActionsMenu = () => (
     <Card style={styles.card}>
       <Card.Content>
         <View style={styles.cardTitleRow}>
-          <MaterialCommunityIcons name="cog" size={24} color="#95A5A6" />
+          <MaterialCommunityIcons name="cog" size={24} color="#94A3B8" />
           <Title style={styles.cardTitle}>Paramètres</Title>
         </View>
 
-        <Divider style={styles.sectionDivider} />
-
-        <List.Section>
+        <List.Section style={{ marginTop: 10 }}>
           <List.Item
             title="Changer le mot de passe"
-            description="Modifier votre mot de passe"
-            left={props => <List.Icon {...props} icon="lock" color="#3498DB" />}
-            right={props => <List.Icon {...props} icon="chevron-right" />}
+            description="Sécurité de votre compte"
+            left={props => <List.Icon {...props} icon="lock-outline" color="#64748B" />}
+            right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />}
             onPress={() => setPasswordModalVisible(true)}
-            style={styles.menuItem}
           />
-
           <Divider />
-
           <List.Item
             title="Carte d'employé"
-            description="Afficher votre carte digitale"
-            left={props => <List.Icon {...props} icon="card-account-details" color="#2ECC71" />}
-            right={props => <List.Icon {...props} icon="chevron-right" />}
+            description="Votre badge digital"
+            left={props => <List.Icon {...props} icon="card-account-details-outline" color="#64748B" />}
+            right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />}
             onPress={() => setQrModalVisible(true)}
-            style={styles.menuItem}
           />
-
           <Divider />
-
+          <List.Item
+            title="Mes Salaires"
+            description="Historique des paiements"
+            left={props => <List.Icon {...props} icon="cash-multiple" color="#64748B" />}
+            right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />}
+            onPress={() => navigation.navigate('Salaires')}
+          />
+          <Divider />
           <List.Item
             title="Notifications"
-            description="Gérer vos notifications"
-            left={props => <List.Icon {...props} icon="bell" color="#F39C12" />}
+            description="Gérer vos messages"
+            left={props => <List.Icon {...props} icon="bell-outline" color="#64748B" />}
             right={props => (
-              <>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 {notifications.filter(n => n.statut === 'non_lu').length > 0 && (
-                  <Badge style={styles.menuBadge}>
+                  <Badge style={{ backgroundColor: '#EF4444', marginRight: 4 }}>
                     {notifications.filter(n => n.statut === 'non_lu').length}
                   </Badge>
                 )}
-                <List.Icon {...props} icon="chevron-right" />
-              </>
+                <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />
+              </View>
             )}
             onPress={() => navigation.navigate('Notifications')}
-            style={styles.menuItem}
           />
-
           <Divider />
-
           <List.Item
-            title="Aide et support"
-            description="Obtenir de l'aide"
-            left={props => <List.Icon {...props} icon="help-circle" color="#9B59B6" />}
-            right={props => <List.Icon {...props} icon="chevron-right" />}
-            onPress={() => Alert.alert('Aide', 'Contactez le support technique')}
-            style={styles.menuItem}
+            title="Assistance technique"
+            description="Support NUTRIFIX"
+            left={props => <List.Icon {...props} icon="help-circle-outline" color="#64748B" />}
+            right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />}
+            onPress={() => Alert.alert('Aide', 'Contactez l\'administrateur')}
           />
-
           <Divider />
-
           <List.Item
             title="Déconnexion"
-            description="Se déconnecter de l'application"
-            left={props => <List.Icon {...props} icon="logout" color="#E74C3C" />}
-            right={props => <List.Icon {...props} icon="chevron-right" />}
+            titleStyle={{ color: '#EF4444', fontWeight: 'bold' }}
+            left={props => <List.Icon {...props} icon="logout" color="#EF4444" />}
             onPress={handleLogout}
-            style={styles.menuItem}
           />
         </List.Section>
       </Card.Content>
     </Card>
   );
+
 
   // Modal changement de mot de passe
   const renderPasswordModal = () => (
@@ -995,19 +967,11 @@ const ProfilScreen = ({ navigation, route, onLogout }) => {
   if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3498DB" />
+        <ActivityIndicator size="large" color="#3B82F6" />
         <Text style={styles.loadingText}>Chargement du profil...</Text>
       </View>
     );
   }
-
-  const getResponsiveLayout = () => {
-    if (isExtraLargeScreen) return 'three-column';
-    if (isLargeScreen) return 'two-column';
-    return 'single-column';
-  };
-
-  const layout = getResponsiveLayout();
 
   return (
     <Provider>
@@ -1017,7 +981,7 @@ const ProfilScreen = ({ navigation, route, onLogout }) => {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={['#3498DB']}
+            colors={['#3B82F6']}
           />
         }
         showsVerticalScrollIndicator={false}
@@ -1099,14 +1063,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   mainWrapper: {
-    paddingBottom: 40,
-  },
-  mainContentContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
-  },
-  mainContentTablet: {
-    paddingHorizontal: 32,
+    paddingBottom: 20,
   },
   loadingContainer: {
     flex: 1,
@@ -1115,51 +1072,55 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   loadingText: {
-    marginTop: 15,
-    fontSize: 16,
+    marginTop: 12,
+    fontSize: 14,
     color: '#64748B',
     fontWeight: '500',
   },
 
-  // Header Redesign
+  // Header Styles
   header: {
-    backgroundColor: '#FFF',
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-    paddingBottom: 30,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    paddingTop: 40,
+    paddingBottom: 25,
+    backgroundColor: '#FFFFFF',
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
   },
   headerTablet: {
     paddingHorizontal: 40,
-    paddingVertical: 50,
+    paddingVertical: 35,
   },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 24,
   },
   profileImageWrapper: {
     marginRight: 20,
   },
   avatarContainer: {
     position: 'relative',
-    padding: 4,
-    borderRadius: 65,
-    backgroundColor: '#F1F5F9',
   },
   avatar: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#F1F5F9',
+    borderWidth: 3,
+    borderColor: '#F8FAFC',
   },
   onlineIndicator: {
     position: 'absolute',
-    bottom: 8,
-    right: 8,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    bottom: 5,
+    right: 5,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     backgroundColor: '#10B981',
-    borderWidth: 3,
-    borderColor: '#FFF',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
   profileMainInfo: {
     flex: 1,
@@ -1168,30 +1129,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
   },
   userName: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
-    color: '#0F172A',
-    flexShrink: 1,
-  },
-  qrIconBadge: {
-    backgroundColor: '#EFF6FF',
-    padding: 8,
-    borderRadius: 12,
+    color: '#1E293B',
+    letterSpacing: -0.5,
   },
   userProfessionalTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 14,
     color: '#3B82F6',
-    marginBottom: 8,
+    fontWeight: '600',
+    marginTop: 2,
   },
   metaRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    marginTop: 8,
     gap: 12,
-    marginBottom: 12,
   },
   metaItem: {
     flexDirection: 'row',
@@ -1199,47 +1153,54 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   metaText: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#64748B',
     fontWeight: '500',
   },
   headerActions: {
     flexDirection: 'row',
+    marginTop: 12,
     gap: 8,
   },
   statusChip: {
     backgroundColor: '#ECFDF5',
-    borderColor: '#D1FAE5',
+    height: 24,
   },
   statusChipText: {
     color: '#059669',
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 10,
+    fontWeight: '800',
   },
   loyaltyChip: {
-    backgroundColor: '#F5F3FF',
-    borderColor: '#EDE9FE',
+    backgroundColor: '#EFF6FF',
+    height: 24,
   },
   loyaltyChipText: {
-    color: '#7C3AED',
-    fontSize: 11,
-    fontWeight: '600',
+    color: '#2563EB',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  qrIconBadge: {
+    padding: 8,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 12,
   },
 
-  // Stats Card Redesign
+  // Stats Grid
+  mainContentContainer: {
+    paddingHorizontal: 16,
+    marginTop: -20,
+  },
   statsContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
-    marginBottom: 24,
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    gap: 12,
   },
   statCard: {
     flex: 1,
-    minWidth: 150,
     borderRadius: 16,
-    backgroundColor: '#FFF',
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
+    backgroundColor: '#FFFFFF',
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -1247,65 +1208,66 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   statContent: {
-    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 12,
   },
   statIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  statInfo: {
-    marginLeft: 12,
-    flex: 1,
+    marginBottom: 8,
   },
   statValue: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
     color: '#1E293B',
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#64748B',
     fontWeight: '600',
-    marginTop: 2,
+    textAlign: 'center',
   },
 
-  // Grid System
+  // Responsive Grid Layout
   responsiveGrid: {
-    gap: 20,
+    flexDirection: 'column',
   },
   responsiveGridTwo: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: 16,
   },
   responsiveGridThree: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    gap: 16,
   },
   gridColumn: {
+    flex: 1,
     width: '100%',
-    gap: 20,
   },
   gridColumnCompact: {
-    flex: 1,
     minWidth: 300,
   },
 
-  // Card Content
+  // Cards
   card: {
+    marginBottom: 16,
     borderRadius: 20,
-    backgroundColor: '#FFF',
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    elevation: 2,
+    backgroundColor: '#FFFFFF',
+    elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.04,
     shadowRadius: 10,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   cardTitleRow: {
     flexDirection: 'row',
@@ -1315,118 +1277,110 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#0F172A',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    color: '#1E293B',
+    lineHeight: 24,
   },
   headerChip: {
-    backgroundColor: '#3B82F6',
-    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '700',
   },
 
-  // Informations Personnelles List
+  // Info Grid
   infoGrid: {
-    paddingVertical: 10,
+    gap: 12,
   },
   infoItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+    borderRadius: 12,
+    gap: 12,
   },
   infoText: {
-    marginLeft: 16,
     flex: 1,
   },
   infoLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#94A3B8',
     fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 2,
   },
   infoValue: {
-    fontSize: 15,
-    color: '#1E293B',
-    fontWeight: '500',
+    fontSize: 14,
+    color: '#334155',
+    fontWeight: '600',
+    marginTop: 2,
   },
 
   // Presence List
   presenceList: {
-    gap: 12,
+    gap: 10,
   },
   presenceItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
+    padding: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#F1F5F9',
   },
   presenceDate: {
-    backgroundColor: '#FFF',
-    padding: 8,
-    borderRadius: 12,
-    width: 60,
+    width: 45,
     alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    borderRightWidth: 1,
+    borderRightColor: '#F1F5F9',
+    marginRight: 12,
   },
   presenceDateDay: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '800',
-    color: '#0F172A',
+    color: '#1E293B',
   },
   presenceDateMonth: {
-    fontSize: 10,
-    color: '#64748B',
+    fontSize: 9,
+    color: '#94A3B8',
     fontWeight: '700',
     textTransform: 'uppercase',
   },
   presenceInfo: {
     flex: 1,
-    marginLeft: 16,
   },
   presenceTimeText: {
-    fontSize: 14,
-    color: '#475569',
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155',
   },
   presenceStatusChip: {
-    borderRadius: 8,
+    height: 22,
+    borderRadius: 6,
   },
 
-  // Conges
+  // Congés
   congeItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
+    padding: 12,
     backgroundColor: '#F8FAFC',
     borderRadius: 16,
-    marginBottom: 12,
+    marginBottom: 10,
+    gap: 12,
   },
   congeIcon: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
   },
   congeInfo: {
     flex: 1,
   },
   congeType: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     color: '#1E293B',
     textTransform: 'capitalize',
@@ -1440,105 +1394,139 @@ const styles = StyleSheet.create({
   // Notifications
   notificationItem: {
     flexDirection: 'row',
+    alignItems: 'center',
     padding: 14,
-    backgroundColor: '#FFF',
     borderRadius: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
+    marginBottom: 8,
+    backgroundColor: '#F8FAFC',
+    gap: 12,
   },
   notificationUnread: {
-    backgroundColor: '#F0F9FF',
-    borderColor: '#BAE6FD',
+    backgroundColor: '#EFF6FF',
+    borderLeftWidth: 4,
+    borderLeftColor: '#3B82F6',
   },
   notificationIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+  },
+  notificationContent: {
+    flex: 1,
   },
   notificationTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0F172A',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
   },
   notificationTime: {
     fontSize: 11,
     color: '#94A3B8',
-    marginTop: 4,
+    marginTop: 2,
   },
 
-  // Buttons
+  // Common Elements
+  emptyState: {
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+  },
+  emptyText: {
+    marginTop: 8,
+    fontSize: 13,
+    color: '#94A3B8',
+    fontWeight: '500',
+  },
   actionButton: {
+    marginTop: 16,
     borderRadius: 12,
-    marginTop: 10,
+    paddingVertical: 4,
   },
   viewAllButton: {
-    marginTop: 16,
+    marginTop: 8,
   },
 
-  // Modal
+  // Modals
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
   modalContainer: {
-    backgroundColor: '#FFF',
+    backgroundColor: '#FFFFFF',
     borderRadius: 24,
-    width: '92%',
-    maxHeight: '85%',
+    width: '100%',
+    maxWidth: 400,
     overflow: 'hidden',
   },
   modalHeader: {
-    padding: 24,
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
   },
   modalContent: {
-    padding: 24,
+    padding: 20,
+  },
+  input: {
+    marginBottom: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  passwordHint: {
+    fontSize: 12,
+    color: '#7F8C8D',
+    marginBottom: 20,
+    lineHeight: 18,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+    marginBottom: 20,
+    paddingHorizontal: 20,
+  },
+  modalCancelButton: {
+    flex: 1,
+    borderRadius: 12,
+  },
+  modalSubmitButton: {
+    flex: 1,
+    borderRadius: 12,
   },
 
-  // QR Modal Card
+  // QR Badge specific
   employeeCard: {
-    borderRadius: 24,
-    backgroundColor: '#FFF',
-    overflow: 'hidden',
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    marginBottom: 24,
-  },
-  employeeCardHeader: {
     backgroundColor: '#3B82F6',
+    borderRadius: 20,
+    padding: 2,
+  },
+  employeeCardInner: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    alignItems: 'center',
     padding: 24,
-    alignItems: 'center',
-  },
-  companyName: {
-    color: '#FFF',
-    fontSize: 24,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  employeeCardBody: {
-    padding: 32,
-    alignItems: 'center',
   },
   qrCodeWrapper: {
     padding: 16,
-    backgroundColor: '#FFF',
+    backgroundColor: '#F8FAFC',
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    marginTop: 24,
+    marginTop: 20,
+  },
+  cardFooter: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  cardFooterText: {
+    fontSize: 10,
+    color: '#94A3B8',
+    fontWeight: '600',
   },
 
   bottomSpacing: {
