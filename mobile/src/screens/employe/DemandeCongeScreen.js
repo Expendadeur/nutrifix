@@ -37,13 +37,13 @@ const COLORS = {
   primary: '#2563EB',
   primaryDark: '#1E40AF',
   primaryLight: '#DBEAFE',
-  
+
   // Background - CLAIR ET LUMINEUX
   bgPrimary: '#F8FAFC',        // Blanc cassé léger
   bgSecondary: '#FFFFFF',      // Blanc pur
   bgTertiary: '#F1F5F9',       // Gris très clair
   bgAccent: '#E2E8F0',         // Gris clair doux
-  
+
   // Status Colors
   success: '#10B981',
   successLight: '#D1FAE5',
@@ -53,12 +53,12 @@ const COLORS = {
   errorLight: '#FEE2E2',
   info: '#0EA5E9',
   infoLight: '#E0F2FE',
-  
+
   // Text Colors
   textPrimary: '#1E293B',
   textSecondary: '#64748B',
   textTertiary: '#94A3B8',
-  
+
   // Borders
   border: '#E2E8F0',
   borderDark: '#CBD5E1',
@@ -114,7 +114,7 @@ const DemandeCongeScreen = ({ navigation }) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
       const response = await fetch(`${API_URL}/employe-inss/conges/solde`, {
-        headers: { 'Authorization': token },
+        headers: { 'Authorization': `Bearer ${token}` },
       });
       const data = await response.json();
       if (data.success) setLeaveBalance(data.data);
@@ -127,7 +127,9 @@ const DemandeCongeScreen = ({ navigation }) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
       const response = await fetch(`${API_URL}/employe-inss/conges?limit=5`, {
-        headers: { 'Authorization': token },
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
       const data = await response.json();
       if (data.success) setRecentLeaves(data.data || []);
@@ -302,30 +304,30 @@ const DemandeCongeScreen = ({ navigation }) => {
     const getStatusConfig = (status) => {
       switch (status) {
         case 'en_attente':
-          return { 
-            color: COLORS.warning, 
-            bg: COLORS.warningLight, 
+          return {
+            color: COLORS.warning,
+            bg: COLORS.warningLight,
             label: 'En attente',
             icon: 'schedule'
           };
         case 'approuve':
-          return { 
-            color: COLORS.success, 
-            bg: COLORS.successLight, 
+          return {
+            color: COLORS.success,
+            bg: COLORS.successLight,
             label: 'Approuvé',
             icon: 'check-circle'
           };
         case 'rejete':
-          return { 
-            color: COLORS.error, 
-            bg: COLORS.errorLight, 
+          return {
+            color: COLORS.error,
+            bg: COLORS.errorLight,
             label: 'Rejeté',
             icon: 'cancel'
           };
         default:
-          return { 
-            color: COLORS.info, 
-            bg: COLORS.infoLight, 
+          return {
+            color: COLORS.info,
+            bg: COLORS.infoLight,
             label: 'Inconnu',
             icon: 'info'
           };
@@ -353,13 +355,13 @@ const DemandeCongeScreen = ({ navigation }) => {
                       {leave.type_conge.charAt(0).toUpperCase() + leave.type_conge.slice(1)}
                     </Text>
                     <Text style={dashboardStyles.leaveDates}>
-                      {new Date(leave.date_debut).toLocaleDateString('fr-FR', { 
-                        day: 'numeric', 
-                        month: 'short' 
-                      })} - {new Date(leave.date_fin).toLocaleDateString('fr-FR', { 
-                        day: 'numeric', 
-                        month: 'short', 
-                        year: 'numeric' 
+                      {new Date(leave.date_debut).toLocaleDateString('fr-FR', {
+                        day: 'numeric',
+                        month: 'short'
+                      })} - {new Date(leave.date_fin).toLocaleDateString('fr-FR', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric'
                       })}
                     </Text>
                   </View>
@@ -402,7 +404,7 @@ const DemandeCongeScreen = ({ navigation }) => {
             }
           >
             {renderHeader()}
-            
+
             <View style={dashboardStyles.content}>
               {renderBalanceCard()}
               {renderStatsCards()}
@@ -470,11 +472,11 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
         type: ['image/*', 'application/pdf'],
       });
       if (result.type === 'success') {
-        setPieceJointe({ 
-          name: result.name, 
-          size: result.size, 
-          uri: result.uri, 
-          type: result.mimeType 
+        setPieceJointe({
+          name: result.name,
+          size: result.size,
+          uri: result.uri,
+          type: result.mimeType
         });
         Alert.alert('✓ Document ajouté', result.name);
       }
@@ -499,16 +501,18 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
       formData.append('raison', raison);
 
       if (pieceJointe) {
-        formData.append('piece_jointe', { 
-          uri: pieceJointe.uri, 
-          name: pieceJointe.name, 
-          type: pieceJointe.type 
+        formData.append('piece_jointe', {
+          uri: pieceJointe.uri,
+          name: pieceJointe.name,
+          type: pieceJointe.type
         });
       }
 
       const response = await fetch(`${API_URL}/employe-inss/conges/demande`, {
         method: 'POST',
-        headers: { 'Authorization': token },
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
         body: formData,
       });
 
@@ -527,10 +531,10 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
     }
   };
 
-  const formatDate = (date) => date.toLocaleDateString('fr-FR', { 
-    day: '2-digit', 
-    month: 'long', 
-    year: 'numeric' 
+  const formatDate = (date) => date.toLocaleDateString('fr-FR', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
   });
 
   return (
@@ -563,7 +567,7 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
                 key={type.value}
                 style={[
                   modalStyles.typeCard,
-                  { 
+                  {
                     width: isMobile ? '48%' : '30%',
                     backgroundColor: typeConge === type.value ? type.bg : COLORS.bgSecondary,
                     borderColor: typeConge === type.value ? type.color : COLORS.border,
@@ -589,7 +593,7 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
         {/* PÉRIODE */}
         <View style={modalStyles.section}>
           <Text style={modalStyles.sectionTitle}>Période *</Text>
-          
+
           <TouchableOpacity
             style={modalStyles.dateCard}
             onPress={() => setShowDateDebutPicker(true)}
@@ -693,7 +697,7 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
                   {(pieceJointe.size / 1024).toFixed(1)} KB
                 </Text>
               </View>
-              <TouchableOpacity 
+              <TouchableOpacity
                 onPress={() => setPieceJointe(null)}
                 style={modalStyles.removeButton}
               >
@@ -808,7 +812,7 @@ const dashboardStyles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 30,
   },
-  
+
   // Balance Card
   balanceCardWrapper: {
     marginBottom: 20,
@@ -1091,7 +1095,7 @@ const modalStyles = StyleSheet.create({
     color: COLORS.textPrimary,
     marginBottom: 12,
   },
-  
+
   // Type Grid
   typeGrid: {
     flexDirection: 'row',

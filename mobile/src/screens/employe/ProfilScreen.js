@@ -115,6 +115,16 @@ const ProfilScreen = ({ navigation, route, onLogout }) => {
   // FONCTIONS PRINCIPALES
   // =================================================================
 
+   const getAuthToken = useCallback(async () => {
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        return token;
+      } catch (error) {
+        console.error('Erreur récupération token:', error);
+        return null;
+      }
+    }, []);
+
 const loadProfile = async () => {
     try {
       setLoading(true);

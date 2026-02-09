@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const db = require('../../database/db');
-const emailService = require('../services/emailService');
+const emailService = require('../emailService');
 
 // ============================================
 // MIDDLEWARE DE VALIDATION
@@ -905,10 +905,10 @@ router.get('/demandes-paiement-salaire', authenticate, authorize('admin'), async
  */
 router.post('/demandes-paiement-salaire/:id/valider', authenticate, authorize('admin'), async (req, res) => {
     const connection = await db.getConnection();
-    
+
     try {
         await connection.beginTransaction();
-        
+
         const { id } = req.params;
         const { commentaire } = req.body;
 
@@ -1010,10 +1010,10 @@ router.post('/demandes-paiement-salaire/:id/valider', authenticate, authorize('a
  */
 router.post('/demandes-paiement-salaire/:id/rejeter', authenticate, authorize('admin'), async (req, res) => {
     const connection = await db.getConnection();
-    
+
     try {
         await connection.beginTransaction();
-        
+
         const { id } = req.params;
         const { motif_rejet, commentaire } = req.body;
 

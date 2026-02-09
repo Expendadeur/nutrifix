@@ -32,10 +32,10 @@ const DashboardScreen = ({ navigation }) => {
   const [dashboardData, setDashboardData] = useState(null);
   const [profileData, setProfileData] = useState(null);
   const [carteData, setCarteData] = useState(null);
-  
+
   const { width } = useWindowDimensions();
   const isTablet = width >= 768; // Détection tablette/desktop
-  
+
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
@@ -93,7 +93,7 @@ const DashboardScreen = ({ navigation }) => {
 
       if (dashboardRes.status === 'fulfilled') {
         const response = dashboardRes.value;
-        
+
         if (response.status === 401) {
           console.error('❌ 401 Dashboard - Token expiré ou invalide');
           await AsyncStorage.removeItem('userToken');
@@ -122,7 +122,7 @@ const DashboardScreen = ({ navigation }) => {
 
       if (profileRes.status === 'fulfilled') {
         const response = profileRes.value;
-        
+
         if (response.status === 401) {
           console.error('❌ 401 Profil - Token expiré');
         } else if (response.status === 403) {
@@ -153,7 +153,7 @@ const DashboardScreen = ({ navigation }) => {
 
       if (carteRes.status === 'fulfilled') {
         const response = carteRes.value;
-        
+
         if (response.status === 401) {
           console.error('❌ 401 Carte - Token expiré');
         } else if (response.status === 403) {
@@ -201,25 +201,25 @@ const DashboardScreen = ({ navigation }) => {
     try {
       const headers = await getAuthHeaders();
       console.log('📡 Pointage entrée...');
-      
+
       const response = await fetch(`${API_URL}/employe-inss/pointage/entree`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ latitude: 0, longitude: 0 })
       });
-      
+
       if (response.status === 401) {
         console.error('❌ 401 - Token expiré');
         Alert.alert('Erreur', 'Session expirée');
         return;
       }
-      
+
       if (response.status === 403) {
         console.error('❌ 403 - Accès refusé');
         Alert.alert('Erreur', 'Accès refusé');
         return;
       }
-      
+
       const data = await response.json();
       if (response.ok) {
         console.log('✅ Pointage enregistré');
@@ -238,25 +238,25 @@ const DashboardScreen = ({ navigation }) => {
     try {
       const headers = await getAuthHeaders();
       console.log('📡 Pointage sortie...');
-      
+
       const response = await fetch(`${API_URL}/employe-inss/pointage/sortie`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ latitude: 0, longitude: 0 })
       });
-      
+
       if (response.status === 401) {
         console.error('❌ 401 - Token expiré');
         Alert.alert('Erreur', 'Session expirée');
         return;
       }
-      
+
       if (response.status === 403) {
         console.error('❌ 403 - Accès refusé');
         Alert.alert('Erreur', 'Accès refusé');
         return;
       }
-      
+
       const data = await response.json();
       if (response.ok) {
         console.log('✅ Pointage enregistré');
@@ -306,15 +306,38 @@ const DashboardScreen = ({ navigation }) => {
   };
 
   const renderDigitalCard = () => {
+
+    // ✅ DEBUG
+    console.log('🔍 renderDigitalCard appelé');
+    console.log('🔍 carteData:', carteData);
+    console.log('🔍 carteData?.carte:', carteData?.carte);
+    console.log('🔍 Matricule:', carteData?.carte?.matricule);
+
     if (!carteData?.carte) return null;
     const { carte } = carteData;
-    const qrData = JSON.stringify({
-      id: carte.id || '000',
-      matricule: carte.matricule || 'N/A',
-      nom: carte.nom_complet,
-      type: carte.type_employe,
-      timestamp: Date.now()
-    });
+
+    // ✅ STRATÉGIE DE QR CODE :
+    // 1. Utiliser carte.qr_code du backend si c'est une Data URL
+    // 2. Sinon, générer localement avec les données de la carte
+    let qrData;
+    let useImageQR = false;
+
+    if (carte.qr_code && carte.qr_code.startsWith('data:image')) {
+      // QR Code vient du backend comme Data URL
+      qrData = carte.qr_code;
+      useImageQR = true;
+      console.log('✅ Utilisation QR Code du backend (Data URL)');
+    } else {
+      // Générer QR Code localement
+      qrData = JSON.stringify({
+        id: carte.id || '000',
+        matricule: carte.matricule || 'N/A',
+        nom: carte.nom_complet,
+        type: carte.type_employe,
+        timestamp: Date.now()
+      });
+      console.log('⚠️ Génération QR Code locale (backend n\'a pas fourni de Data URL)');
+    }
 
     return (
       <Animated.View style={[styles.cardSection, { opacity: fadeAnim }]}>
@@ -361,9 +384,9 @@ const DashboardScreen = ({ navigation }) => {
                   <Text style={styles.employeeName} numberOfLines={2}>{carte.nom_complet}</Text>
                   <Text style={styles.employeePosition}>Employé</Text>
                   <Text style={styles.employeeDepartment}>{carte.departement_nom || 'NUTRIFIX'}</Text>
-                  
+
                   <View style={styles.infoDivider} />
-                  
+
                   <View style={styles.detailsList}>
                     <View style={styles.detailRow}>
                       <MaterialIcons name="badge" size={12} color="#2563EB" />
@@ -399,16 +422,33 @@ const DashboardScreen = ({ navigation }) => {
               </View>
             </View>
 
-            {/* Footer */}
+            {/* Footer avec QR Code */}
             <View style={styles.cardFooter}>
               <View style={styles.footerLeft}>
                 <Text style={styles.footerLabel}>DATE DE VALIDITÉ</Text>
                 <Text style={styles.footerDate}>{formatDate(carte.validite)}</Text>
                 <Text style={styles.footerEmission}>Émise le {formatDate(new Date().toISOString())}</Text>
               </View>
+
+              {/* ✅ QR CODE SECTION - GÈRE LES DEUX CAS */}
               <View style={styles.qrSection}>
                 <View style={styles.qrWrapper}>
-                  <QRCode value={qrData} size={75} backgroundColor="#FFF" color="#1E3A8A" />
+                  {useImageQR ? (
+                    // Cas 1: QR Code vient du backend comme image Data URL
+                    <Image
+                      source={{ uri: qrData }}
+                      style={{ width: 75, height: 75 }}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    // Cas 2: Génération locale avec react-native-qrcode-svg
+                    <QRCode
+                      value={qrData}
+                      size={75}
+                      backgroundColor="#FFF"
+                      color="#1E3A8A"
+                    />
+                  )}
                 </View>
                 <Text style={styles.qrText}>Vérification du code</Text>
               </View>
@@ -491,7 +531,7 @@ const DashboardScreen = ({ navigation }) => {
       },
       {
         icon: 'attach-money',
-        value: dashboardData.dernier_salaire?.salaire_net 
+        value: dashboardData.dernier_salaire?.salaire_net
           ? `${Math.round(dashboardData.dernier_salaire.salaire_net).toLocaleString()} FBU`
           : 'N/A',
         label: 'Dernier salaire',
@@ -570,7 +610,7 @@ const DashboardScreen = ({ navigation }) => {
       showsVerticalScrollIndicator={false}
     >
       {renderHeader()}
-      
+
       {/* LAYOUT RESPONSIVE: Sur tablette/desktop, disposition en 2 colonnes */}
       {isTablet ? (
         <View style={styles.tabletLayout}>
@@ -578,7 +618,7 @@ const DashboardScreen = ({ navigation }) => {
           <View style={styles.leftColumn}>
             {renderDigitalCard()}
           </View>
-          
+
           {/* Colonne Droite: Reste du contenu */}
           <View style={styles.rightColumn}>
             {renderAttendanceSection()}
@@ -604,7 +644,7 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 30 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F3F4F6' },
   loadingText: { marginTop: 16, fontSize: 16, color: '#6B7280', fontWeight: '500' },
-  
+
   // LAYOUT RESPONSIVE TABLET/DESKTOP
   tabletLayout: {
     flexDirection: 'row',
@@ -619,7 +659,7 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 16,
   },
-  
+
   section: { paddingHorizontal: 16, marginBottom: 16 },
 
   // Header

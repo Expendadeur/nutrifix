@@ -1,4 +1,4 @@
-// backend/api/routes/employe-inss.js - VERSION AVEC INTÉGRATION EMAIL COMPLÈTE
+// backend/api/routes/employe-inss.js - VERSION CORRIGÉE
 const express = require('express');
 const router = express.Router();
 const db = require('../../database/db');
@@ -28,7 +28,7 @@ const upload = multer({
     const allowedTypes = /jpeg|jpg|png|pdf|doc|docx/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
-    
+
     if (mimetype && extname) {
       return cb(null, true);
     } else {
@@ -41,29 +41,20 @@ const upload = multer({
 // CONSTANTES RÉGLEMENTATION INSS BURUNDI (2026)
 // ============================================
 const INSS_CONSTANTS = {
-  // Plafonds mensuels par travailleur (en FBU)
   PLAFOND_PENSIONS: 450000,
   PLAFOND_RISQUES_PRO: 80000,
-  
-  // SMIG (Salaire Minimum Interprofessionnel Garanti)
   SMIG: 150000,
-  
-  // Taux de cotisation - Assurés civils
   CIVIL: {
-    PENSIONS_EMPLOYEUR: 0.06,    // 6%
-    PENSIONS_EMPLOYE: 0.04,      // 4%
-    RISQUES_PRO_EMPLOYEUR: 0.03  // 3%
+    PENSIONS_EMPLOYEUR: 0.06,
+    PENSIONS_EMPLOYE: 0.04,
+    RISQUES_PRO_EMPLOYEUR: 0.03
   },
-  
-  // Taux de cotisation - Militaires et Policiers
   MILITAIRE_POLICE: {
-    PENSIONS_EMPLOYEUR: 0.088,   // 8.8%
-    PENSIONS_EMPLOYE: 0.058,     // 5.8%
-    RISQUES_PRO_EMPLOYEUR: 0.03, // 3%
-    INDEMNITES_FORFAITAIRES_TAUX: 2.0 // 200% du salaire de base
+    PENSIONS_EMPLOYEUR: 0.088,
+    PENSIONS_EMPLOYE: 0.058,
+    RISQUES_PRO_EMPLOYEUR: 0.03,
+    INDEMNITES_FORFAITAIRES_TAUX: 2.0
   },
-  
-  // Barème IPR (Impôt Professionnel sur les Rémunérations)
   IPR_BAREME: [
     { min: 0, max: 150000, taux: 0 },
     { min: 150001, max: 300000, taux: 0.20 },
@@ -75,35 +66,29 @@ const INSS_CONSTANTS = {
 // FONCTIONS UTILITAIRES
 // ============================================
 
-/**
- * Calcule l'assiette des cotisations INSS
- */
 function calculerAssietteCotisations(remuneration, categorie = 'civil') {
   const salaireBase = parseFloat(remuneration.salaire_base) || 0;
   let assietteBase = 0;
-  
+
   if (categorie === 'militaire_police') {
     const indemnitesForftaitaires = salaireBase * INSS_CONSTANTS.MILITAIRE_POLICE.INDEMNITES_FORFAITAIRES_TAUX;
     assietteBase = salaireBase + indemnitesForftaitaires;
   } else {
-    // Pour civils: salaire de base + indemnités soumises
-    assietteBase = salaireBase + 
+    assietteBase = salaireBase +
       (parseFloat(remuneration.indemnites_logement) || 0) +
       (parseFloat(remuneration.indemnites_deplacement) || 0) +
       (parseFloat(remuneration.heures_supplementaires) || 0) +
       (parseFloat(remuneration.primes_diverses) || 0) +
       (parseFloat(remuneration.gratifications) || 0);
   }
-  
-  // Assiette minimale = SMIG
+
   if (assietteBase < INSS_CONSTANTS.SMIG) {
     assietteBase = INSS_CONSTANTS.SMIG;
   }
-  
-  // Appliquer les plafonds
+
   const assiettePensions = Math.min(assietteBase, INSS_CONSTANTS.PLAFOND_PENSIONS);
   const assietteRisquesPro = Math.min(assietteBase, INSS_CONSTANTS.PLAFOND_RISQUES_PRO);
-  
+
   return {
     assiette_brute: Math.round(assietteBase),
     assiette_pensions: Math.round(assiettePensions),
@@ -111,95 +96,117 @@ function calculerAssietteCotisations(remuneration, categorie = 'civil') {
   };
 }
 
-/**
- * Calcule les cotisations INSS
- */
 function calculerCotisationsINSS(assiettePensions, assietteRisquesPro, categorie = 'civil') {
-  const taux = categorie === 'militaire_police' 
-    ? INSS_CONSTANTS.MILITAIRE_POLICE 
+  const taux = categorie === 'militaire_police'
+    ? INSS_CONSTANTS.MILITAIRE_POLICE
     : INSS_CONSTANTS.CIVIL;
-  
-  // Cotisations pensions
+
   const pensionsEmployeur = assiettePensions * taux.PENSIONS_EMPLOYEUR;
   const pensionsEmploye = assiettePensions * taux.PENSIONS_EMPLOYE;
   const totalPensions = pensionsEmployeur + pensionsEmploye;
-  
-  // Cotisations risques professionnels (100% employeur)
+
   const risquesProEmployeur = assietteRisquesPro * taux.RISQUES_PRO_EMPLOYEUR;
-  
-  // Totaux
+
   const totalEmployeur = pensionsEmployeur + risquesProEmployeur;
   const totalEmploye = pensionsEmploye;
   const totalCotisations = totalEmployeur + totalEmploye;
-  
+
   return {
-    // Pensions
     pensions_employeur: Math.round(pensionsEmployeur),
     pensions_employe: Math.round(pensionsEmploye),
     pensions_total: Math.round(totalPensions),
     taux_pensions_employeur: taux.PENSIONS_EMPLOYEUR * 100,
     taux_pensions_employe: taux.PENSIONS_EMPLOYE * 100,
-    
-    // Risques professionnels
     risques_pro_employeur: Math.round(risquesProEmployeur),
     taux_risques_pro: taux.RISQUES_PRO_EMPLOYEUR * 100,
-    
-    // Totaux
     total_employeur: Math.round(totalEmployeur),
     total_employe: Math.round(totalEmploye),
     total_cotisations: Math.round(totalCotisations)
   };
 }
 
-/**
- * Calcule l'IPR selon le barème burundais
- */
 function calculerIPR(salaireBrut) {
   const montant = parseFloat(salaireBrut) || 0;
-  
-  // Trouver la tranche applicable
   const tranche = INSS_CONSTANTS.IPR_BAREME.find(
     t => montant >= t.min && montant <= t.max
   );
-  
+
   if (!tranche || tranche.taux === 0) {
     return 0;
   }
-  
-  // Calcul progressif de l'IPR
-  let ipr = 0;
-  
-  // Calculer l'impôt sur la partie qui dépasse le minimum de la tranche
+
   const partieImposable = montant - tranche.min + 1;
-  ipr = partieImposable * tranche.taux;
-  
+  const ipr = partieImposable * tranche.taux;
+
   return Math.round(ipr);
 }
 
-/**
- * Calcule le solde de congés
- */
-async function calculerSoldeConges(userId) {
+async function calculerSoldeConges(userId, connection = db) {
+  console.log("\n========================================");
+  console.log("🔍 DÉBUT calculerSoldeConges");
+  console.log("========================================");
+
   try {
-    console.log('📊 Calcul solde congés pour userId:', userId);
-    
-    // Récupérer la date d'embauche et les jours annuels
-    const [employe] = await db.query(
-      'SELECT date_embauche, jours_conges_annuels FROM employes WHERE id = ?',
-      [userId]
-    );
-    
-    console.log('👤 Employé trouvé:', employe);
-    
-    if (!employe || employe.length === 0) {
-      console.log('❌ Employé non trouvé pour userId:', userId);
-      throw new Error('Employé non trouvé');
-    }
-    
-    const dateEmbauche = employe[0].date_embauche ? new Date(employe[0].date_embauche) : null;
-    const joursAnnuels = parseInt(employe[0].jours_conges_annuels) || 24; // 24 jours par défaut
-    
-    if (!dateEmbauche) {
+    // ========================================
+    // DEBUG 1 : Paramètres d'entrée
+    // ========================================
+    console.log("📥 PARAMÈTRES D'ENTRÉE:");
+    console.log("  - userId:", userId);
+    console.log("  - Type de userId:", typeof userId);
+    console.log("  - userId est null?", userId === null);
+    console.log("  - userId est undefined?", userId === undefined);
+    console.log("  - connection fournie?", connection !== db ? "OUI (transaction)" : "NON (db par défaut)");
+
+    // ========================================
+    // DEBUG 2 : Requête SQL
+    // ========================================
+    const sqlQuery = `SELECT date_embauche, jours_conges_annuels FROM employes WHERE id = ? LIMIT 1`;
+    console.log("\n📝 REQUÊTE SQL:");
+    console.log("  SQL:", sqlQuery);
+    console.log("  Paramètres:", [userId]);
+
+    // ========================================
+    // DEBUG 3 : Exécution de la requête
+    // ========================================
+    console.log("\n⏳ EXÉCUTION DE LA REQUÊTE...");
+    const startTime = Date.now();
+
+    const result = await connection.query(sqlQuery, [userId]);
+
+    const executionTime = Date.now() - startTime;
+    console.log(`✅ Requête exécutée en ${executionTime}ms`);
+
+    // ========================================
+    // DEBUG 4 : Résultat brut
+    // ========================================
+    console.log("\n📦 RÉSULTAT BRUT DE LA REQUÊTE:");
+    console.log("  - Type de result:", typeof result);
+    console.log("  - result est un array?", Array.isArray(result));
+    console.log("  - Longueur de result:", result?.length);
+    console.log("  - result complet:", JSON.stringify(result, null, 2));
+
+    // ========================================
+    // DEBUG 5 : Déstructuration
+    // ========================================
+    console.log("\n🔓 DÉSTRUCTURATION:");
+    const [rows] = result;
+    console.log("  - Type de rows:", typeof rows);
+    console.log("  - rows est un array?", Array.isArray(rows));
+    console.log("  - rows existe?", rows !== undefined && rows !== null);
+    console.log("  - Longueur de rows:", rows?.length);
+    console.log("  - rows complet:", JSON.stringify(rows, null, 2));
+
+    // ========================================
+    // DEBUG 6 : Vérification du résultat
+    // ========================================
+    console.log("\n✔️ VÉRIFICATIONS:");
+    console.log("  - !rows?", !rows);
+    console.log("  - rows.length === 0?", rows?.length === 0);
+    console.log("  - !rows[0]?", !rows?.[0]);
+
+    if (!rows || rows.length === 0 || !rows[0]) {
+      console.log("\n⚠️ AUCUN EMPLOYÉ TROUVÉ");
+      console.log("  Raison:", !rows ? "rows est falsy" : rows.length === 0 ? "tableau vide" : "rows[0] est undefined");
       return {
         mois_travailles: 0,
         jours_acquis: 0,
@@ -209,59 +216,177 @@ async function calculerSoldeConges(userId) {
         date_embauche: null
       };
     }
-    
+
+    // ========================================
+    // DEBUG 7 : Premier élément
+    // ========================================
+    console.log("\n👤 DONNÉES EMPLOYÉ (rows[0]):");
+    const employe = rows[0];
+    console.log("  - Type de employe:", typeof employe);
+    console.log("  - employe existe?", employe !== undefined && employe !== null);
+    console.log("  - employe complet:", JSON.stringify(employe, null, 2));
+    console.log("  - Propriétés de employe:", Object.keys(employe || {}));
+
+    // ========================================
+    // DEBUG 8 : Champs spécifiques
+    // ========================================
+    console.log("\n📅 CHAMPS SPÉCIFIQUES:");
+    console.log("  - employe.date_embauche:", employe?.date_embauche);
+    console.log("  - Type de date_embauche:", typeof employe?.date_embauche);
+    console.log("  - employe.jours_conges_annuels:", employe?.jours_conges_annuels);
+    console.log("  - Type de jours_conges_annuels:", typeof employe?.jours_conges_annuels);
+
+    // ========================================
+    // DEBUG 9 : Vérification date_embauche
+    // ========================================
+    if (!employe || !employe.date_embauche) {
+      console.log("\n❌ DATE D'EMBAUCHE MANQUANTE OU INVALIDE");
+      console.log("  - employe existe?", !!employe);
+      console.log("  - date_embauche existe?", !!employe?.date_embauche);
+      return {
+        mois_travailles: 0,
+        jours_acquis: 0,
+        jours_pris: 0,
+        jours_en_attente: 0,
+        jours_disponibles: 0,
+        date_embauche: null
+      };
+    }
+
+    // ========================================
+    // DEBUG 10 : Calculs
+    // ========================================
+    console.log("\n🧮 CALCULS:");
+    const dateEmbauche = new Date(employe.date_embauche);
+    console.log("  - dateEmbauche (objet Date):", dateEmbauche);
+    console.log("  - dateEmbauche valide?", !isNaN(dateEmbauche.getTime()));
+
     const maintenant = new Date();
-    
-    // Calculer les mois travaillés
-    const moisTravailles = Math.floor(
-      (maintenant - dateEmbauche) / (1000 * 60 * 60 * 24 * 30.44)
+    console.log("  - maintenant:", maintenant);
+
+    const moisTravailles = Math.max(0,
+      (maintenant.getFullYear() - dateEmbauche.getFullYear()) * 12 +
+      (maintenant.getMonth() - dateEmbauche.getMonth())
     );
-    
-    // Droit: 2 jours par mois (pour 24 jours/an)
-    const joursParMois = joursAnnuels / 12;
-    const joursAcquis = Math.floor(moisTravailles * joursParMois);
-    
-    // Récupérer les congés pris (approuvés uniquement)
-    const [congesPris] = await db.query(
-      `SELECT COALESCE(SUM(jours_demandes), 0) as total_jours_pris
-       FROM conges 
-       WHERE id_utilisateur = ? 
-       AND statut = 'approuve' 
-       AND type_conge = 'annuel'`,
-      [userId]
-    );
-    
-    const joursPris = parseInt(congesPris[0]?.total_jours_pris) || 0;
-    
-    // Récupérer les congés en attente
-    const [congesEnAttente] = await db.query(
-      `SELECT COALESCE(SUM(jours_demandes), 0) as total_jours_attente
-       FROM conges 
-       WHERE id_utilisateur = ? 
-       AND statut = 'en_attente' 
-       AND type_conge = 'annuel'`,
-      [userId]
-    );
-    
-    const joursEnAttente = parseInt(congesEnAttente[0]?.total_jours_attente) || 0;
-    
-    return {
+    console.log("  - moisTravailles:", moisTravailles);
+
+    const joursParAn = employe.jours_conges_annuels || 20;
+    console.log("  - joursParAn:", joursParAn);
+
+    const joursAcquis = Math.floor((moisTravailles * joursParAn) / 12);
+    console.log("  - joursAcquis:", joursAcquis);
+
+    // ========================================
+    // DEBUG 11 : Résultat final
+    // ========================================
+    const resultat = {
       mois_travailles: moisTravailles,
       jours_acquis: joursAcquis,
-      jours_pris: joursPris,
-      jours_en_attente: joursEnAttente,
-      jours_disponibles: Math.max(0, joursAcquis - joursPris - joursEnAttente),
-      date_embauche: dateEmbauche.toISOString().split('T')[0]
+      jours_pris: 0,
+      jours_en_attente: 0,
+      jours_disponibles: joursAcquis,
+      date_embauche: employe.date_embauche
     };
+
+    console.log("\n✅ RÉSULTAT FINAL:");
+    console.log(JSON.stringify(resultat, null, 2));
+    console.log("========================================");
+    console.log("🔍 FIN calculerSoldeConges");
+    console.log("========================================\n");
+
+    return resultat;
+
   } catch (error) {
-    console.error('❌ Erreur calcul solde congés:', error);
-    throw error;
+    // ========================================
+    // DEBUG 12 : Gestion d'erreur
+    // ========================================
+    console.log("\n❌❌❌ ERREUR DANS calculerSoldeConges ❌❌❌");
+    console.log("  - Message:", error.message);
+    console.log("  - Type:", error.constructor.name);
+    console.log("  - Code:", error.code);
+    console.log("  - Stack complet:");
+    console.log(error.stack);
+    console.log("========================================\n");
+
+    return {
+      mois_travailles: 0,
+      jours_acquis: 0,
+      jours_pris: 0,
+      jours_en_attente: 0,
+      jours_disponibles: 0,
+      date_embauche: null
+    };
   }
 }
 
-/**
- * Récupérer les emails des managers et admins
- */
+async function calculerSoldeConges(userId, connection = db) {
+  try {
+    // ✅ NE PAS déstructurer avec [rows]
+    const rows = await connection.query(
+      `SELECT date_embauche, jours_conges_annuels FROM employes WHERE id = ? LIMIT 1`,
+      [userId]
+    );
+
+    // Vérification
+    if (!rows || rows.length === 0) {
+      console.warn(`⚠️ Aucun employé trouvé pour userId: ${userId}`);
+      return {
+        mois_travailles: 0,
+        jours_acquis: 0,
+        jours_pris: 0,
+        jours_en_attente: 0,
+        jours_disponibles: 0,
+        date_embauche: null
+      };
+    }
+
+    // ✅ Maintenant rows[0] fonctionne
+    const employe = rows[0];
+
+    if (!employe || !employe.date_embauche) {
+      console.warn(`⚠️ Date d'embauche manquante pour userId: ${userId}`);
+      return {
+        mois_travailles: 0,
+        jours_acquis: 0,
+        jours_pris: 0,
+        jours_en_attente: 0,
+        jours_disponibles: 0,
+        date_embauche: null
+      };
+    }
+
+    const dateEmbauche = new Date(employe.date_embauche);
+    const maintenant = new Date();
+
+    const moisTravailles = Math.max(0,
+      (maintenant.getFullYear() - dateEmbauche.getFullYear()) * 12 +
+      (maintenant.getMonth() - dateEmbauche.getMonth())
+    );
+
+    const joursParAn = employe.jours_conges_annuels || 20;
+    const joursAcquis = Math.floor((moisTravailles * joursParAn) / 12);
+
+    return {
+      mois_travailles: moisTravailles,
+      jours_acquis: joursAcquis,
+      jours_pris: 0,
+      jours_en_attente: 0,
+      jours_disponibles: joursAcquis,
+      date_embauche: employe.date_embauche
+    };
+  } catch (error) {
+    console.error("❌ Erreur calcul solde congés:", error.message);
+    return {
+      mois_travailles: 0,
+      jours_acquis: 0,
+      jours_pris: 0,
+      jours_en_attente: 0,
+      jours_disponibles: 0,
+      date_embauche: null
+    };
+  }
+}
+
 async function getManagersAndAdminsEmails(departementId = null) {
   try {
     let query = `
@@ -272,13 +397,16 @@ async function getManagersAndAdminsEmails(departementId = null) {
       AND email IS NOT NULL
     `;
     const params = [];
-    
+
     if (departementId) {
       query += ' AND (id_departement = ? OR role = "admin")';
       params.push(departementId);
     }
-    
-    const [managers] = await db.query(query, params);
+
+    let managers = await db.query(query, params);
+    if (Array.isArray(managers) && managers.length > 0 && Array.isArray(managers[0])) {
+      managers = managers[0];
+    }
     return managers || [];
   } catch (error) {
     console.error('❌ Erreur récupération managers:', error);
@@ -290,18 +418,12 @@ async function getManagersAndAdminsEmails(departementId = null) {
 // ROUTES API
 // ============================================
 
-/**
- * @route   GET /api/employe-inss/dashboard
- * @desc    Récupérer les données du dashboard employé
- * @access  Private (Employé INSS)
- */
 router.get('/dashboard', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     console.log('📊 Dashboard pour userId:', userId);
-    
-    // 1. Statistiques de présence du mois
-    const [presencesMois] = await db.query(
+
+    let presencesMois = await db.query(
       `SELECT 
         COUNT(*) as jours_presents,
         COALESCE(SUM(TIMESTAMPDIFF(HOUR, heure_entree, heure_sortie)), 0) as total_heures,
@@ -313,14 +435,16 @@ router.get('/dashboard', authenticate, authorize(['employe']), async (req, res) 
        AND heure_sortie IS NOT NULL`,
       [userId]
     );
-    
+    if (Array.isArray(presencesMois) && presencesMois.length > 0 && Array.isArray(presencesMois[0])) {
+      presencesMois = presencesMois[0];
+    }
+
     const presencesData = presencesMois && presencesMois.length > 0 ? presencesMois[0] : {
       jours_presents: 0,
       total_heures: 0,
       moyenne_heures_jour: 0
     };
-    
-    // 2. Solde de congés
+
     let soldeConges;
     try {
       soldeConges = await calculerSoldeConges(userId);
@@ -335,9 +459,8 @@ router.get('/dashboard', authenticate, authorize(['employe']), async (req, res) 
         date_embauche: null
       };
     }
-    
-    // 3. Dernier salaire
-    const [dernierSalaire] = await db.query(
+
+    let dernierSalaire = await db.query(
       `SELECT salaire_net, mois, annee, statut_paiement, date_paiement
        FROM salaires 
        WHERE id_utilisateur = ? 
@@ -345,7 +468,10 @@ router.get('/dashboard', authenticate, authorize(['employe']), async (req, res) 
        LIMIT 1`,
       [userId]
     );
-    
+    if (Array.isArray(dernierSalaire) && dernierSalaire.length > 0 && Array.isArray(dernierSalaire[0])) {
+      dernierSalaire = dernierSalaire[0];
+    }
+
     const salaireData = dernierSalaire && dernierSalaire.length > 0 ? {
       salaire_net: parseFloat(dernierSalaire[0].salaire_net) || 0,
       mois: dernierSalaire[0].mois,
@@ -353,20 +479,21 @@ router.get('/dashboard', authenticate, authorize(['employe']), async (req, res) 
       statut: dernierSalaire[0].statut_paiement,
       date_paiement: dernierSalaire[0].date_paiement
     } : null;
-    
-    // 4. Notifications non lues
-    const [notifications] = await db.query(
+
+    let notifications = await db.query(
       `SELECT COUNT(*) as non_lues 
        FROM notifications 
        WHERE id_utilisateur = ? AND statut = 'non_lu'`,
       [userId]
     );
-    
-    const notificationsData = notifications && notifications.length > 0 ? 
+    if (Array.isArray(notifications) && notifications.length > 0 && Array.isArray(notifications[0])) {
+      notifications = notifications[0];
+    }
+
+    const notificationsData = notifications && notifications.length > 0 ?
       notifications[0].non_lues : 0;
-    
-    // 5. Prochains congés approuvés
-    const [prochainsConges] = await db.query(
+
+    let prochainsConges = await db.query(
       `SELECT type_conge, date_debut, date_fin, jours_demandes
        FROM conges 
        WHERE id_utilisateur = ? 
@@ -376,7 +503,10 @@ router.get('/dashboard', authenticate, authorize(['employe']), async (req, res) 
        LIMIT 3`,
       [userId]
     );
-    
+    if (Array.isArray(prochainsConges) && prochainsConges.length > 0 && Array.isArray(prochainsConges[0])) {
+      prochainsConges = prochainsConges[0];
+    }
+
     res.json({
       success: true,
       data: {
@@ -401,18 +531,15 @@ router.get('/dashboard', authenticate, authorize(['employe']), async (req, res) 
   }
 });
 
-/**
- * @route   GET /api/employe-inss/profil
- * @desc    Récupérer le profil complet de l'employé
- * @access  Private (Employé INSS)
- */
-router.get('/profil', authenticate, authorize(['employe']), async (req, res) => {
+// ============================================
+// ✅ FIX 2: CORRIGER /profil
+// ============================================
+router.get("/profil", authenticate, authorize(["employe"]), async (req, res) => {
   try {
     const userId = req.user.id;
-    console.log('👤 Profil pour userId:', userId);
-    
-    const [employe] = await db.query(
-      `SELECT 
+
+    const sql = `
+      SELECT 
         e.id,
         e.matricule,
         e.email,
@@ -421,7 +548,7 @@ router.get('/profil', authenticate, authorize(['employe']), async (req, res) => 
         e.type_employe,
         e.role,
         e.id_departement,
-        d.nom as departement_nom,
+        d.nom AS departement_nom,
         e.date_embauche,
         e.date_naissance,
         e.adresse,
@@ -434,50 +561,40 @@ router.get('/profil', authenticate, authorize(['employe']), async (req, res) => 
         e.nom_banque,
         e.photo_identite,
         e.statut
-       FROM employes e
-       LEFT JOIN departements d ON e.id_departement = d.id
-       WHERE e.id = ?`,
-      [userId]
-    );
-    
-    console.log('📋 Résultat requête profil:', employe);
-    
-    if (!employe || employe.length === 0) {
-      console.log('❌ Employé non trouvé pour userId:', userId);
+      FROM employes e
+      LEFT JOIN departements d ON d.id = e.id_departement
+      WHERE e.id = ?
+      LIMIT 1
+    `;
+
+    let rows = await db.query(sql, [userId]);
+    if (Array.isArray(rows) && rows.length > 0 && Array.isArray(rows[0])) {
+      rows = rows[0];
+    }
+
+    // ✅ CORRECTION : Vérifier AVANT d'accéder à rows[0]
+    if (!rows || rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Employé non trouvé'
+        message: "Profil introuvable"
       });
     }
-    
-    const profilData = employe[0];
-    
-    // Convertir les champs numériques
-    if (profilData.salaire_base) {
-      profilData.salaire_base = parseFloat(profilData.salaire_base);
-    }
-    
-    console.log('✅ Profil récupéré avec succès');
-    
-    res.json({
+
+    const employe = rows[0];
+
+    return res.json({
       success: true,
-      data: profilData
+      data: employe,
     });
   } catch (error) {
-    console.error('❌ Erreur récupération profil:', error);
+    console.error("❌ Erreur récupération profil:", error);
     res.status(500).json({
       success: false,
-      message: 'Erreur lors de la récupération du profil',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: "Erreur récupération profil"
     });
   }
 });
 
-/**
- * @route   PUT /api/employe-inss/profil
- * @desc    Mettre à jour le profil de l'employé
- * @access  Private (Employé INSS)
- */
 router.put('/profil', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
@@ -489,23 +606,21 @@ router.put('/profil', authenticate, authorize(['employe']), async (req, res) => 
       compte_bancaire,
       nom_banque
     } = req.body;
-    
-    // Validation email
+
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({
         success: false,
         message: 'Format d\'email invalide'
       });
     }
-    
-    // Validation téléphone
+
     if (telephone && !/^[\d\s\+\-\(\)]+$/.test(telephone)) {
       return res.status(400).json({
         success: false,
         message: 'Format de téléphone invalide'
       });
     }
-    
+
     await db.query(
       `UPDATE employes SET 
         telephone = ?,
@@ -526,7 +641,7 @@ router.put('/profil', authenticate, authorize(['employe']), async (req, res) => 
         userId
       ]
     );
-    
+
     res.json({
       success: true,
       message: 'Profil mis à jour avec succès'
@@ -541,21 +656,17 @@ router.put('/profil', authenticate, authorize(['employe']), async (req, res) => 
   }
 });
 
-/**
- * @route   POST /api/employe-inss/conges/demande
- * @desc    Créer une demande de congé + Envoyer email aux managers
- * @access  Private (Employé INSS)
- */
-router.post('/conges/demande', 
-  authenticate, 
-  authorize(['employe']), 
+
+router.post('/conges/demande',
+  authenticate,
+  authorize(['employe']),
   upload.single('piece_jointe'),
   async (req, res) => {
     const connection = await db.getConnection();
-    
+
     try {
       await connection.beginTransaction();
-      
+
       const userId = req.user.id;
       const {
         type_conge,
@@ -563,40 +674,36 @@ router.post('/conges/demande',
         date_fin,
         raison
       } = req.body;
-      
-      // Validation des champs
+
       if (!type_conge || !date_debut || !date_fin || !raison) {
         throw new Error('Tous les champs obligatoires doivent être remplis');
       }
-      
+
       const dateDebut = new Date(date_debut);
       const dateFin = new Date(date_fin);
       const aujourdhui = new Date();
       aujourdhui.setHours(0, 0, 0, 0);
-      
-      // Validations
+
       if (dateDebut < aujourdhui) {
         throw new Error('La date de début ne peut pas être dans le passé');
       }
-      
+
       if (dateFin < dateDebut) {
         throw new Error('La date de fin doit être après la date de début');
       }
-      
+
       const joursDemandesCalendar = Math.ceil((dateFin - dateDebut) / (1000 * 60 * 60 * 24)) + 1;
-      
-      // Vérifier le solde pour les congés annuels
+
       if (type_conge === 'annuel') {
         const solde = await calculerSoldeConges(userId);
-        
+
         if (joursDemandesCalendar > solde.jours_disponibles) {
           throw new Error(
             `Solde insuffisant. Vous avez ${solde.jours_disponibles} jours disponibles et vous demandez ${joursDemandesCalendar} jours`
           );
         }
       }
-      
-      // Vérifier les chevauchements
+
       const [chevauchements] = await connection.query(
         `SELECT COUNT(*) as count 
          FROM conges 
@@ -609,12 +716,11 @@ router.post('/conges/demande',
          )`,
         [userId, date_debut, date_debut, date_fin, date_fin, date_debut, date_fin]
       );
-      
+
       if (chevauchements && chevauchements[0] && chevauchements[0].count > 0) {
         throw new Error('Vous avez déjà une demande de congé pour cette période');
       }
-      
-      // Créer la demande
+
       const [result] = await connection.query(
         `INSERT INTO conges (
           id_utilisateur, type_conge, date_debut, date_fin, 
@@ -632,17 +738,15 @@ router.post('/conges/demande',
           userId
         ]
       );
-      
-      // Récupérer les informations de l'employé
+
       const [employe] = await connection.query(
         'SELECT id_departement, nom_complet, email FROM employes WHERE id = ?',
         [userId]
       );
-      
+
       if (employe && employe.length > 0) {
         const employeData = employe[0];
-        
-        // Récupérer les managers pour notification
+
         const [managers] = await connection.query(
           `SELECT id, email, nom_complet FROM employes 
            WHERE role IN ('manager', 'admin') 
@@ -651,8 +755,7 @@ router.post('/conges/demande',
            AND email IS NOT NULL`,
           [employeData.id_departement]
         );
-        
-        // Créer des notifications pour les managers
+
         for (const manager of managers) {
           await connection.query(
             `INSERT INTO notifications (
@@ -667,8 +770,7 @@ router.post('/conges/demande',
               result.insertId
             ]
           );
-          
-          // ✅ ENVOYER EMAIL AU MANAGER
+
           if (manager.email) {
             try {
               await emailService.envoyerNotificationConge(
@@ -682,12 +784,10 @@ router.post('/conges/demande',
               console.log(`✅ Email envoyé au manager ${manager.nom_complet}`);
             } catch (emailError) {
               console.error('⚠️ Erreur envoi email manager:', emailError);
-              // Ne pas bloquer la transaction si l'email échoue
             }
           }
         }
-        
-        // ✅ ENVOYER EMAIL DE CONFIRMATION À L'EMPLOYÉ
+
         if (employeData.email) {
           try {
             await emailService.envoyerConfirmationDemandeConge(
@@ -704,9 +804,9 @@ router.post('/conges/demande',
           }
         }
       }
-      
+
       await connection.commit();
-      
+
       res.json({
         success: true,
         message: 'Demande de congé soumise avec succès. Vos responsables ont été notifiés par email.',
@@ -728,16 +828,11 @@ router.post('/conges/demande',
   }
 );
 
-/**
- * @route   GET /api/employe-inss/conges
- * @desc    Récupérer l'historique des demandes de congé
- * @access  Private (Employé INSS)
- */
 router.get('/conges', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     const { statut, annee } = req.query;
-    
+
     let query = `
       SELECT 
         c.*,
@@ -747,21 +842,21 @@ router.get('/conges', authenticate, authorize(['employe']), async (req, res) => 
       WHERE c.id_utilisateur = ?
     `;
     const params = [userId];
-    
+
     if (statut && statut !== 'tous') {
       query += ' AND c.statut = ?';
       params.push(statut);
     }
-    
+
     if (annee) {
       query += ' AND YEAR(c.date_debut) = ?';
       params.push(annee);
     }
-    
+
     query += ' ORDER BY c.date_creation DESC';
-    
-    const [conges] = await db.query(query, params);
-    
+
+    const conges = await db.query(query, params);
+
     res.json({
       success: true,
       data: conges || []
@@ -776,16 +871,11 @@ router.get('/conges', authenticate, authorize(['employe']), async (req, res) => 
   }
 });
 
-/**
- * @route   GET /api/employe-inss/conges/solde
- * @desc    Récupérer le solde de congés
- * @access  Private (Employé INSS)
- */
 router.get('/conges/solde', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     const solde = await calculerSoldeConges(userId);
-    
+
     res.json({
       success: true,
       data: solde
@@ -800,16 +890,11 @@ router.get('/conges/solde', authenticate, authorize(['employe']), async (req, re
   }
 });
 
-/**
- * @route   GET /api/employe-inss/salaires
- * @desc    Récupérer les bulletins de salaire
- * @access  Private (Employé INSS)
- */
 router.get('/salaires', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     const { annee } = req.query;
-    
+
     let query = `
       SELECT 
         s.*,
@@ -818,22 +903,21 @@ router.get('/salaires', authenticate, authorize(['employe']), async (req, res) =
       WHERE s.id_utilisateur = ?
     `;
     const params = [userId];
-    
+
     if (annee) {
       query += ' AND s.annee = ?';
       params.push(annee);
     }
-    
+
     query += ' ORDER BY s.annee DESC, s.mois DESC';
-    
-    const [salaires] = await db.query(query, params);
-    
-    // Calculer les statistiques
+
+    const salaires = await db.query(query, params);
+
     let statistiques = null;
     if (salaires && salaires.length > 0) {
       const total_brut = salaires.reduce((sum, s) => sum + (parseFloat(s.salaire_brut) || 0), 0);
       const total_net = salaires.reduce((sum, s) => sum + (parseFloat(s.salaire_net) || 0), 0);
-      
+
       statistiques = {
         nombre_bulletins: salaires.length,
         total_brut: Math.round(total_brut),
@@ -842,7 +926,7 @@ router.get('/salaires', authenticate, authorize(['employe']), async (req, res) =
         moyenne_net: Math.round(total_net / salaires.length)
       };
     }
-    
+
     res.json({
       success: true,
       data: {
@@ -860,17 +944,12 @@ router.get('/salaires', authenticate, authorize(['employe']), async (req, res) =
   }
 });
 
-/**
- * @route   GET /api/employe-inss/salaires/:id
- * @desc    Récupérer le détail d'un bulletin de salaire
- * @access  Private (Employé INSS)
- */
 router.get('/salaires/:id', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     const salaireId = req.params.id;
-    
-    const [salaire] = await db.query(
+
+    const salaire = await db.query(
       `SELECT 
         s.*, 
         e.nom_complet, 
@@ -883,30 +962,29 @@ router.get('/salaires/:id', authenticate, authorize(['employe']), async (req, re
        WHERE s.id = ? AND s.id_utilisateur = ?`,
       [salaireId, userId]
     );
-    
+
     if (!salaire || salaire.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'Bulletin de salaire non trouvé'
       });
     }
-    
+
     const salaireData = salaire[0];
-    
-    // Convertir les champs numériques
+
     const numericFields = [
       'salaire_brut', 'heures_travaillees', 'heures_supp', 'taux_heure_supp',
       'deduction_inss', 'deduction_impots', 'autres_deductions', 'avances',
-      'primes', 'indemnites', 'commissions', 'total_deductions', 
+      'primes', 'indemnites', 'commissions', 'total_deductions',
       'total_additions', 'salaire_net'
     ];
-    
+
     numericFields.forEach(field => {
       if (salaireData[field]) {
         salaireData[field] = parseFloat(salaireData[field]);
       }
     });
-    
+
     res.json({
       success: true,
       data: salaireData
@@ -921,16 +999,11 @@ router.get('/salaires/:id', authenticate, authorize(['employe']), async (req, re
   }
 });
 
-/**
- * @route   GET /api/employe-inss/presences
- * @desc    Récupérer l'historique des présences
- * @access  Private (Employé INSS)
- */
 router.get('/presences', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     const { mois, annee } = req.query;
-    
+
     let query = `
       SELECT 
         p.*,
@@ -943,21 +1016,20 @@ router.get('/presences', authenticate, authorize(['employe']), async (req, res) 
       WHERE p.id_utilisateur = ?
     `;
     const params = [userId];
-    
+
     if (mois && annee) {
       query += ' AND MONTH(p.date) = ? AND YEAR(p.date) = ?';
       params.push(mois, annee);
     }
-    
+
     query += ' ORDER BY p.date DESC';
-    
-    const [presences] = await db.query(query, params);
-    
-    // Statistiques
+
+    const presences = await db.query(query, params);
+
     const presencesData = presences || [];
     const totalHeures = presencesData.reduce((sum, p) => sum + (parseFloat(p.duree_heures) || 0), 0);
     const joursRetard = presencesData.filter(p => p.retard === 1).length;
-    
+
     res.json({
       success: true,
       data: {
@@ -965,10 +1037,10 @@ router.get('/presences', authenticate, authorize(['employe']), async (req, res) 
         statistiques: {
           total_jours: presencesData.length,
           total_heures: Math.round(totalHeures),
-          moyenne_heures_jour: presencesData.length > 0 ? 
+          moyenne_heures_jour: presencesData.length > 0 ?
             (totalHeures / presencesData.length).toFixed(1) : 0,
           jours_retard: joursRetard,
-          taux_ponctualite: presencesData.length > 0 ? 
+          taux_ponctualite: presencesData.length > 0 ?
             (((presencesData.length - joursRetard) / presencesData.length) * 100).toFixed(1) : 100
         }
       }
@@ -983,39 +1055,33 @@ router.get('/presences', authenticate, authorize(['employe']), async (req, res) 
   }
 });
 
-/**
- * @route   POST /api/employe-inss/pointage/entree
- * @desc    Enregistrer un pointage d'entrée
- * @access  Private (Employé INSS)
- */
 router.post('/pointage/entree', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     const { latitude, longitude } = req.body;
     const dateAujourdhui = new Date().toISOString().split('T')[0];
-    
-    // Vérifier qu'il n'y a pas déjà un pointage aujourd'hui
-    const [existing] = await db.query(
+
+    const existing = await db.query(
       'SELECT id FROM presences WHERE id_utilisateur = ? AND date = ?',
       [userId, dateAujourdhui]
     );
-    
+
     if (existing && existing.length > 0) {
       return res.status(400).json({
         success: false,
         message: 'Vous avez déjà pointé aujourd\'hui'
       });
     }
-    
+
     const localisation = latitude && longitude ? `${latitude},${longitude}` : null;
-    
+
     await db.query(
       `INSERT INTO presences (
         id_utilisateur, date, heure_entree, localisation_entree, statut
       ) VALUES (?, ?, NOW(), ?, 'present')`,
       [userId, dateAujourdhui, localisation]
     );
-    
+
     res.json({
       success: true,
       message: 'Pointage d\'entrée enregistré avec succès'
@@ -1030,39 +1096,33 @@ router.post('/pointage/entree', authenticate, authorize(['employe']), async (req
   }
 });
 
-/**
- * @route   POST /api/employe-inss/pointage/sortie
- * @desc    Enregistrer un pointage de sortie
- * @access  Private (Employé INSS)
- */
 router.post('/pointage/sortie', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     const { latitude, longitude } = req.body;
     const dateAujourdhui = new Date().toISOString().split('T')[0];
-    
-    // Vérifier qu'il y a un pointage d'entrée
-    const [presence] = await db.query(
+
+    const presence = await db.query(
       'SELECT id, heure_entree, heure_sortie FROM presences WHERE id_utilisateur = ? AND date = ?',
       [userId, dateAujourdhui]
     );
-    
+
     if (!presence || presence.length === 0) {
       return res.status(400).json({
         success: false,
         message: 'Vous devez d\'abord pointer votre entrée'
       });
     }
-    
+
     if (presence[0].heure_sortie) {
       return res.status(400).json({
         success: false,
         message: 'Vous avez déjà pointé votre sortie aujourd\'hui'
       });
     }
-    
+
     const localisation = latitude && longitude ? `${latitude},${longitude}` : null;
-    
+
     await db.query(
       `UPDATE presences 
        SET heure_sortie = NOW(), 
@@ -1070,14 +1130,13 @@ router.post('/pointage/sortie', authenticate, authorize(['employe']), async (req
        WHERE id = ?`,
       [localisation, presence[0].id]
     );
-    
-    // Calculer la durée
-    const [updated] = await db.query(
+
+    const updated = await db.query(
       `SELECT TIMESTAMPDIFF(HOUR, heure_entree, heure_sortie) as duree 
        FROM presences WHERE id = ?`,
       [presence[0].id]
     );
-    
+
     res.json({
       success: true,
       message: 'Pointage de sortie enregistré avec succès',
@@ -1093,33 +1152,28 @@ router.post('/pointage/sortie', authenticate, authorize(['employe']), async (req
   }
 });
 
-/**
- * @route   GET /api/employe-inss/notifications
- * @desc    Récupérer les notifications
- * @access  Private (Employé INSS)
- */
 router.get('/notifications', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     const { statut, limit = 20 } = req.query;
-    
+
     let query = `
       SELECT *
       FROM notifications
       WHERE id_utilisateur = ?
     `;
     const params = [userId];
-    
+
     if (statut && statut !== 'tous') {
       query += ' AND statut = ?';
       params.push(statut);
     }
-    
+
     query += ' ORDER BY date_creation DESC LIMIT ?';
     params.push(parseInt(limit));
-    
-    const [notifications] = await db.query(query, params);
-    
+
+    const notifications = await db.query(query, params);
+
     res.json({
       success: true,
       data: notifications || []
@@ -1134,23 +1188,18 @@ router.get('/notifications', authenticate, authorize(['employe']), async (req, r
   }
 });
 
-/**
- * @route   PUT /api/employe-inss/notifications/:id/marquer-lu
- * @desc    Marquer une notification comme lue
- * @access  Private (Employé INSS)
- */
 router.put('/notifications/:id/marquer-lu', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
     const notificationId = req.params.id;
-    
+
     await db.query(
       `UPDATE notifications 
        SET statut = 'lu', date_lecture = NOW()
        WHERE id = ? AND id_utilisateur = ?`,
       [notificationId, userId]
     );
-    
+
     res.json({
       success: true,
       message: 'Notification marquée comme lue'
@@ -1165,55 +1214,47 @@ router.put('/notifications/:id/marquer-lu', authenticate, authorize(['employe'])
   }
 });
 
-/**
- * @route   POST /api/employe-inss/salaires/:id/demander-paiement
- * @desc    Demander le paiement d'un salaire + Envoyer email aux managers/admin
- * @access  Private (Employé INSS)
- */
-router.post('/salaires/:id/demander-paiement', 
-  authenticate, 
-  authorize(['employe']), 
+router.post('/salaires/:id/demander-paiement',
+  authenticate,
+  authorize(['employe']),
   async (req, res) => {
     const connection = await db.getConnection();
-    
+
     try {
       await connection.beginTransaction();
-      
+
       const userId = req.user.id;
       const salaireId = req.params.id;
       const { mois, annee, montant } = req.body;
-      
-      // Vérifier que le salaire appartient à l'employé
+
       const [salaire] = await connection.query(
         `SELECT s.*, e.nom_complet, e.email, e.id_departement 
          FROM salaires s
-         JOIN employes e ON s.id_utilisateur = e.id
+         JOIN utilisateurs e ON s.id_utilisateur = e.id
          WHERE s.id = ? AND s.id_utilisateur = ?`,
         [salaireId, userId]
       );
-      
+
       if (!salaire || salaire.length === 0) {
         throw new Error('Salaire non trouvé');
       }
-      
+
       const salaireData = salaire[0];
-      
+
       if (salaireData.statut_paiement !== 'calculé') {
         throw new Error('Ce salaire n\'est pas en attente de paiement');
       }
-      
-      // Vérifier qu'il n'y a pas déjà une demande en cours
+
       const [demandeExistante] = await connection.query(
         `SELECT * FROM demandes_paiement_salaire 
          WHERE id_salaire = ? AND statut = 'en_attente'`,
         [salaireId]
       );
-      
+
       if (demandeExistante && demandeExistante.length > 0) {
         throw new Error('Une demande de paiement est déjà en cours pour ce salaire');
       }
-      
-      // Créer la demande de paiement
+
       await connection.query(
         `INSERT INTO demandes_paiement_salaire (
           id_salaire, id_employe, mois, annee, montant,
@@ -1221,8 +1262,7 @@ router.post('/salaires/:id/demander-paiement',
         ) VALUES (?, ?, ?, ?, ?, 'en_attente', NOW())`,
         [salaireId, userId, mois, annee, montant]
       );
-      
-      // Récupérer les managers/admins
+
       const [managers] = await connection.query(
         `SELECT id, email, nom_complet FROM employes 
          WHERE role IN ('manager', 'admin') 
@@ -1231,8 +1271,7 @@ router.post('/salaires/:id/demander-paiement',
          AND email IS NOT NULL`,
         [salaireData.id_departement]
       );
-      
-      // Créer des notifications pour les managers
+
       for (const manager of managers) {
         await connection.query(
           `INSERT INTO notifications (
@@ -1247,8 +1286,7 @@ router.post('/salaires/:id/demander-paiement',
             salaireId
           ]
         );
-        
-        // ✅ ENVOYER EMAIL AU MANAGER/ADMIN
+
         if (manager.email) {
           try {
             await emailService.envoyerNotificationDemandePaiement(
@@ -1265,8 +1303,7 @@ router.post('/salaires/:id/demander-paiement',
           }
         }
       }
-      
-      // ✅ ENVOYER EMAIL DE CONFIRMATION À L'EMPLOYÉ
+
       if (salaireData.email) {
         try {
           await emailService.envoyerConfirmationDemandePaiement(
@@ -1281,9 +1318,9 @@ router.post('/salaires/:id/demander-paiement',
           console.error('⚠️ Erreur envoi email employé:', emailError);
         }
       }
-      
+
       await connection.commit();
-      
+
       res.json({
         success: true,
         message: 'Demande de paiement envoyée avec succès. Les responsables ont été notifiés par email.'
@@ -1301,55 +1338,47 @@ router.post('/salaires/:id/demander-paiement',
   }
 );
 
-/**
- * @route   POST /api/employe-inss/salaires/:id/confirmer-reception
- * @desc    Confirmer la réception d'un salaire avec code de vérification + Envoyer email aux managers
- * @access  Private (Employé INSS)
- */
-router.post('/salaires/:id/confirmer-reception', 
-  authenticate, 
-  authorize(['employe']), 
+router.post('/salaires/:id/confirmer-reception',
+  authenticate,
+  authorize(['employe']),
   async (req, res) => {
     const connection = await db.getConnection();
-    
+
     try {
       await connection.beginTransaction();
-      
+
       const userId = req.user.id;
       const salaireId = req.params.id;
       const { code_verification, mois, annee } = req.body;
-      
-      // Récupérer les infos de l'employé ET du salaire
+
       const [salaire] = await connection.query(
         `SELECT s.*, e.nom_complet, e.email, e.id_departement 
          FROM salaires s
-         JOIN employes e ON s.id_utilisateur = e.id
+         JOIN utilisateurs e ON s.id_utilisateur = e.id
          WHERE s.id = ? AND s.id_utilisateur = ?`,
         [salaireId, userId]
       );
-      
+
       if (!salaire || salaire.length === 0) {
         throw new Error('Salaire non trouvé');
       }
-      
+
       const salaireData = salaire[0];
-      
+
       if (salaireData.statut_paiement !== 'payé') {
         throw new Error('Ce salaire n\'a pas encore été payé');
       }
-      
-      // Vérifier que le salaire n'a pas déjà été confirmé
+
       const [confirmationExistante] = await connection.query(
         `SELECT * FROM confirmations_reception_salaire 
          WHERE id_salaire = ? AND confirme = 1`,
         [salaireId]
       );
-      
+
       if (confirmationExistante && confirmationExistante.length > 0) {
         throw new Error('La réception de ce salaire a déjà été confirmée');
       }
-      
-      // Générer ou récupérer le code de vérification
+
       let codeAttendu;
       const [codeExistant] = await connection.query(
         `SELECT code_verification, date_expiration 
@@ -1358,31 +1387,28 @@ router.post('/salaires/:id/confirmer-reception',
          ORDER BY date_creation DESC LIMIT 1`,
         [salaireId, userId]
       );
-      
+
       if (codeExistant && codeExistant.length > 0) {
-        // Vérifier si le code n'est pas expiré (valide 24h)
         const dateExpiration = new Date(codeExistant[0].date_expiration);
         const maintenant = new Date();
-        
+
         if (maintenant > dateExpiration) {
           throw new Error('Le code de vérification a expiré. Veuillez demander un nouveau code.');
         }
-        
+
         codeAttendu = codeExistant[0].code_verification;
       } else {
-        // Générer un nouveau code
         codeAttendu = Math.floor(100000 + Math.random() * 900000).toString();
         const dateExpiration = new Date();
         dateExpiration.setHours(dateExpiration.getHours() + 24);
-        
+
         await connection.query(
           `INSERT INTO codes_verification_salaire (
             id_salaire, id_utilisateur, code_verification, date_expiration
           ) VALUES (?, ?, ?, ?)`,
           [salaireId, userId, codeAttendu, dateExpiration]
         );
-        
-        // ✅ ENVOYER LE CODE PAR EMAIL
+
         if (salaireData.email) {
           try {
             await emailService.envoyerCodeVerification(
@@ -1397,20 +1423,18 @@ router.post('/salaires/:id/confirmer-reception',
             console.error('⚠️ Erreur envoi email:', emailError);
           }
         }
-        
+
         throw new Error(
-          process.env.NODE_ENV === 'development' 
+          process.env.NODE_ENV === 'development'
             ? `Un code de vérification a été envoyé à votre email. Code: ${codeAttendu} (DEV)`
             : 'Un code de vérification a été envoyé à votre email.'
         );
       }
-      
-      // Vérifier le code
+
       if (code_verification !== codeAttendu) {
         throw new Error('Code de vérification incorrect');
       }
-      
-      // Enregistrer la confirmation
+
       await connection.query(
         `INSERT INTO confirmations_reception_salaire (
           id_salaire, id_utilisateur, mois, annee, montant,
@@ -1418,24 +1442,21 @@ router.post('/salaires/:id/confirmer-reception',
         ) VALUES (?, ?, ?, ?, ?, ?, 1, NOW())`,
         [salaireId, userId, mois, annee, salaireData.salaire_net, code_verification]
       );
-      
-      // Mettre à jour le salaire
+
       await connection.query(
         `UPDATE salaires 
          SET confirme_reception = 1, date_confirmation_reception = NOW()
          WHERE id = ?`,
         [salaireId]
       );
-      
-      // Invalider le code de vérification
+
       await connection.query(
         `UPDATE codes_verification_salaire 
          SET utilise = 1, date_utilisation = NOW()
          WHERE id_salaire = ? AND code_verification = ?`,
         [salaireId, code_verification]
       );
-      
-      // ✅ NOTIFIER LES MANAGERS/ADMINS DE LA CONFIRMATION
+
       const [managers] = await connection.query(
         `SELECT id, email, nom_complet FROM employes 
          WHERE role IN ('manager', 'admin') 
@@ -1444,9 +1465,8 @@ router.post('/salaires/:id/confirmer-reception',
          AND email IS NOT NULL`,
         [salaireData.id_departement]
       );
-      
+
       for (const manager of managers) {
-        // Notification dans la base
         await connection.query(
           `INSERT INTO notifications (
             id_utilisateur, type_notification, titre, message,
@@ -1460,8 +1480,7 @@ router.post('/salaires/:id/confirmer-reception',
             salaireId
           ]
         );
-        
-        // ✅ EMAIL AU MANAGER
+
         if (manager.email) {
           try {
             await emailService.envoyerNotificationConfirmationReception(
@@ -1478,9 +1497,9 @@ router.post('/salaires/:id/confirmer-reception',
           }
         }
       }
-      
+
       await connection.commit();
-      
+
       res.json({
         success: true,
         message: 'Réception du salaire confirmée avec succès. Les responsables ont été notifiés.'
@@ -1498,47 +1517,39 @@ router.post('/salaires/:id/confirmer-reception',
   }
 );
 
-/**
- * @route   POST /api/employe-inss/salaires/:id/demander-code
- * @desc    Demander un nouveau code de vérification
- * @access  Private (Employé INSS)
- */
-router.post('/salaires/:id/demander-code', 
-  authenticate, 
-  authorize(['employe']), 
+router.post('/salaires/:id/demander-code',
+  authenticate,
+  authorize(['employe']),
   async (req, res) => {
     try {
       const userId = req.user.id;
       const salaireId = req.params.id;
-      
-      // Vérifier que le salaire appartient à l'employé et récupérer l'email
-      const [salaire] = await db.query(
+
+      const salaire = await db.query(
         `SELECT s.*, e.nom_complet, e.email
          FROM salaires s
          JOIN employes e ON s.id_utilisateur = e.id
          WHERE s.id = ? AND s.id_utilisateur = ?`,
         [salaireId, userId]
       );
-      
+
       if (!salaire || salaire.length === 0) {
         throw new Error('Salaire non trouvé');
       }
-      
+
       const salaireData = salaire[0];
-      
-      // Générer un nouveau code
+
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       const dateExpiration = new Date();
       dateExpiration.setHours(dateExpiration.getHours() + 24);
-      
+
       await db.query(
         `INSERT INTO codes_verification_salaire (
           id_salaire, id_utilisateur, code_verification, date_expiration
         ) VALUES (?, ?, ?, ?)`,
         [salaireId, userId, code, dateExpiration]
       );
-      
-      // ✅ ENVOYER LE CODE PAR EMAIL
+
       if (salaireData.email) {
         try {
           await emailService.envoyerCodeVerification(
@@ -1553,7 +1564,7 @@ router.post('/salaires/:id/demander-code',
           console.error('⚠️ Erreur envoi email:', emailError);
         }
       }
-      
+
       res.json({
         success: true,
         message: 'Un nouveau code de vérification a été envoyé à votre email',
@@ -1569,135 +1580,130 @@ router.post('/salaires/:id/demander-code',
   }
 );
 
-/**
- * @route   GET /api/employe-inss/carte
- * @desc    Récupérer la carte digitale de l'employé
- * @access  Private (Employé INSS)
- */
-router.get('/carte', authenticate, authorize(['employe']), async (req, res) => {
+// ============================================
+// /carte - Génération de carte d'employé avec QR Code
+// ============================================
+router.get("/carte", authenticate, authorize(["employe"]), async (req, res) => {
   try {
     const userId = req.user.id;
-    console.log('🎴 Génération carte pour userId:', userId);
-    
-    const [employes] = await db.query(
-      `SELECT 
-        e.id,
-        e.matricule,
-        e.nom_complet,
-        e.email,
-        e.telephone,
-        e.type_employe,
-        e.role,
-        e.date_embauche,
-        e.date_naissance,
-        e.numero_cnss,
-        e.photo_identite,
-        e.qr_code,
-        e.statut,
-        d.nom as departement_nom
-       FROM employes e
-       LEFT JOIN departements d ON e.id_departement = d.id
-       WHERE e.id = ?`,
-      [userId]
-    );
-    
-    console.log('📋 Résultat requête carte:', employes);
-    
-    if (!employes || employes.length === 0) {
-      console.log('❌ Employé non trouvé pour carte, userId:', userId);
-      return res.status(404).json({
-        success: false,
-        message: 'Employé non trouvé'
+    console.log(`📇 Génération carte pour userId: ${userId}`);
+
+    const sql = `
+      SELECT 
+        e.*, 
+        d.nom AS departement_nom
+      FROM employes e
+      LEFT JOIN departements d ON d.id = e.id_departement
+      WHERE e.id = ?
+      LIMIT 1
+    `;
+
+    // ✅ CORRECTION : Sans déstructuration pour mysql2
+    const rows = await db.query(sql, [userId]);
+
+    // Vérification si l'employé existe
+    if (!rows || rows.length === 0) {
+      console.warn(`⚠️ Employé non trouvé pour userId: ${userId}`);
+      return res.status(404).json({ 
+        success: false, 
+        message: "Employé introuvable" 
       });
     }
-    
-    const employe = employes[0];
-    
-    // Générer le QR code s'il n'existe pas
-    let qrCodeData = employe.qr_code;
-    
-    if (!qrCodeData) {
-      const qrPayload = {
-        id: employe.id,
-        matricule: employe.matricule,
+
+    // ✅ Récupérer le premier employé
+    const employe = rows[0];
+    console.log(`✅ Employé trouvé: ${employe.nom_complet} (Matricule: ${employe.matricule})`);
+
+    // ✅ Vérifier et générer le QR code si nécessaire
+    let qrCodeDataUrl = employe.qr_code;
+
+    // Si le QR code n'existe pas ou n'est pas une Data URL valide
+    if (!qrCodeDataUrl || !qrCodeDataUrl.startsWith('data:image')) {
+      console.log('🔄 Génération du QR Code...');
+      
+      // Données à encoder dans le QR code
+      const payload = JSON.stringify({ 
+        id: employe.id, 
+        matricule: employe.matricule, 
         nom: employe.nom_complet,
-        type: employe.type_employe,
-        role: employe.role,
-        departement: employe.departement_nom,
+        type: employe.type_employe || 'INSS',
         timestamp: Date.now()
-      };
-      
-      qrCodeData = await QRCode.toDataURL(JSON.stringify(qrPayload));
-      
-      // Sauvegarder le QR code généré
-      await db.query(
-        'UPDATE employes SET qr_code = ? WHERE id = ?',
-        [qrCodeData, userId]
-      );
+      });
+
+      try {
+        // Générer le QR Code comme Data URL
+        qrCodeDataUrl = await QRCode.toDataURL(payload, {
+          errorCorrectionLevel: 'M',
+          type: 'image/png',
+          quality: 0.92,
+          margin: 1,
+          color: {
+            dark: '#1E3A8A',  // Couleur du QR code
+            light: '#FFFFFF'  // Couleur de fond
+          }
+        });
+
+        console.log(`✅ QR Code généré (${qrCodeDataUrl.length} caractères)`);
+
+        // Mettre à jour la base de données avec le QR code généré
+        await db.query(
+          "UPDATE employes SET qr_code = ? WHERE id = ?",
+          [qrCodeDataUrl, userId]
+        );
+        
+        console.log('💾 QR Code sauvegardé dans la base de données');
+      } catch (qrError) {
+        console.error('❌ Erreur génération QR Code:', qrError);
+        // Si la génération échoue, on continue sans QR code
+        qrCodeDataUrl = null;
+      }
+    } else {
+      console.log('✅ QR Code existant trouvé dans la base de données');
     }
-    
-    // Calculer la date de validité (1 an à partir d'aujourd'hui)
-    const dateValidite = new Date();
-    dateValidite.setFullYear(dateValidite.getFullYear() + 1);
-    
-    // Préparer les données de la carte avec TOUTES les informations
+
+    // ✅ Calculer la date de validité (1 an à partir d'aujourd'hui)
+    const validite = new Date();
+    validite.setFullYear(validite.getFullYear() + 1);
+    const validiteFormatted = validite.toISOString().split('T')[0];
+
+    // ✅ Préparer les données de la carte
     const carteData = {
       id: employe.id,
-      matricule: employe.matricule || 'N/A',
       nom_complet: employe.nom_complet,
+      matricule: employe.matricule,
       email: employe.email,
       telephone: employe.telephone,
-      type_employe: employe.type_employe || 'INSS',
-      role: employe.role,
-      date_embauche: employe.date_embauche,
-      date_naissance: employe.date_naissance,
-      numero_cnss: employe.numero_cnss,
       departement_nom: employe.departement_nom || 'NUTRIFIX',
+      type_employe: employe.type_employe || 'INSS',
+      numero_cnss: employe.numero_cnss,
+      date_embauche: employe.date_embauche,
       photo_identite: employe.photo_identite,
-      qr_code: qrCodeData,
-      statut: employe.statut,
-      validite: dateValidite.toISOString().split('T')[0],
-      date_emission: new Date().toISOString().split('T')[0]
+      qr_code: qrCodeDataUrl,
+      validite: validiteFormatted
     };
-    
-    console.log('✅ Données carte générées:', {
-      id: carteData.id,
-      matricule: carteData.matricule,
-      nom: carteData.nom_complet,
-      validite: carteData.validite,
-      departement: carteData.departement_nom
-    });
-    
-    res.json({
+
+    console.log('📤 Envoi des données de la carte au frontend');
+    console.log('🔍 QR Code inclus:', qrCodeDataUrl ? 'OUI' : 'NON');
+
+    return res.json({
       success: true,
       data: {
-        employe: {
-          id: employe.id,
-          matricule: employe.matricule || 'N/A',
-          nom_complet: employe.nom_complet,
-          email: employe.email,
-          telephone: employe.telephone,
-          type_employe: employe.type_employe || 'INSS',
-          role: employe.role,
-          date_embauche: employe.date_embauche,
-          numero_cnss: employe.numero_cnss,
-          departement_nom: employe.departement_nom || 'NUTRIFIX',
-          statut: employe.statut
-        },
         carte: carteData
       }
     });
+
   } catch (error) {
-    console.error('❌ Erreur génération carte:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur lors de la génération de la carte digitale',
+    console.error("❌ Erreur génération carte:", error);
+    console.error("Stack:", error.stack);
+    
+    return res.status(500).json({ 
+      success: false, 
+      message: "Erreur serveur lors de la génération de la carte",
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
 
-// Fonction helper pour obtenir le nom du mois
 function getMoisNom(mois) {
   const moisNoms = [
     'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
