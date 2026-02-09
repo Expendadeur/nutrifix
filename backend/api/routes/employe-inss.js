@@ -743,7 +743,7 @@ router.get('/conges', authenticate, authorize(['employe']), async (req, res) => 
         c.*,
         e.nom_complet as validateur_nom
       FROM conges c
-      LEFT JOIN employes e ON c.valide_par = e.id
+      LEFT JOIN utilisateurs e ON c.valide_par = e.id
       WHERE c.id_utilisateur = ?
     `;
     const params = [userId];
