@@ -5,7 +5,7 @@ const emailService = require('./api/emailService');
 const db = require('./database/db');
 
 // Email de test
-const EMPLOYE_EMAIL = "nishimwesalthiel@gmail.com";
+const EMPLOYE_EMAIL = "kmugishawimana@gmail.com";
 
 // =============================
 // 1. Envoyer notification congé rejeté
@@ -15,7 +15,7 @@ async function testEnvoyerCongeRejete() {
 
   const result = await emailService.envoyerNotificationCongeRejete(
     EMPLOYE_EMAIL,
-    "Nishimwe Salthiel",
+    "MUGISHAWIMANA Kelly",
     "annuel",
     "2026-02-15",
     "2026-02-20",
