@@ -1,8 +1,9 @@
-// backend/routes/adminRoutes.js
+// backend/routes/adminRoutes.js - VERSION AVEC INTÉGRATION EMAIL COMPLÈTE
 const express = require('express');
 const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const db = require('../../database/db');
+const emailService = require('../services/emailService');
 
 // ============================================
 // MIDDLEWARE DE VALIDATION
@@ -98,7 +99,7 @@ async function getKPIs(dateFilters) {
         // ============================================
         // CHIFFRE D'AFFAIRES
         // ============================================
-        const caResults = await db.query(`
+        const [caResults] = await db.query(`
             SELECT 
                 COALESCE(SUM(CASE 
                     WHEN date_commande BETWEEN ? AND ? 
@@ -124,7 +125,7 @@ async function getKPIs(dateFilters) {
         // ============================================
         // BÉNÉFICE NET
         // ============================================
-        const beneficeResults = await db.query(`
+        const [beneficeResults] = await db.query(`
             SELECT 
                 COALESCE(SUM(CASE 
                     WHEN type_mouvement IN ('entree', 'recette') 
@@ -150,11 +151,11 @@ async function getKPIs(dateFilters) {
         // ============================================
         // EMPLOYÉS
         // ============================================
-        const employesResults = await db.query(`
+        const [employesResults] = await db.query(`
             SELECT 
                 COUNT(*) as total,
                 SUM(CASE WHEN statut = 'actif' THEN 1 ELSE 0 END) as actifs
-            FROM utilisateurs
+            FROM employes
             WHERE role IN ('employe', 'manager', 'comptable', 'veterinaire', 'chauffeur', 'agriculteur', 'technicien')
         `);
 
@@ -169,7 +170,7 @@ async function getKPIs(dateFilters) {
         // ============================================
         // VÉHICULES
         // ============================================
-        const vehiculesResults = await db.query(`
+        const [vehiculesResults] = await db.query(`
             SELECT 
                 COUNT(*) as total,
                 SUM(CASE WHEN statut = 'actif' THEN 1 ELSE 0 END) as actifs,
@@ -189,7 +190,7 @@ async function getKPIs(dateFilters) {
         // ============================================
         // ANIMAUX
         // ============================================
-        const animauxResults = await db.query(`
+        const [animauxResults] = await db.query(`
             SELECT 
                 COUNT(*) as total,
                 SUM(CASE WHEN statut = 'vivant' THEN 1 ELSE 0 END) as vivants
@@ -207,7 +208,7 @@ async function getKPIs(dateFilters) {
         // ============================================
         // COMMANDES
         // ============================================
-        const commandesResults = await db.query(`
+        const [commandesResults] = await db.query(`
             SELECT 
                 COUNT(CASE WHEN statut IN ('brouillon', 'confirmee', 'en_preparation') THEN 1 END) as en_cours,
                 COUNT(CASE WHEN statut = 'livree_complete' 
@@ -261,7 +262,7 @@ async function getAlerts() {
         // ============================================
         // MAINTENANCES VÉHICULES
         // ============================================
-        const maintenancesResult = await db.query(`
+        const [maintenancesResult] = await db.query(`
             SELECT 
                 v.immatriculation,
                 v.marque,
@@ -296,7 +297,7 @@ async function getAlerts() {
         // ============================================
         // STOCKS FAIBLES
         // ============================================
-        const stocksResult = await db.query(`
+        const [stocksResult] = await db.query(`
             SELECT 
                 s.type_article,
                 s.id_article,
@@ -328,7 +329,7 @@ async function getAlerts() {
         // ============================================
         // FACTURES IMPAYÉES
         // ============================================
-        const facturesResult = await db.query(`
+        const [facturesResult] = await db.query(`
             SELECT 
                 numero_facture,
                 montant_du,
@@ -358,7 +359,7 @@ async function getAlerts() {
         // ============================================
         // CONGÉS EN ATTENTE
         // ============================================
-        const congesResult = await db.query(`
+        const [congesResult] = await db.query(`
             SELECT 
                 c.id,
                 u.nom_complet,
@@ -366,7 +367,7 @@ async function getAlerts() {
                 c.date_debut,
                 DATEDIFF(c.date_debut, NOW()) as jours_avant
             FROM conges c
-            JOIN utilisateurs u ON c.id_utilisateur = u.id
+            JOIN employes u ON c.id_utilisateur = u.id
             WHERE c.statut = 'en_attente'
             ORDER BY c.date_creation DESC
             LIMIT 3
@@ -390,7 +391,7 @@ async function getAlerts() {
         // ============================================
         // ASSURANCES VÉHICULES
         // ============================================
-        const assurancesResult = await db.query(`
+        const [assurancesResult] = await db.query(`
             SELECT 
                 v.immatriculation,
                 a.compagnie_assurance,
@@ -441,7 +442,7 @@ async function getCharts(dateFilters) {
         // ============================================
         // ÉVOLUTION CA (30 derniers jours)
         // ============================================
-        const evolutionCAResult = await db.query(`
+        const [evolutionCAResult] = await db.query(`
             SELECT 
                 DATE(date_commande) as date,
                 COALESCE(SUM(montant_total), 0) as montant
@@ -457,7 +458,7 @@ async function getCharts(dateFilters) {
         // ============================================
         // RÉPARTITION REVENUS
         // ============================================
-        const repartitionRevenusResult = await db.query(`
+        const [repartitionRevenusResult] = await db.query(`
             SELECT 
                 categorie,
                 COALESCE(SUM(montant), 0) as montant
@@ -512,7 +513,7 @@ async function getTopPerformers(dateFilters) {
         // ============================================
         // TOP CLIENTS
         // ============================================
-        const topClientsResult = await db.query(`
+        const [topClientsResult] = await db.query(`
             SELECT 
                 c.id,
                 c.nom_client as nom,
@@ -532,7 +533,7 @@ async function getTopPerformers(dateFilters) {
         // ============================================
         // TOP PRODUITS
         // ============================================
-        const topProduitsResult = await db.query(`
+        const [topProduitsResult] = await db.query(`
             SELECT 
                 lcv.designation as nom,
                 COUNT(*) as ventes,
@@ -581,11 +582,11 @@ async function getModuleStats(dateFilters) {
         // ============================================
         // RH
         // ============================================
-        const rhStatsResult = await db.query(`
+        const [rhStatsResult] = await db.query(`
             SELECT 
                 COUNT(DISTINCT u.id) as operations,
                 COALESCE(SUM(s.salaire_net), 0) as montant
-            FROM utilisateurs u
+            FROM employes u
             LEFT JOIN salaires s ON u.id = s.id_utilisateur
             WHERE u.statut = 'actif'
             AND (
@@ -605,7 +606,7 @@ async function getModuleStats(dateFilters) {
         // ============================================
         // COMMERCIAL
         // ============================================
-        const commercialStatsResult = await db.query(`
+        const [commercialStatsResult] = await db.query(`
             SELECT 
                 COUNT(*) as operations,
                 COALESCE(SUM(montant_total), 0) as montant
@@ -625,7 +626,7 @@ async function getModuleStats(dateFilters) {
         // ============================================
         // FINANCE
         // ============================================
-        const financeStatsResult = await db.query(`
+        const [financeStatsResult] = await db.query(`
             SELECT 
                 COUNT(*) as operations,
                 COALESCE(SUM(CASE 
@@ -648,7 +649,7 @@ async function getModuleStats(dateFilters) {
         // ============================================
         // ÉLEVAGE
         // ============================================
-        const elevageStatsResult = await db.query(`
+        const [elevageStatsResult] = await db.query(`
             SELECT 
                 COUNT(*) as operations,
                 COALESCE(SUM(quantite_litres * 1800), 0) as montant
@@ -668,7 +669,7 @@ async function getModuleStats(dateFilters) {
         // ============================================
         // AGRICULTURE
         // ============================================
-        const agricultureStatsResult = await db.query(`
+        const [agricultureStatsResult] = await db.query(`
             SELECT 
                 COUNT(*) as operations,
                 COALESCE(SUM(cout_total), 0) as montant
@@ -837,7 +838,7 @@ router.get('/demandes-paiement-salaire', authenticate, authorize('admin'), async
 
         console.log('🔍 Recherche demandes:', { statut, page: pageNum, limit: limitNum, offset });
 
-        const demandesResult = await db.query(`
+        const [demandesResult] = await db.query(`
             SELECT 
                 dps.id,
                 dps.id_salaire,
@@ -856,7 +857,7 @@ router.get('/demandes-paiement-salaire', authenticate, authorize('admin'), async
                 d.nom as departement_nom
             FROM demandes_paiement_salaire dps
             JOIN salaires s ON dps.id_salaire = s.id
-            JOIN utilisateurs u ON s.id_utilisateur = u.id
+            JOIN employes u ON s.id_utilisateur = u.id
             LEFT JOIN departements d ON u.id_departement = d.id
             WHERE dps.statut = ?
             ORDER BY dps.date_demande ASC
@@ -867,7 +868,7 @@ router.get('/demandes-paiement-salaire', authenticate, authorize('admin'), async
 
         console.log('✅ Demandes trouvées:', demandes.length);
 
-        const countResult = await db.query(`
+        const [countResult] = await db.query(`
             SELECT COUNT(*) as total
             FROM demandes_paiement_salaire
             WHERE statut = ?
@@ -900,16 +901,21 @@ router.get('/demandes-paiement-salaire', authenticate, authorize('admin'), async
 
 /**
  * POST /api/admin/demandes-paiement-salaire/:id/valider
- * Valide une demande de paiement
+ * Valide une demande de paiement + Envoie email à l'employé
  */
 router.post('/demandes-paiement-salaire/:id/valider', authenticate, authorize('admin'), async (req, res) => {
+    const connection = await db.getConnection();
+    
     try {
+        await connection.beginTransaction();
+        
         const { id } = req.params;
         const { commentaire } = req.body;
 
         const codeVerification = Math.floor(100000 + Math.random() * 900000).toString();
 
-        await db.query(`
+        // Mettre à jour la demande
+        await connection.query(`
             UPDATE demandes_paiement_salaire
             SET 
                 statut = 'validee',
@@ -920,22 +926,26 @@ router.post('/demandes-paiement-salaire/:id/valider', authenticate, authorize('a
             WHERE id = ?
         `, [req.user.id, commentaire || null, codeVerification, id]);
 
-        const demandeResult = await db.query(`
+        // Récupérer les informations complètes
+        const [demandeResult] = await connection.query(`
             SELECT 
                 dps.*,
                 s.id_utilisateur,
                 u.email as employe_email,
-                u.nom_complet as employe_nom
+                u.nom_complet as employe_nom,
+                admin.nom_complet as validateur_nom
             FROM demandes_paiement_salaire dps
             JOIN salaires s ON dps.id_salaire = s.id
-            JOIN utilisateurs u ON s.id_utilisateur = u.id
+            JOIN employes u ON s.id_utilisateur = u.id
+            LEFT JOIN employes admin ON dps.id_validateur = admin.id
             WHERE dps.id = ?
         `, [id]);
 
         const demande = Array.isArray(demandeResult) ? demandeResult[0] : null;
 
         if (demande) {
-            await db.query(`
+            // Notification dans la base
+            await connection.query(`
                 INSERT INTO notifications (
                     id_utilisateur,
                     titre,
@@ -951,43 +961,68 @@ router.post('/demandes-paiement-salaire/:id/valider', authenticate, authorize('a
                 'paiement',
                 'non_lu'
             ]);
+
+            // ✅ ENVOYER EMAIL À L'EMPLOYÉ
+            if (demande.employe_email) {
+                try {
+                    await emailService.envoyerNotificationValidationPaiement(
+                        demande.employe_email,
+                        demande.employe_nom,
+                        demande.validateur_nom || 'Administration',
+                        codeVerification,
+                        demande.mois,
+                        demande.annee,
+                        parseFloat(demande.montant)
+                    );
+                    console.log(`✅ Email validation paiement envoyé à ${demande.employe_nom}`);
+                } catch (emailError) {
+                    console.error('⚠️ Erreur envoi email validation:', emailError);
+                    // Ne pas bloquer la transaction
+                }
+            }
         }
+
+        await connection.commit();
 
         res.status(200).json({
             success: true,
-            message: 'Demande validée avec succès',
+            message: 'Demande validée avec succès. L\'employé a été notifié par email.',
             data: {
-                codeVerification,
+                codeVerification: process.env.NODE_ENV === 'development' ? codeVerification : undefined,
                 demande: demande
             }
         });
     } catch (error) {
+        await connection.rollback();
         console.error('❌ Erreur validation demande:', error);
         res.status(500).json({
             success: false,
-            message: 'Erreur lors de la validation de la demande.',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            message: error.message || 'Erreur lors de la validation de la demande.'
         });
+    } finally {
+        connection.release();
     }
 });
 
 /**
  * POST /api/admin/demandes-paiement-salaire/:id/rejeter
- * Rejette une demande de paiement
+ * Rejette une demande de paiement + Envoie email à l'employé
  */
 router.post('/demandes-paiement-salaire/:id/rejeter', authenticate, authorize('admin'), async (req, res) => {
+    const connection = await db.getConnection();
+    
     try {
+        await connection.beginTransaction();
+        
         const { id } = req.params;
         const { motif_rejet, commentaire } = req.body;
 
         if (!motif_rejet || motif_rejet.trim() === '') {
-            return res.status(400).json({
-                success: false,
-                message: 'Le motif de rejet est obligatoire'
-            });
+            throw new Error('Le motif de rejet est obligatoire');
         }
 
-        await db.query(`
+        // Mettre à jour la demande
+        await connection.query(`
             UPDATE demandes_paiement_salaire
             SET 
                 statut = 'rejetee',
@@ -998,21 +1033,26 @@ router.post('/demandes-paiement-salaire/:id/rejeter', authenticate, authorize('a
             WHERE id = ?
         `, [req.user.id, motif_rejet, commentaire || null, id]);
 
-        const demandeResult = await db.query(`
+        // Récupérer les informations complètes
+        const [demandeResult] = await connection.query(`
             SELECT 
                 dps.*,
                 s.id_utilisateur,
-                u.nom_complet as employe_nom
+                u.email as employe_email,
+                u.nom_complet as employe_nom,
+                admin.nom_complet as rejeteur_nom
             FROM demandes_paiement_salaire dps
             JOIN salaires s ON dps.id_salaire = s.id
-            JOIN utilisateurs u ON s.id_utilisateur = u.id
+            JOIN employes u ON s.id_utilisateur = u.id
+            LEFT JOIN employes admin ON dps.id_rejeteur = admin.id
             WHERE dps.id = ?
         `, [id]);
 
         const demande = Array.isArray(demandeResult) ? demandeResult[0] : null;
 
         if (demande) {
-            await db.query(`
+            // Notification dans la base
+            await connection.query(`
                 INSERT INTO notifications (
                     id_utilisateur,
                     titre,
@@ -1028,19 +1068,42 @@ router.post('/demandes-paiement-salaire/:id/rejeter', authenticate, authorize('a
                 'paiement',
                 'non_lu'
             ]);
+
+            // ✅ ENVOYER EMAIL À L'EMPLOYÉ
+            if (demande.employe_email) {
+                try {
+                    await emailService.envoyerNotificationRejetPaiement(
+                        demande.employe_email,
+                        demande.employe_nom,
+                        demande.rejeteur_nom || 'Administration',
+                        motif_rejet,
+                        demande.mois,
+                        demande.annee,
+                        parseFloat(demande.montant),
+                        commentaire
+                    );
+                    console.log(`✅ Email rejet paiement envoyé à ${demande.employe_nom}`);
+                } catch (emailError) {
+                    console.error('⚠️ Erreur envoi email rejet:', emailError);
+                }
+            }
         }
+
+        await connection.commit();
 
         res.status(200).json({
             success: true,
-            message: 'Demande rejetée avec succès'
+            message: 'Demande rejetée avec succès. L\'employé a été notifié par email.'
         });
     } catch (error) {
+        await connection.rollback();
         console.error('❌ Erreur rejet demande:', error);
         res.status(500).json({
             success: false,
-            message: 'Erreur lors du rejet de la demande.',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            message: error.message || 'Erreur lors du rejet de la demande.'
         });
+    } finally {
+        connection.release();
     }
 });
 
@@ -1158,9 +1221,9 @@ router.get('/module-stats', authenticate, authorize('admin'), validatePeriod, as
  */
 router.get('/summary', authenticate, authorize('admin'), async (req, res) => {
     try {
-        const summaryResult = await db.query(`
+        const [summaryResult] = await db.query(`
             SELECT 
-                (SELECT COUNT(*) FROM utilisateurs WHERE statut = 'actif') as utilisateurs_actifs,
+                (SELECT COUNT(*) FROM employes WHERE statut = 'actif') as utilisateurs_actifs,
                 (SELECT COUNT(*) FROM vehicules WHERE statut = 'actif') as vehicules_actifs,
                 (SELECT COUNT(*) FROM animaux WHERE statut = 'vivant') as animaux_vivants,
                 (SELECT COUNT(*) FROM commandes_vente WHERE statut IN ('brouillon', 'confirmee', 'en_preparation')) as commandes_en_cours,
