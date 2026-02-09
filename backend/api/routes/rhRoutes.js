@@ -28,7 +28,7 @@ router.get('/employes', authenticate, authorize('admin', 'manager'), async (req,
                  FROM presences p 
                  WHERE p.id_utilisateur = u.id 
                  AND p.statut = 'present') as jours_travailles
-            FROM employes u
+            FROM utilisateurs u
             LEFT JOIN departements d ON u.id_departement = d.id
             WHERE 1=1
         `;
@@ -86,7 +86,7 @@ router.get('/employes/:id', authenticate, authorize('admin', 'manager'), async (
                  FROM conges c 
                  WHERE c.id_utilisateur = u.id 
                  AND c.statut = 'approuve') as conges_pris
-            FROM employes u
+            FROM utilisateurs u
             LEFT JOIN departements d ON u.id_departement = d.id
             WHERE u.id = ?
         `, [id]);
@@ -688,7 +688,7 @@ router.get('/presences', authenticate, authorize('admin', 'manager'), async (req
                 u.telephone,
                 d.nom as departement_nom
             FROM presences p
-            JOIN employes u ON p.id_utilisateur = u.id
+            JOIN utilisateurs u ON p.id_utilisateur = u.id
             LEFT JOIN departements d ON u.id_departement = d.id
             WHERE 1=1
         `;
@@ -780,7 +780,7 @@ router.get('/salaires', authenticate, authorize('admin', 'manager'), async (req,
                 u.salaire_base,
                 d.nom as departement_nom
             FROM salaires s
-            JOIN employes u ON s.id_utilisateur = u.id
+            JOIN utilisateurs u ON s.id_utilisateur = u.id
             LEFT JOIN departements d ON u.id_departement = d.id
             WHERE 1=1
         `;
@@ -981,7 +981,7 @@ router.put('/salaires/:id/valider', authenticate, authorize('admin', 'manager'),
         const [salaire] = await connection.query(`
             SELECT s.*, u.nom_complet, u.email, u.matricule
             FROM salaires s
-            JOIN employes u ON s.id_utilisateur = u.id
+            JOIN utilisateurs u ON s.id_utilisateur = u.id
             WHERE s.id = ?
         `, [id]);
 
@@ -1070,9 +1070,9 @@ router.get('/conges', authenticate, authorize('admin', 'manager'), async (req, r
                 d.nom as departement_nom,
                 v.nom_complet as valideur_nom
             FROM conges c
-            JOIN employes u ON c.id_utilisateur = u.id
+            JOIN utilisateurs u ON c.id_utilisateur = u.id
             LEFT JOIN departements d ON u.id_departement = d.id
-            LEFT JOIN employes v ON c.valide_par = v.id
+            LEFT JOIN utilisateurs v ON c.valide_par = v.id
             WHERE 1=1
         `;
         const params = [];
@@ -1115,7 +1115,7 @@ router.put('/conges/:id/approuver', authenticate, authorize('admin', 'manager'),
         const [conge] = await connection.query(`
             SELECT c.*, u.nom_complet, u.email
             FROM conges c
-            JOIN employes u ON c.id_utilisateur = u.id
+            JOIN utilisateurs u ON c.id_utilisateur = u.id
             WHERE c.id = ?
         `, [id]);
 
@@ -1211,7 +1211,7 @@ router.put('/conges/:id/rejeter', authenticate, authorize('admin', 'manager'), a
         const [conge] = await connection.query(`
             SELECT c.*, u.nom_complet, u.email
             FROM conges c
-            JOIN employes u ON c.id_utilisateur = u.id
+            JOIN utilisateurs u ON c.id_utilisateur = u.id
             WHERE c.id = ?
         `, [id]);
 
@@ -1305,7 +1305,7 @@ router.get('/historique', authenticate, authorize('admin', 'manager'), async (re
                 u.nom_complet as effectue_par_nom,
                 u.role as effectue_par_role
             FROM traces t
-            LEFT JOIN employes u ON t.id_utilisateur = u.id
+            LEFT JOIN utilisateurs u ON t.id_utilisateur = u.id
             WHERE t.module = 'rh'
         `;
         const params = [];
