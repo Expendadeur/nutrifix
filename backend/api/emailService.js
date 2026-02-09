@@ -1,4 +1,4 @@
-// backend/services/emailService.js - SERVICE EMAIL COMPLET
+// backend/services/emailService.js - SERVICE EMAIL COMPLET CORRIGÉ
 const nodemailer = require('nodemailer');
 
 /**
@@ -6,12 +6,16 @@ const nodemailer = require('nodemailer');
  */
 class EmailService {
   constructor() {
-    // Configuration du transporteur Gmail
+    // Configuration du transporteur Gmail avec gestion SSL
     this.transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
         user: process.env.EMAIL_USER, // Votre email Gmail
         pass: process.env.EMAIL_APP_PASSWORD // Mot de passe d'application Gmail
+      },
+      // Solution pour le problème de certificat auto-signé
+      tls: {
+        rejectUnauthorized: false // Accepter les certificats auto-signés
       }
     });
   }
@@ -300,7 +304,7 @@ class EmailService {
                 
                 <div style="text-align: center;">
                   <p style="color: #DC2626; font-weight: bold; margin-top: 20px;">
-                Cette demande nécessite votre approbation urgente
+                    Cette demande nécessite votre approbation urgente
                   </p>
                 </div>
               </div>
@@ -512,7 +516,7 @@ class EmailService {
                 <p>Vous pouvez consulter votre bulletin de salaire détaillé dans l'application NUTRIFIX.</p>
                 
                 <p style="color: #6B7280; font-size: 14px; margin-top: 20px;">
-                N'oubliez pas de confirmer la réception de votre salaire dans l'application une fois le virement reçu.
+                  N'oubliez pas de confirmer la réception de votre salaire dans l'application une fois le virement reçu.
                 </p>
               </div>
               
@@ -533,43 +537,6 @@ class EmailService {
       console.error('Erreur envoi notification salaire:', error);
       return { success: false, error: error.message };
     }
-  }
-
-  /**
-   * Helper: Obtenir le nom du mois
-   */
-  getMoisNom(mois) {
-    const moisNoms = [
-      'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-      'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
-    ];
-    return moisNoms[mois - 1] || '';
-  }
-
-  /**
-   * Helper: Formater une date
-   */
-  formatDate(date) {
-    const d = new Date(date);
-    const jour = String(d.getDate()).padStart(2, '0');
-    const mois = String(d.getMonth() + 1).padStart(2, '0');
-    const annee = d.getFullYear();
-    return `${jour}/${mois}/${annee}`;
-  }
-
-  /**
-   * Helper: Obtenir le label du type de congé
-   */
-  getTypeCongeLabel(type) {
-    const labels = {
-      'annuel': 'Congé Annuel',
-      'maladie': 'Congé Maladie',
-      'maternite': 'Congé Maternité',
-      'paternite': 'Congé Paternité',
-      'sans_solde': 'Congé Sans Solde',
-      'exceptionnel': 'Congé Exceptionnel'
-    };
-    return labels[type] || type;
   }
 
   /**
@@ -873,6 +840,43 @@ class EmailService {
       console.error('Erreur envoi rejet congé:', error);
       return { success: false, error: error.message };
     }
+  }
+
+  /**
+   * Helper: Obtenir le nom du mois
+   */
+  getMoisNom(mois) {
+    const moisNoms = [
+      'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+      'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+    ];
+    return moisNoms[mois - 1] || '';
+  }
+
+  /**
+   * Helper: Formater une date
+   */
+  formatDate(date) {
+    const d = new Date(date);
+    const jour = String(d.getDate()).padStart(2, '0');
+    const mois = String(d.getMonth() + 1).padStart(2, '0');
+    const annee = d.getFullYear();
+    return `${jour}/${mois}/${annee}`;
+  }
+
+  /**
+   * Helper: Obtenir le label du type de congé
+   */
+  getTypeCongeLabel(type) {
+    const labels = {
+      'annuel': 'Congé Annuel',
+      'maladie': 'Congé Maladie',
+      'maternite': 'Congé Maternité',
+      'paternite': 'Congé Paternité',
+      'sans_solde': 'Congé Sans Solde',
+      'exceptionnel': 'Congé Exceptionnel'
+    };
+    return labels[type] || type;
   }
 
   /**
