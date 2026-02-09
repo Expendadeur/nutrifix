@@ -1,4 +1,4 @@
-// backend/api/routes/employe-inss.js
+// backend/api/routes/employe-inss.js - VERSION AVEC INTÉGRATION EMAIL COMPLÈTE
 const express = require('express');
 const router = express.Router();
 const db = require('../../database/db');
@@ -6,6 +6,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
 const QRCode = require('qrcode');
+const emailService = require('../emailService');
 
 // ============================================
 // CONFIGURATION MULTER
@@ -180,13 +181,18 @@ function calculerIPR(salaireBrut) {
  */
 async function calculerSoldeConges(userId) {
   try {
+    console.log('📊 Calcul solde congés pour userId:', userId);
+    
     // Récupérer la date d'embauche et les jours annuels
     const [employe] = await db.query(
-      'SELECT date_embauche, jours_conges_annuels FROM utilisateurs WHERE id = ?',
+      'SELECT date_embauche, jours_conges_annuels FROM employes WHERE id = ?',
       [userId]
     );
     
-    if (!employe || !employe.length) {
+    console.log('👤 Employé trouvé:', employe);
+    
+    if (!employe || employe.length === 0) {
+      console.log('❌ Employé non trouvé pour userId:', userId);
       throw new Error('Employé non trouvé');
     }
     
@@ -248,8 +254,35 @@ async function calculerSoldeConges(userId) {
       date_embauche: dateEmbauche.toISOString().split('T')[0]
     };
   } catch (error) {
-    console.error('Erreur calcul solde congés:', error);
+    console.error('❌ Erreur calcul solde congés:', error);
     throw error;
+  }
+}
+
+/**
+ * Récupérer les emails des managers et admins
+ */
+async function getManagersAndAdminsEmails(departementId = null) {
+  try {
+    let query = `
+      SELECT DISTINCT email, nom_complet 
+      FROM employes 
+      WHERE role IN ('manager', 'admin') 
+      AND statut = 'actif'
+      AND email IS NOT NULL
+    `;
+    const params = [];
+    
+    if (departementId) {
+      query += ' AND (id_departement = ? OR role = "admin")';
+      params.push(departementId);
+    }
+    
+    const [managers] = await db.query(query, params);
+    return managers || [];
+  } catch (error) {
+    console.error('❌ Erreur récupération managers:', error);
+    return [];
   }
 }
 
@@ -265,6 +298,7 @@ async function calculerSoldeConges(userId) {
 router.get('/dashboard', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
+    console.log('📊 Dashboard pour userId:', userId);
     
     // 1. Statistiques de présence du mois
     const [presencesMois] = await db.query(
@@ -291,7 +325,7 @@ router.get('/dashboard', authenticate, authorize(['employe']), async (req, res) 
     try {
       soldeConges = await calculerSoldeConges(userId);
     } catch (error) {
-      console.error('Erreur calcul congés:', error);
+      console.error('⚠️ Erreur calcul congés:', error);
       soldeConges = {
         mois_travailles: 0,
         jours_acquis: 0,
@@ -358,7 +392,7 @@ router.get('/dashboard', authenticate, authorize(['employe']), async (req, res) 
       }
     });
   } catch (error) {
-    console.error('Erreur récupération dashboard:', error);
+    console.error('❌ Erreur récupération dashboard:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur lors de la récupération des données du dashboard',
@@ -375,37 +409,41 @@ router.get('/dashboard', authenticate, authorize(['employe']), async (req, res) 
 router.get('/profil', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
+    console.log('👤 Profil pour userId:', userId);
     
     const [employe] = await db.query(
       `SELECT 
-        u.id,
-        u.matricule,
-        u.email,
-        u.nom_complet,
-        u.telephone,
-        u.type_employe,
-        u.role,
-        u.id_departement,
+        e.id,
+        e.matricule,
+        e.email,
+        e.nom_complet,
+        e.telephone,
+        e.type_employe,
+        e.role,
+        e.id_departement,
         d.nom as departement_nom,
-        u.date_embauche,
-        u.date_naissance,
-        u.adresse,
-        u.ville,
-        u.pays,
-        u.numero_cnss,
-        u.salaire_base,
-        u.jours_conges_annuels,
-        u.compte_bancaire,
-        u.nom_banque,
-        u.photo_identite,
-        u.statut
-       FROM utilisateurs u
-       LEFT JOIN departements d ON u.id_departement = d.id
-       WHERE u.id = ?`,
+        e.date_embauche,
+        e.date_naissance,
+        e.adresse,
+        e.ville,
+        e.pays,
+        e.numero_cnss,
+        e.salaire_base,
+        e.jours_conges_annuels,
+        e.compte_bancaire,
+        e.nom_banque,
+        e.photo_identite,
+        e.statut
+       FROM employes e
+       LEFT JOIN departements d ON e.id_departement = d.id
+       WHERE e.id = ?`,
       [userId]
     );
     
-    if (!employe || !employe.length) {
+    console.log('📋 Résultat requête profil:', employe);
+    
+    if (!employe || employe.length === 0) {
+      console.log('❌ Employé non trouvé pour userId:', userId);
       return res.status(404).json({
         success: false,
         message: 'Employé non trouvé'
@@ -419,12 +457,14 @@ router.get('/profil', authenticate, authorize(['employe']), async (req, res) => 
       profilData.salaire_base = parseFloat(profilData.salaire_base);
     }
     
+    console.log('✅ Profil récupéré avec succès');
+    
     res.json({
       success: true,
       data: profilData
     });
   } catch (error) {
-    console.error('Erreur récupération profil:', error);
+    console.error('❌ Erreur récupération profil:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur lors de la récupération du profil',
@@ -467,7 +507,7 @@ router.put('/profil', authenticate, authorize(['employe']), async (req, res) => 
     }
     
     await db.query(
-      `UPDATE utilisateurs SET 
+      `UPDATE employes SET 
         telephone = ?,
         email = ?,
         adresse = ?,
@@ -492,7 +532,7 @@ router.put('/profil', authenticate, authorize(['employe']), async (req, res) => 
       message: 'Profil mis à jour avec succès'
     });
   } catch (error) {
-    console.error('Erreur mise à jour profil:', error);
+    console.error('❌ Erreur mise à jour profil:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur lors de la mise à jour du profil',
@@ -503,7 +543,7 @@ router.put('/profil', authenticate, authorize(['employe']), async (req, res) => 
 
 /**
  * @route   POST /api/employe-inss/conges/demande
- * @desc    Créer une demande de congé
+ * @desc    Créer une demande de congé + Envoyer email aux managers
  * @access  Private (Employé INSS)
  */
 router.post('/conges/demande', 
@@ -578,33 +618,38 @@ router.post('/conges/demande',
       const [result] = await connection.query(
         `INSERT INTO conges (
           id_utilisateur, type_conge, date_debut, date_fin, 
-          raison, pieces_jointes, statut, 
+          jours_demandes, raison, pieces_jointes, statut, 
           cree_par, date_creation
-        ) VALUES (?, ?, ?, ?, ?, ?, 'en_attente', ?, NOW())`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'en_attente', ?, NOW())`,
         [
           userId,
           type_conge,
           date_debut,
           date_fin,
+          joursDemandesCalendar,
           raison,
           req.file ? req.file.path : null,
           userId
         ]
       );
       
-      // Récupérer le manager pour notification
+      // Récupérer les informations de l'employé
       const [employe] = await connection.query(
-        'SELECT id_departement FROM utilisateurs WHERE id = ?',
+        'SELECT id_departement, nom_complet, email FROM employes WHERE id = ?',
         [userId]
       );
       
-      if (employe && employe.length > 0 && employe[0].id_departement) {
+      if (employe && employe.length > 0) {
+        const employeData = employe[0];
+        
+        // Récupérer les managers pour notification
         const [managers] = await connection.query(
-          `SELECT id FROM utilisateurs 
+          `SELECT id, email, nom_complet FROM employes 
            WHERE role IN ('manager', 'admin') 
            AND (id_departement = ? OR role = 'admin')
-           AND statut = 'actif'`,
-          [employe[0].id_departement]
+           AND statut = 'actif'
+           AND email IS NOT NULL`,
+          [employeData.id_departement]
         );
         
         // Créer des notifications pour les managers
@@ -618,10 +663,45 @@ router.post('/conges/demande',
             [
               manager.id,
               'Nouvelle demande de congé',
-              `Une nouvelle demande de congé ${type_conge} a été soumise`,
+              `${employeData.nom_complet} a soumis une demande de congé ${type_conge} du ${date_debut} au ${date_fin}`,
               result.insertId
             ]
           );
+          
+          // ✅ ENVOYER EMAIL AU MANAGER
+          if (manager.email) {
+            try {
+              await emailService.envoyerNotificationConge(
+                manager.email,
+                employeData.nom_complet,
+                type_conge,
+                date_debut,
+                date_fin,
+                joursDemandesCalendar
+              );
+              console.log(`✅ Email envoyé au manager ${manager.nom_complet}`);
+            } catch (emailError) {
+              console.error('⚠️ Erreur envoi email manager:', emailError);
+              // Ne pas bloquer la transaction si l'email échoue
+            }
+          }
+        }
+        
+        // ✅ ENVOYER EMAIL DE CONFIRMATION À L'EMPLOYÉ
+        if (employeData.email) {
+          try {
+            await emailService.envoyerConfirmationDemandeConge(
+              employeData.email,
+              employeData.nom_complet,
+              type_conge,
+              date_debut,
+              date_fin,
+              joursDemandesCalendar
+            );
+            console.log('✅ Email de confirmation envoyé à l\'employé');
+          } catch (emailError) {
+            console.error('⚠️ Erreur envoi email employé:', emailError);
+          }
         }
       }
       
@@ -629,7 +709,7 @@ router.post('/conges/demande',
       
       res.json({
         success: true,
-        message: 'Demande de congé soumise avec succès',
+        message: 'Demande de congé soumise avec succès. Vos responsables ont été notifiés par email.',
         data: {
           id_conge: result.insertId,
           jours_demandes: joursDemandesCalendar
@@ -637,7 +717,7 @@ router.post('/conges/demande',
       });
     } catch (error) {
       await connection.rollback();
-      console.error('Erreur création demande congé:', error);
+      console.error('❌ Erreur création demande congé:', error);
       res.status(400).json({
         success: false,
         message: error.message || 'Erreur lors de la création de la demande de congé'
@@ -661,9 +741,9 @@ router.get('/conges', authenticate, authorize(['employe']), async (req, res) => 
     let query = `
       SELECT 
         c.*,
-        u.nom_complet as validateur_nom
+        e.nom_complet as validateur_nom
       FROM conges c
-      LEFT JOIN utilisateurs u ON c.valide_par = u.id
+      LEFT JOIN employes e ON c.valide_par = e.id
       WHERE c.id_utilisateur = ?
     `;
     const params = [userId];
@@ -687,7 +767,7 @@ router.get('/conges', authenticate, authorize(['employe']), async (req, res) => 
       data: conges || []
     });
   } catch (error) {
-    console.error('Erreur récupération congés:', error);
+    console.error('❌ Erreur récupération congés:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur lors de la récupération des congés',
@@ -711,7 +791,7 @@ router.get('/conges/solde', authenticate, authorize(['employe']), async (req, re
       data: solde
     });
   } catch (error) {
-    console.error('Erreur récupération solde congés:', error);
+    console.error('❌ Erreur récupération solde congés:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur lors de la récupération du solde de congés',
@@ -771,7 +851,7 @@ router.get('/salaires', authenticate, authorize(['employe']), async (req, res) =
       }
     });
   } catch (error) {
-    console.error('Erreur récupération salaires:', error);
+    console.error('❌ Erreur récupération salaires:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur lors de la récupération des bulletins de salaire',
@@ -793,18 +873,18 @@ router.get('/salaires/:id', authenticate, authorize(['employe']), async (req, re
     const [salaire] = await db.query(
       `SELECT 
         s.*, 
-        u.nom_complet, 
-        u.matricule, 
-        u.numero_cnss, 
+        e.nom_complet, 
+        e.matricule, 
+        e.numero_cnss, 
         d.nom as departement
        FROM salaires s
-       JOIN utilisateurs u ON s.id_utilisateur = u.id
-       LEFT JOIN departements d ON u.id_departement = d.id
+       JOIN employes e ON s.id_utilisateur = e.id
+       LEFT JOIN departements d ON e.id_departement = d.id
        WHERE s.id = ? AND s.id_utilisateur = ?`,
       [salaireId, userId]
     );
     
-    if (!salaire || !salaire.length) {
+    if (!salaire || salaire.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'Bulletin de salaire non trouvé'
@@ -832,7 +912,7 @@ router.get('/salaires/:id', authenticate, authorize(['employe']), async (req, re
       data: salaireData
     });
   } catch (error) {
-    console.error('Erreur récupération bulletin:', error);
+    console.error('❌ Erreur récupération bulletin:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur lors de la récupération du bulletin',
@@ -894,7 +974,7 @@ router.get('/presences', authenticate, authorize(['employe']), async (req, res) 
       }
     });
   } catch (error) {
-    console.error('Erreur récupération présences:', error);
+    console.error('❌ Erreur récupération présences:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur lors de la récupération des présences',
@@ -941,7 +1021,7 @@ router.post('/pointage/entree', authenticate, authorize(['employe']), async (req
       message: 'Pointage d\'entrée enregistré avec succès'
     });
   } catch (error) {
-    console.error('Erreur pointage entrée:', error);
+    console.error('❌ Erreur pointage entrée:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur lors de l\'enregistrement du pointage',
@@ -967,7 +1047,7 @@ router.post('/pointage/sortie', authenticate, authorize(['employe']), async (req
       [userId, dateAujourdhui]
     );
     
-    if (!presence || !presence.length) {
+    if (!presence || presence.length === 0) {
       return res.status(400).json({
         success: false,
         message: 'Vous devez d\'abord pointer votre entrée'
@@ -1004,7 +1084,7 @@ router.post('/pointage/sortie', authenticate, authorize(['employe']), async (req
       duree_travail: updated && updated[0] ? `${updated[0].duree}h` : null
     });
   } catch (error) {
-    console.error('Erreur pointage sortie:', error);
+    console.error('❌ Erreur pointage sortie:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur lors de l\'enregistrement du pointage',
@@ -1045,7 +1125,7 @@ router.get('/notifications', authenticate, authorize(['employe']), async (req, r
       data: notifications || []
     });
   } catch (error) {
-    console.error('Erreur récupération notifications:', error);
+    console.error('❌ Erreur récupération notifications:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur lors de la récupération des notifications',
@@ -1076,7 +1156,7 @@ router.put('/notifications/:id/marquer-lu', authenticate, authorize(['employe'])
       message: 'Notification marquée comme lue'
     });
   } catch (error) {
-    console.error('Erreur marquage notification:', error);
+    console.error('❌ Erreur marquage notification:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur lors du marquage de la notification',
@@ -1085,10 +1165,9 @@ router.put('/notifications/:id/marquer-lu', authenticate, authorize(['employe'])
   }
 });
 
-
 /**
  * @route   POST /api/employe-inss/salaires/:id/demander-paiement
- * @desc    Demander le paiement d'un salaire
+ * @desc    Demander le paiement d'un salaire + Envoyer email aux managers/admin
  * @access  Private (Employé INSS)
  */
 router.post('/salaires/:id/demander-paiement', 
@@ -1106,16 +1185,20 @@ router.post('/salaires/:id/demander-paiement',
       
       // Vérifier que le salaire appartient à l'employé
       const [salaire] = await connection.query(
-        `SELECT * FROM salaires 
-         WHERE id = ? AND id_utilisateur = ?`,
+        `SELECT s.*, e.nom_complet, e.email, e.id_departement 
+         FROM salaires s
+         JOIN employes e ON s.id_utilisateur = e.id
+         WHERE s.id = ? AND s.id_utilisateur = ?`,
         [salaireId, userId]
       );
       
-      if (!salaire || !salaire.length) {
+      if (!salaire || salaire.length === 0) {
         throw new Error('Salaire non trouvé');
       }
       
-      if (salaire[0].statut_paiement !== 'calculé') {
+      const salaireData = salaire[0];
+      
+      if (salaireData.statut_paiement !== 'calculé') {
         throw new Error('Ce salaire n\'est pas en attente de paiement');
       }
       
@@ -1139,36 +1222,63 @@ router.post('/salaires/:id/demander-paiement',
         [salaireId, userId, mois, annee, montant]
       );
       
-      // Récupérer le manager/admin
-      const [employe] = await connection.query(
-        'SELECT id_departement, nom_complet FROM utilisateurs WHERE id = ?',
-        [userId]
+      // Récupérer les managers/admins
+      const [managers] = await connection.query(
+        `SELECT id, email, nom_complet FROM employes 
+         WHERE role IN ('manager', 'admin') 
+         AND (id_departement = ? OR role = 'admin')
+         AND statut = 'actif'
+         AND email IS NOT NULL`,
+        [salaireData.id_departement]
       );
       
-      if (employe && employe.length > 0 && employe[0].id_departement) {
-        const [managers] = await connection.query(
-          `SELECT id FROM utilisateurs 
-           WHERE role IN ('manager', 'admin') 
-           AND (id_departement = ? OR role = 'admin')
-           AND statut = 'actif'`,
-          [employe[0].id_departement]
+      // Créer des notifications pour les managers
+      for (const manager of managers) {
+        await connection.query(
+          `INSERT INTO notifications (
+            id_utilisateur, type_notification, titre, message,
+            priorite, type_reference, id_reference, 
+            statut, date_creation
+          ) VALUES (?, 'approbation', ?, ?, 'haute', 'demande_paiement_salaire', ?, 'non_lu', NOW())`,
+          [
+            manager.id,
+            'Demande de paiement de salaire',
+            `${salaireData.nom_complet} demande le paiement de son salaire de ${getMoisNom(mois)} ${annee} - Montant: ${montant.toLocaleString()} FBU`,
+            salaireId
+          ]
         );
         
-        // Créer des notifications pour les managers
-        for (const manager of managers) {
-          await connection.query(
-            `INSERT INTO notifications (
-              id_utilisateur, type_notification, titre, message,
-              priorite, type_reference, id_reference, 
-              statut, date_creation
-            ) VALUES (?, 'approbation', ?, ?, 'haute', 'demande_paiement_salaire', ?, 'non_lu', NOW())`,
-            [
-              manager.id,
-              'Demande de paiement de salaire',
-              `${employe[0].nom_complet} demande le paiement de son salaire de ${getMoisNom(mois)} ${annee}`,
-              salaireId
-            ]
+        // ✅ ENVOYER EMAIL AU MANAGER/ADMIN
+        if (manager.email) {
+          try {
+            await emailService.envoyerNotificationDemandePaiement(
+              manager.email,
+              manager.nom_complet,
+              salaireData.nom_complet,
+              mois,
+              annee,
+              montant
+            );
+            console.log(`✅ Email demande paiement envoyé à ${manager.nom_complet}`);
+          } catch (emailError) {
+            console.error('⚠️ Erreur envoi email manager:', emailError);
+          }
+        }
+      }
+      
+      // ✅ ENVOYER EMAIL DE CONFIRMATION À L'EMPLOYÉ
+      if (salaireData.email) {
+        try {
+          await emailService.envoyerConfirmationDemandePaiement(
+            salaireData.email,
+            salaireData.nom_complet,
+            mois,
+            annee,
+            montant
           );
+          console.log('✅ Email confirmation demande paiement envoyé à l\'employé');
+        } catch (emailError) {
+          console.error('⚠️ Erreur envoi email employé:', emailError);
         }
       }
       
@@ -1176,11 +1286,11 @@ router.post('/salaires/:id/demander-paiement',
       
       res.json({
         success: true,
-        message: 'Demande de paiement envoyée avec succès'
+        message: 'Demande de paiement envoyée avec succès. Les responsables ont été notifiés par email.'
       });
     } catch (error) {
       await connection.rollback();
-      console.error('Erreur demande paiement:', error);
+      console.error('❌ Erreur demande paiement:', error);
       res.status(400).json({
         success: false,
         message: error.message || 'Erreur lors de l\'envoi de la demande'
@@ -1193,7 +1303,7 @@ router.post('/salaires/:id/demander-paiement',
 
 /**
  * @route   POST /api/employe-inss/salaires/:id/confirmer-reception
- * @desc    Confirmer la réception d'un salaire avec code de vérification
+ * @desc    Confirmer la réception d'un salaire avec code de vérification + Envoyer email aux managers
  * @access  Private (Employé INSS)
  */
 router.post('/salaires/:id/confirmer-reception', 
@@ -1209,18 +1319,22 @@ router.post('/salaires/:id/confirmer-reception',
       const salaireId = req.params.id;
       const { code_verification, mois, annee } = req.body;
       
-      // Vérifier que le salaire appartient à l'employé
+      // Récupérer les infos de l'employé ET du salaire
       const [salaire] = await connection.query(
-        `SELECT * FROM salaires 
-         WHERE id = ? AND id_utilisateur = ?`,
+        `SELECT s.*, e.nom_complet, e.email, e.id_departement 
+         FROM salaires s
+         JOIN employes e ON s.id_utilisateur = e.id
+         WHERE s.id = ? AND s.id_utilisateur = ?`,
         [salaireId, userId]
       );
       
-      if (!salaire || !salaire.length) {
+      if (!salaire || salaire.length === 0) {
         throw new Error('Salaire non trouvé');
       }
       
-      if (salaire[0].statut_paiement !== 'payé') {
+      const salaireData = salaire[0];
+      
+      if (salaireData.statut_paiement !== 'payé') {
         throw new Error('Ce salaire n\'a pas encore été payé');
       }
       
@@ -1268,10 +1382,27 @@ router.post('/salaires/:id/confirmer-reception',
           [salaireId, userId, codeAttendu, dateExpiration]
         );
         
-        // Envoyer le code par email/SMS (à implémenter)
-        // TODO: Implémenter l'envoi du code par email/SMS
+        // ✅ ENVOYER LE CODE PAR EMAIL
+        if (salaireData.email) {
+          try {
+            await emailService.envoyerCodeVerification(
+              salaireData.email,
+              codeAttendu,
+              salaireData.nom_complet,
+              mois,
+              annee
+            );
+            console.log('✅ Code envoyé par email à:', salaireData.email);
+          } catch (emailError) {
+            console.error('⚠️ Erreur envoi email:', emailError);
+          }
+        }
         
-        throw new Error(`Un code de vérification a été envoyé à votre email/téléphone. Code: ${codeAttendu} (DÉVELOPPEMENT)`);
+        throw new Error(
+          process.env.NODE_ENV === 'development' 
+            ? `Un code de vérification a été envoyé à votre email. Code: ${codeAttendu} (DEV)`
+            : 'Un code de vérification a été envoyé à votre email.'
+        );
       }
       
       // Vérifier le code
@@ -1285,7 +1416,7 @@ router.post('/salaires/:id/confirmer-reception',
           id_salaire, id_utilisateur, mois, annee, montant,
           code_verification_utilise, confirme, date_confirmation
         ) VALUES (?, ?, ?, ?, ?, ?, 1, NOW())`,
-        [salaireId, userId, mois, annee, salaire[0].salaire_net, code_verification]
+        [salaireId, userId, mois, annee, salaireData.salaire_net, code_verification]
       );
       
       // Mettre à jour le salaire
@@ -1304,15 +1435,59 @@ router.post('/salaires/:id/confirmer-reception',
         [salaireId, code_verification]
       );
       
+      // ✅ NOTIFIER LES MANAGERS/ADMINS DE LA CONFIRMATION
+      const [managers] = await connection.query(
+        `SELECT id, email, nom_complet FROM employes 
+         WHERE role IN ('manager', 'admin') 
+         AND (id_departement = ? OR role = 'admin')
+         AND statut = 'actif'
+         AND email IS NOT NULL`,
+        [salaireData.id_departement]
+      );
+      
+      for (const manager of managers) {
+        // Notification dans la base
+        await connection.query(
+          `INSERT INTO notifications (
+            id_utilisateur, type_notification, titre, message,
+            priorite, type_reference, id_reference, 
+            statut, date_creation
+          ) VALUES (?, 'information', ?, ?, 'normale', 'confirmation_salaire', ?, 'non_lu', NOW())`,
+          [
+            manager.id,
+            'Confirmation de réception de salaire',
+            `${salaireData.nom_complet} a confirmé la réception de son salaire de ${getMoisNom(mois)} ${annee}`,
+            salaireId
+          ]
+        );
+        
+        // ✅ EMAIL AU MANAGER
+        if (manager.email) {
+          try {
+            await emailService.envoyerNotificationConfirmationReception(
+              manager.email,
+              manager.nom_complet,
+              salaireData.nom_complet,
+              mois,
+              annee,
+              parseFloat(salaireData.salaire_net)
+            );
+            console.log(`✅ Email confirmation envoyé à ${manager.nom_complet}`);
+          } catch (emailError) {
+            console.error('⚠️ Erreur envoi email manager:', emailError);
+          }
+        }
+      }
+      
       await connection.commit();
       
       res.json({
         success: true,
-        message: 'Réception du salaire confirmée avec succès'
+        message: 'Réception du salaire confirmée avec succès. Les responsables ont été notifiés.'
       });
     } catch (error) {
       await connection.rollback();
-      console.error('Erreur confirmation réception:', error);
+      console.error('❌ Erreur confirmation réception:', error);
       res.status(400).json({
         success: false,
         message: error.message || 'Erreur lors de la confirmation'
@@ -1336,16 +1511,20 @@ router.post('/salaires/:id/demander-code',
       const userId = req.user.id;
       const salaireId = req.params.id;
       
-      // Vérifier que le salaire appartient à l'employé
+      // Vérifier que le salaire appartient à l'employé et récupérer l'email
       const [salaire] = await db.query(
-        `SELECT * FROM salaires 
-         WHERE id = ? AND id_utilisateur = ?`,
+        `SELECT s.*, e.nom_complet, e.email
+         FROM salaires s
+         JOIN employes e ON s.id_utilisateur = e.id
+         WHERE s.id = ? AND s.id_utilisateur = ?`,
         [salaireId, userId]
       );
       
-      if (!salaire || !salaire.length) {
+      if (!salaire || salaire.length === 0) {
         throw new Error('Salaire non trouvé');
       }
+      
+      const salaireData = salaire[0];
       
       // Générer un nouveau code
       const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -1359,15 +1538,29 @@ router.post('/salaires/:id/demander-code',
         [salaireId, userId, code, dateExpiration]
       );
       
-      // TODO: Envoyer le code par email/SMS
+      // ✅ ENVOYER LE CODE PAR EMAIL
+      if (salaireData.email) {
+        try {
+          await emailService.envoyerCodeVerification(
+            salaireData.email,
+            code,
+            salaireData.nom_complet,
+            salaireData.mois,
+            salaireData.annee
+          );
+          console.log('✅ Nouveau code envoyé par email');
+        } catch (emailError) {
+          console.error('⚠️ Erreur envoi email:', emailError);
+        }
+      }
       
       res.json({
         success: true,
-        message: 'Un nouveau code de vérification a été envoyé',
+        message: 'Un nouveau code de vérification a été envoyé à votre email',
         code: process.env.NODE_ENV === 'development' ? code : undefined
       });
     } catch (error) {
-      console.error('Erreur demande code:', error);
+      console.error('❌ Erreur demande code:', error);
       res.status(400).json({
         success: false,
         message: error.message || 'Erreur lors de la demande du code'
@@ -1375,16 +1568,6 @@ router.post('/salaires/:id/demander-code',
     }
   }
 );
-
-// Fonction helper pour obtenir le nom du mois
-function getMoisNom(mois) {
-  const moisNoms = [
-    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
-  ];
-  return moisNoms[mois - 1] || '';
-}
-
 
 /**
  * @route   GET /api/employe-inss/carte
@@ -1394,31 +1577,34 @@ function getMoisNom(mois) {
 router.get('/carte', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
+    console.log('🎴 Génération carte pour userId:', userId);
     
-    // Récupérer les informations complètes de l'employé
     const [employes] = await db.query(
       `SELECT 
-        u.id,
-        u.matricule,
-        u.nom_complet,
-        u.email,
-        u.telephone,
-        u.type_employe,
-        u.role,
-        u.date_embauche,
-        u.date_naissance,
-        u.numero_cnss,
-        u.photo_identite,
-        u.qr_code,
-        u.statut,
+        e.id,
+        e.matricule,
+        e.nom_complet,
+        e.email,
+        e.telephone,
+        e.type_employe,
+        e.role,
+        e.date_embauche,
+        e.date_naissance,
+        e.numero_cnss,
+        e.photo_identite,
+        e.qr_code,
+        e.statut,
         d.nom as departement_nom
-       FROM utilisateurs u
-       LEFT JOIN departements d ON u.id_departement = d.id
-       WHERE u.id = ?`,
+       FROM employes e
+       LEFT JOIN departements d ON e.id_departement = d.id
+       WHERE e.id = ?`,
       [userId]
     );
     
-    if (!employes || !employes.length) {
+    console.log('📋 Résultat requête carte:', employes);
+    
+    if (!employes || employes.length === 0) {
+      console.log('❌ Employé non trouvé pour carte, userId:', userId);
       return res.status(404).json({
         success: false,
         message: 'Employé non trouvé'
@@ -1445,7 +1631,7 @@ router.get('/carte', authenticate, authorize(['employe']), async (req, res) => {
       
       // Sauvegarder le QR code généré
       await db.query(
-        'UPDATE utilisateurs SET qr_code = ? WHERE id = ?',
+        'UPDATE employes SET qr_code = ? WHERE id = ?',
         [qrCodeData, userId]
       );
     }
@@ -1510,5 +1696,14 @@ router.get('/carte', authenticate, authorize(['employe']), async (req, res) => {
     });
   }
 });
+
+// Fonction helper pour obtenir le nom du mois
+function getMoisNom(mois) {
+  const moisNoms = [
+    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+  ];
+  return moisNoms[mois - 1] || '';
+}
 
 module.exports = router;
