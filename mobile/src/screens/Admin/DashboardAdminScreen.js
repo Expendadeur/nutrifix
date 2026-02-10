@@ -538,12 +538,12 @@ const DashboardAdminScreen = ({ navigation }) => {
       console.log('🔔 Clic sur alerte:', alert.type);
 
       const navigationMap = {
-        maintenance: { screen: 'FlouteAgricultureElevage', params: { tab: 'flotte' } },
-        stock: { screen: 'FlouteAgricultureElevage', params: { tab: 'agriculture' } },
-        salaire: { screen: 'RHPersonnel' },
-        paiement: { screen: 'FinanceComptabilite' },
-        conges: { screen: 'RHPersonnel', params: { tab: 'conges' } },
-        assurance: { screen: 'FlouteAgricultureElevage', params: { tab: 'flotte' } },
+        maintenance: { screen: 'FlotteAgricultureElevageScreen', params: { tab: 'flotte' } },
+        stock: { screen: 'FlotteAgricultureElevageScreen', params: { tab: 'agriculture' } },
+        salaire: { screen: 'RHPersonnelScreen' },
+        paiement: { screen: 'FinanceComptabiliteScreen' },
+        conges: { screen: 'RHPersonnelScreen', params: { tab: 'conges' } },
+        assurance: { screen: 'FlotteAgricultureElevageScreen', params: { tab: 'flotte' } },
         notification: { action: handleOpenNotificationDialog } // Action spéciale pour notification
       };
 
