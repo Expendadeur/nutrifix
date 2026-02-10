@@ -843,6 +843,72 @@ class EmailService {
   }
 
   /**
+   * Envoyer une notification générale aux employés
+   */
+  async envoyerNotificationGenerale(destinataire, sujet, message) {
+    try {
+      const mailOptions = {
+        from: {
+          name: 'NUTRIFIX - Administration',
+          address: process.env.EMAIL_USER
+        },
+        to: destinataire,
+        subject: sujet,
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <style>
+              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              .header { background: linear-gradient(135deg, #4F46E5 0%, #4338CA 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+              .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
+              .message-box { background: white; border-left: 4px solid #4F46E5; padding: 20px; margin: 20px 0; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+              .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB; color: #6B7280; font-size: 12px; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>Notification Importante</h1>
+              </div>
+              
+              <div class="content">
+                <p>Bonjour,</p>
+                
+                <p>Vous avez reçu une nouvelle notification de l'administration NUTRIFIX :</p>
+                
+                <div class="message-box">
+                  <h3 style="margin-top: 0; color: #4F46E5;">${sujet}</h3>
+                  <div style="white-space: pre-line;">${message}</div>
+                </div>
+                
+                <p style="color: #6B7280; font-size: 14px; margin-top: 20px;">
+                  Ceci est un message automatique, merci de ne pas y répondre directement sauf indication contraire.
+                </p>
+              </div>
+              
+              <div class="footer">
+                <p><strong>NUTRIFIX</strong> - Communication Interne</p>
+                <p>&copy; ${new Date().getFullYear()} NUTRIFIX. Tous droits réservés.</p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log('Notification générale envoyée:', info.messageId);
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      console.error('Erreur notification générale:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Helper: Obtenir le nom du mois
    */
   getMoisNom(mois) {

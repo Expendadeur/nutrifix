@@ -105,19 +105,19 @@ const safeGetArray = (value, defaultValue = []) => {
 
 const DashboardAdminScreen = ({ navigation }) => {
   const { user, isLoading } = requireAuth(navigation, { role: 'admin' });
-  
-  
+
+
   // ============================================
   // ÉTATS
   // ============================================
-  
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
   const [selectedPeriod, setSelectedPeriod] = useState('month');
   const [error, setError] = useState(null);
   const [snackbarVisible, setSnackbarVisible] = useState(false);
-  
+
   // États pour les demandes de paiement
   const [demandesPaiement, setDemandesPaiement] = useState([]);
   const [loadingDemandes, setLoadingDemandes] = useState(false);
@@ -126,13 +126,20 @@ const DashboardAdminScreen = ({ navigation }) => {
   const [rejectDialogVisible, setRejectDialogVisible] = useState(false);
   const [motifRejet, setMotifRejet] = useState('');
   const [commentaireValidation, setCommentaireValidation] = useState('');
-  
+
+  // États pour les notifications
+  const [notificationDialogVisible, setNotificationDialogVisible] = useState(false);
+  const [notificationSubject, setNotificationSubject] = useState('');
+  const [notificationMessage, setNotificationMessage] = useState('');
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [notificationTarget, setNotificationTarget] = useState('all'); // 'all' or specific email (future)
+
   const { width: windowWidth } = useWindowDimensions();
-  
+
   // ============================================
   // CONFIGURATION RESPONSIVE
   // ============================================
-  
+
   const deviceType = useMemo(() => {
     const isWeb = Platform.OS === 'web';
     if (windowWidth >= 1440) return { type: 'desktop', cols: 6, isWeb };
@@ -224,16 +231,16 @@ const DashboardAdminScreen = ({ navigation }) => {
     try {
       setLoading(true);
       setError(null);
-      
+
       console.log('🔄 Chargement dashboard pour période:', selectedPeriod);
-      
+
       const api = await createApiInstance();
       const response = await api.get('/admin/dashboard', {
         params: { period: selectedPeriod }
       });
 
       console.log('✅ Données dashboard reçues:', response.data);
-      
+
       if (response.data && response.data.success) {
         // Validation et nettoyage des données
         const cleanData = {
@@ -260,12 +267,12 @@ const DashboardAdminScreen = ({ navigation }) => {
       } else {
         throw new Error(response.data?.message || 'Erreur lors du chargement');
       }
-      
+
     } catch (err) {
       console.error('❌ Erreur dashboard:', err);
-      
+
       let errorMessage = 'Une erreur est survenue lors du chargement des données';
-      
+
       if (err.code === 'ECONNABORTED') {
         errorMessage = 'Délai d\'attente dépassé. Vérifiez votre connexion.';
       } else if (err.response) {
@@ -281,10 +288,10 @@ const DashboardAdminScreen = ({ navigation }) => {
       } else if (err.message) {
         errorMessage = err.message;
       }
-      
+
       setError(errorMessage);
       setSnackbarVisible(true);
-      
+
       // Données par défaut en cas d'erreur
       setDashboardData({
         kpis: {
@@ -305,7 +312,7 @@ const DashboardAdminScreen = ({ navigation }) => {
         period: selectedPeriod,
         lastUpdate: new Date()
       });
-      
+
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -315,10 +322,10 @@ const DashboardAdminScreen = ({ navigation }) => {
   const loadDemandesPaiement = useCallback(async () => {
     try {
       setLoadingDemandes(true);
-      
+
       const api = await createApiInstance();
       const response = await api.get('/admin/demandes-paiement-salaire', {
-        params: { 
+        params: {
           statut: 'en_attente',
           page: 1,
           limit: 5
@@ -326,11 +333,11 @@ const DashboardAdminScreen = ({ navigation }) => {
       });
 
       console.log('✅ Demandes paiement reçues:', response.data);
-      
+
       if (response.data && response.data.success) {
         setDemandesPaiement(safeGetArray(response.data.data?.demandes, []));
       }
-      
+
     } catch (error) {
       console.error('❌ Erreur chargement demandes:', error);
       setDemandesPaiement([]);
@@ -362,8 +369,8 @@ const DashboardAdminScreen = ({ navigation }) => {
                   Alert.alert(
                     'Succès',
                     `Paiement validé avec succès.\n\nCode de vérification: ${response.data.data?.codeVerification || 'N/A'}\n\nCe code a été envoyé à l'employé.`,
-                    [{ 
-                      text: 'OK', 
+                    [{
+                      text: 'OK',
                       onPress: () => {
                         setCommentaireValidation('');
                         loadDemandesPaiement();
@@ -374,11 +381,11 @@ const DashboardAdminScreen = ({ navigation }) => {
                 } else {
                   throw new Error(response.data?.message || 'Erreur de validation');
                 }
-                
+
               } catch (error) {
                 console.error('Erreur validation:', error);
                 Alert.alert(
-                  'Erreur', 
+                  'Erreur',
                   error.response?.data?.message || error.message || 'Impossible de valider la demande'
                 );
               }
@@ -409,7 +416,7 @@ const DashboardAdminScreen = ({ navigation }) => {
       const api = await createApiInstance();
       const response = await api.post(
         `/admin/demandes-paiement-salaire/${selectedDemande.id}/rejeter`,
-        { 
+        {
           motif_rejet: motifRejet,
           commentaire: commentaireValidation
         }
@@ -425,15 +432,54 @@ const DashboardAdminScreen = ({ navigation }) => {
       } else {
         throw new Error(response.data?.message || 'Erreur de rejet');
       }
-      
+
     } catch (error) {
       console.error('Erreur rejet:', error);
       Alert.alert(
-        'Erreur', 
+        'Erreur',
         error.response?.data?.message || error.message || 'Impossible de rejeter la demande'
       );
     }
   }, [selectedDemande, motifRejet, commentaireValidation, createApiInstance, loadDemandesPaiement, loadDashboard]);
+
+  const handleOpenNotificationDialog = useCallback(() => {
+    setNotificationSubject('');
+    setNotificationMessage('');
+    setNotificationTarget('all');
+    setNotificationDialogVisible(true);
+  }, []);
+
+  const handleSendNotification = useCallback(async () => {
+    if (!notificationSubject.trim() || !notificationMessage.trim()) {
+      Alert.alert('Erreur', 'Le sujet et le message sont obligatoires');
+      return;
+    }
+
+    try {
+      setNotificationLoading(true);
+      const api = await createApiInstance();
+      const response = await api.post('/admin/notify', {
+        recipients: notificationTarget,
+        subject: notificationSubject,
+        message: notificationMessage
+      });
+
+      if (response.data && response.data.success) {
+        setNotificationDialogVisible(false);
+        Alert.alert('Succès', response.data.message || 'Notification envoyée avec succès');
+      } else {
+        throw new Error(response.data?.message || 'Erreur lors de l\'envoi');
+      }
+    } catch (error) {
+      console.error('Erreur notification:', error);
+      Alert.alert(
+        'Erreur',
+        error.response?.data?.message || error.message || 'Impossible d\'envoyer la notification'
+      );
+    } finally {
+      setNotificationLoading(false);
+    }
+  }, [notificationSubject, notificationMessage, notificationTarget, createApiInstance]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -490,19 +536,24 @@ const DashboardAdminScreen = ({ navigation }) => {
 
     try {
       console.log('🔔 Clic sur alerte:', alert.type);
-      
+
       const navigationMap = {
         maintenance: { screen: 'FlouteAgricultureElevage', params: { tab: 'flotte' } },
         stock: { screen: 'FlouteAgricultureElevage', params: { tab: 'agriculture' } },
         salaire: { screen: 'RHPersonnel' },
         paiement: { screen: 'FinanceComptabilite' },
         conges: { screen: 'RHPersonnel', params: { tab: 'conges' } },
-        assurance: { screen: 'FlouteAgricultureElevage', params: { tab: 'flotte' } }
+        assurance: { screen: 'FlouteAgricultureElevage', params: { tab: 'flotte' } },
+        notification: { action: handleOpenNotificationDialog } // Action spéciale pour notification
       };
 
       const nav = navigationMap[alert.type];
-      if (nav && navigation && navigation.navigate) {
-        navigation.navigate(nav.screen, nav.params || {});
+      if (nav) {
+        if (nav.action) {
+          nav.action();
+        } else if (navigation && navigation.navigate) {
+          navigation.navigate(nav.screen, nav.params || {});
+        }
       } else {
         console.warn('Navigation non configurée pour:', alert.type);
       }
@@ -510,9 +561,14 @@ const DashboardAdminScreen = ({ navigation }) => {
       console.error('Erreur navigation alerte:', error);
       Alert.alert('Erreur', 'Impossible de naviguer vers cette section');
     }
-  }, [navigation]);
+  }, [navigation, handleOpenNotificationDialog]);
 
   const handleQuickAction = useCallback((screen, params = {}) => {
+    if (screen === 'OPEN_NOTIFICATION_DIALOG') {
+      handleOpenNotificationDialog();
+      return;
+    }
+
     try {
       console.log('⚡ Action rapide:', screen, params);
       if (navigation && navigation.navigate) {
@@ -525,7 +581,7 @@ const DashboardAdminScreen = ({ navigation }) => {
       console.error('Erreur action rapide:', error);
       Alert.alert('Erreur', 'Une erreur est survenue');
     }
-  }, [navigation]);
+  }, [navigation, handleOpenNotificationDialog]);
 
   // ============================================
   // CALCULS DYNAMIQUES DE DIMENSIONS
@@ -581,15 +637,15 @@ const DashboardAdminScreen = ({ navigation }) => {
   const renderKPICard = (title, value, icon, color, trend, iconFamily = 'MaterialIcons') => {
     const IconComponent = iconFamily === 'FontAwesome5' ? FontAwesome5 : MaterialIcons;
     const cardWidth = getKPICardWidth();
-    
+
     const getTrendColorLocal = (trendValue) => {
       const trendNum = safeParseFloat(trendValue, 0);
       if (trendNum === 0) return COLORS.grayMedium;
       return trendNum > 0 ? COLORS.success : COLORS.danger;
     };
-    
+
     const safeTrend = safeParseFloat(trend, null);
-    
+
     return (
       <Card style={[styles.kpiCard, { width: cardWidth, marginBottom: spacing.inner }]}>
         <Card.Content style={{ padding: spacing.card }}>
@@ -598,15 +654,15 @@ const DashboardAdminScreen = ({ navigation }) => {
               <IconComponent name={icon} size={deviceType.type === 'mobile' ? 24 : 28} color={color} />
             </View>
             {safeTrend !== null && (
-              <View style={[styles.trendContainer, { 
+              <View style={[styles.trendContainer, {
                 backgroundColor: getTrendColorLocal(safeTrend) + '20'
               }]}>
-                <MaterialIcons 
+                <MaterialIcons
                   name={safeTrend > 0 ? 'trending-up' : safeTrend < 0 ? 'trending-down' : 'trending-flat'}
-                  size={deviceType.type === 'mobile' ? 14 : 16} 
+                  size={deviceType.type === 'mobile' ? 14 : 16}
                   color={getTrendColorLocal(safeTrend)}
                 />
-                <Text style={[styles.trendText, { 
+                <Text style={[styles.trendText, {
                   color: getTrendColorLocal(safeTrend),
                   fontSize: deviceType.type === 'mobile' ? 11 : 13
                 }]}>
@@ -615,13 +671,13 @@ const DashboardAdminScreen = ({ navigation }) => {
               </View>
             )}
           </View>
-          <Text style={[styles.kpiTitle, { 
-            fontSize: deviceType.type === 'mobile' ? 12 : 13 
+          <Text style={[styles.kpiTitle, {
+            fontSize: deviceType.type === 'mobile' ? 12 : 13
           }]}>
             {title}
           </Text>
-          <Text style={[styles.kpiValue, { 
-            fontSize: deviceType.type === 'mobile' ? 20 : deviceType.type === 'tablet' ? 22 : 24 
+          <Text style={[styles.kpiValue, {
+            fontSize: deviceType.type === 'mobile' ? 20 : deviceType.type === 'tablet' ? 22 : 24
           }]}>
             {value}
           </Text>
@@ -634,8 +690,8 @@ const DashboardAdminScreen = ({ navigation }) => {
     if (!alert) return null;
 
     return (
-      <TouchableOpacity 
-        key={alert.id} 
+      <TouchableOpacity
+        key={alert.id}
         style={[styles.alertCard, { padding: spacing.card }]}
         onPress={() => handleAlertClick(alert)}
         activeOpacity={0.7}
@@ -645,13 +701,13 @@ const DashboardAdminScreen = ({ navigation }) => {
             <MaterialIcons name={alert.icon || 'info'} size={24} color={alert.color || COLORS.grayMedium} />
           </View>
           <View style={styles.alertContent}>
-            <Text style={[styles.alertTitle, { 
-              fontSize: deviceType.type === 'mobile' ? 14 : 15 
+            <Text style={[styles.alertTitle, {
+              fontSize: deviceType.type === 'mobile' ? 14 : 15
             }]}>
               {safeGetString(alert.title, 'Alerte')}
             </Text>
-            <Text style={[styles.alertDescription, { 
-              fontSize: deviceType.type === 'mobile' ? 12 : 13 
+            <Text style={[styles.alertDescription, {
+              fontSize: deviceType.type === 'mobile' ? 12 : 13
             }]}>
               {safeGetString(alert.description, '')}
             </Text>
@@ -671,11 +727,11 @@ const DashboardAdminScreen = ({ navigation }) => {
     const cols = getQuickActionCols();
     const totalSpacing = spacing.outer * 2 + spacing.inner * (cols - 1);
     const actionWidth = (windowWidth - totalSpacing) / cols;
-    
+
     return (
       <TouchableOpacity
         key={title}
-        style={[styles.quickActionCard, { 
+        style={[styles.quickActionCard, {
           width: actionWidth,
           marginBottom: spacing.inner,
           padding: deviceType.type === 'mobile' ? 14 : 16
@@ -683,7 +739,7 @@ const DashboardAdminScreen = ({ navigation }) => {
         onPress={() => handleQuickAction(screen, params)}
         activeOpacity={0.7}
       >
-        <View style={[styles.quickActionIcon, { 
+        <View style={[styles.quickActionIcon, {
           backgroundColor: color + '20',
           width: deviceType.type === 'mobile' ? 56 : 64,
           height: deviceType.type === 'mobile' ? 56 : 64,
@@ -691,8 +747,8 @@ const DashboardAdminScreen = ({ navigation }) => {
         }]}>
           <MaterialIcons name={icon} size={deviceType.type === 'mobile' ? 28 : 32} color={color} />
         </View>
-        <Text style={[styles.quickActionText, { 
-          fontSize: deviceType.type === 'mobile' ? 12 : 13 
+        <Text style={[styles.quickActionText, {
+          fontSize: deviceType.type === 'mobile' ? 12 : 13
         }]}>
           {title}
         </Text>
@@ -707,8 +763,8 @@ const DashboardAdminScreen = ({ navigation }) => {
       <Card key={demande.id} style={[styles.demandeCard, { padding: spacing.card, marginBottom: spacing.inner }]}>
         <View style={styles.demandeHeader}>
           <View style={styles.demandeLeft}>
-            <Avatar.Text 
-              size={48} 
+            <Avatar.Text
+              size={48}
               label={safeGetString(demande.employe_nom, 'XX').substring(0, 2).toUpperCase()}
               style={{ backgroundColor: COLORS.primaryLight }}
             />
@@ -723,7 +779,7 @@ const DashboardAdminScreen = ({ navigation }) => {
           </View>
           <View style={styles.demandeRight}>
             <Text style={styles.demandeMontant}>{formatMontantLocal(demande.montant)}</Text>
-            <Chip 
+            <Chip
               style={{ backgroundColor: COLORS.warningBg, marginTop: 4 }}
               textStyle={{ color: COLORS.warning, fontSize: 11, fontWeight: '700' }}
             >
@@ -825,17 +881,17 @@ const DashboardAdminScreen = ({ navigation }) => {
 
   return (
     <View style={styles.mainContainer}>
-      <StatusBar 
+      <StatusBar
         barStyle="light-content"
-        backgroundColor={COLORS.primary} 
+        backgroundColor={COLORS.primary}
       />
-      
-      <ScrollView 
+
+      <ScrollView
         style={styles.container}
         contentContainerStyle={{ paddingBottom: spacing.outer * 2 }}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
+          <RefreshControl
+            refreshing={refreshing}
             onRefresh={onRefresh}
             colors={[COLORS.primary]}
             tintColor={COLORS.primary}
@@ -845,8 +901,8 @@ const DashboardAdminScreen = ({ navigation }) => {
         {/* EN-TÊTE */}
         <View style={[styles.header, { padding: spacing.outer }]}>
           <View style={{ flex: 1 }}>
-            <Title style={[styles.headerTitle, { 
-              fontSize: deviceType.type === 'mobile' ? 24 : 28 
+            <Title style={[styles.headerTitle, {
+              fontSize: deviceType.type === 'mobile' ? 24 : 28
             }]}>
               Tableau de Bord
             </Title>
@@ -857,7 +913,7 @@ const DashboardAdminScreen = ({ navigation }) => {
             </Text>
           </View>
           <View style={styles.headerRight}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.headerIconButton}
               onPress={handleNavigateToNotifications}
               activeOpacity={0.7}
@@ -869,7 +925,7 @@ const DashboardAdminScreen = ({ navigation }) => {
                 </View>
               )}
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.headerIconButton}
               onPress={handleNavigateToSettings}
               activeOpacity={0.7}
@@ -880,8 +936,8 @@ const DashboardAdminScreen = ({ navigation }) => {
         </View>
 
         {/* FILTRES DE PÉRIODE */}
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.periodFilter}
           contentContainerStyle={{ paddingHorizontal: spacing.outer }}
@@ -892,12 +948,12 @@ const DashboardAdminScreen = ({ navigation }) => {
               selected={selectedPeriod === period}
               onPress={() => handlePeriodChange(period)}
               style={[
-                styles.periodChip, 
+                styles.periodChip,
                 { marginRight: spacing.inner },
                 selectedPeriod === period && styles.periodChipSelected
               ]}
               selectedColor={COLORS.white}
-              textStyle={{ 
+              textStyle={{
                 fontSize: deviceType.type === 'mobile' ? 13 : 14,
                 color: selectedPeriod === period ? COLORS.white : COLORS.textSecondary,
                 fontWeight: selectedPeriod === period ? '700' : '500'
@@ -909,7 +965,7 @@ const DashboardAdminScreen = ({ navigation }) => {
         </ScrollView>
 
         {/* KPIs PRINCIPAUX */}
-        <View style={[styles.kpiContainer, { 
+        <View style={[styles.kpiContainer, {
           padding: spacing.outer,
           gap: spacing.inner,
           flexDirection: 'row',
@@ -962,15 +1018,15 @@ const DashboardAdminScreen = ({ navigation }) => {
         </View>
 
         {/* DEMANDES DE PAIEMENT SALAIRE */}
-        <Card style={[styles.demandesCard, { 
+        <Card style={[styles.demandesCard, {
           marginHorizontal: spacing.outer,
-          marginBottom: spacing.outer 
+          marginBottom: spacing.outer
         }]}>
           <Card.Content style={{ padding: spacing.card }}>
             <View style={styles.sectionHeader}>
               <View>
-                <Title style={[styles.sectionTitle, { 
-                  fontSize: deviceType.type === 'mobile' ? 18 : 20 
+                <Title style={[styles.sectionTitle, {
+                  fontSize: deviceType.type === 'mobile' ? 18 : 20
                 }]}>
                   Demandes de Paiement
                 </Title>
@@ -1007,7 +1063,7 @@ const DashboardAdminScreen = ({ navigation }) => {
         {/* GRAPHIQUES */}
         <View style={[
           styles.chartsContainer,
-          { 
+          {
             padding: spacing.outer,
             flexDirection: showChartsInRow ? 'row' : 'column',
             gap: spacing.inner
@@ -1016,8 +1072,8 @@ const DashboardAdminScreen = ({ navigation }) => {
           {/* Évolution CA */}
           <Card style={[styles.chartCard, showChartsInRow && { flex: 1 }]}>
             <Card.Content style={{ padding: spacing.card }}>
-              <Title style={[styles.chartTitle, { 
-                fontSize: deviceType.type === 'mobile' ? 16 : 18 
+              <Title style={[styles.chartTitle, {
+                fontSize: deviceType.type === 'mobile' ? 16 : 18
               }]}>
                 Évolution Chiffre d'Affaires
               </Title>
@@ -1042,8 +1098,8 @@ const DashboardAdminScreen = ({ navigation }) => {
           {/* Répartition Revenus */}
           <Card style={[styles.chartCard, showChartsInRow && { flex: 1 }]}>
             <Card.Content style={{ padding: spacing.card }}>
-              <Title style={[styles.chartTitle, { 
-                fontSize: deviceType.type === 'mobile' ? 16 : 18 
+              <Title style={[styles.chartTitle, {
+                fontSize: deviceType.type === 'mobile' ? 16 : 18
               }]}>
                 Répartition Revenus
               </Title>
@@ -1069,14 +1125,14 @@ const DashboardAdminScreen = ({ navigation }) => {
         </View>
 
         {/* ALERTES CRITIQUES */}
-        <Card style={[styles.alertsCard, { 
+        <Card style={[styles.alertsCard, {
           marginHorizontal: spacing.outer,
-          marginBottom: spacing.outer 
+          marginBottom: spacing.outer
         }]}>
           <Card.Content style={{ padding: spacing.card }}>
             <View style={styles.sectionHeader}>
-              <Title style={[styles.sectionTitle, { 
-                fontSize: deviceType.type === 'mobile' ? 18 : 20 
+              <Title style={[styles.sectionTitle, {
+                fontSize: deviceType.type === 'mobile' ? 18 : 20
               }]}>
                 Alertes Critiques
               </Title>
@@ -1101,18 +1157,18 @@ const DashboardAdminScreen = ({ navigation }) => {
         </Card>
 
         {/* ACTIONS RAPIDES */}
-        <Card style={[styles.quickActionsCard, { 
+        <Card style={[styles.quickActionsCard, {
           marginHorizontal: spacing.outer,
-          marginBottom: spacing.outer 
+          marginBottom: spacing.outer
         }]}>
           <Card.Content style={{ padding: spacing.card }}>
-            <Title style={[styles.sectionTitle, { 
+            <Title style={[styles.sectionTitle, {
               fontSize: deviceType.type === 'mobile' ? 18 : 20,
-              marginBottom: spacing.inner 
+              marginBottom: spacing.inner
             }]}>
               Actions Rapides
             </Title>
-            <View style={[styles.quickActionsGrid, { 
+            <View style={[styles.quickActionsGrid, {
               flexDirection: 'row',
               flexWrap: 'wrap',
               gap: spacing.inner,
@@ -1124,40 +1180,41 @@ const DashboardAdminScreen = ({ navigation }) => {
               {renderQuickAction('Nouvelle Commande', 'shopping-bag', COLORS.success, 'CommercialClients', { action: 'addCommande' })}
               {renderQuickAction('Paiement', 'payment', COLORS.danger, 'FinanceComptabilite', { action: 'addPaiement' })}
               {renderQuickAction('Voir Journal', 'receipt', COLORS.primaryLight, 'FinanceComptabilite', { tab: 'journal' })}
+              {renderQuickAction('Envoyer Annonce', 'campaign', COLORS.purple, 'OPEN_NOTIFICATION_DIALOG')}
             </View>
           </Card.Content>
         </Card>
 
         {/* STATISTIQUES PAR MODULE */}
-        <Card style={[styles.statsCard, { 
+        <Card style={[styles.statsCard, {
           marginHorizontal: spacing.outer,
-          marginBottom: spacing.outer 
+          marginBottom: spacing.outer
         }]}>
           <Card.Content style={{ padding: spacing.card }}>
-            <Title style={[styles.sectionTitle, { 
+            <Title style={[styles.sectionTitle, {
               fontSize: deviceType.type === 'mobile' ? 18 : 20,
-              marginBottom: spacing.inner 
+              marginBottom: spacing.inner
             }]}>
               Statistiques par Module
             </Title>
             {dashboardData?.moduleStats && dashboardData.moduleStats.length > 0 ? (
               <DataTable>
                 <DataTable.Header style={{ backgroundColor: COLORS.grayCard, borderRadius: 8 }}>
-                  <DataTable.Title textStyle={{ 
+                  <DataTable.Title textStyle={{
                     fontSize: deviceType.type === 'mobile' ? 13 : 14,
                     fontWeight: '700',
                     color: COLORS.blackSoft
                   }}>
                     Module
                   </DataTable.Title>
-                  <DataTable.Title numeric textStyle={{ 
+                  <DataTable.Title numeric textStyle={{
                     fontSize: deviceType.type === 'mobile' ? 13 : 14,
                     fontWeight: '700',
                     color: COLORS.blackSoft
                   }}>
                     Opérations
                   </DataTable.Title>
-                  <DataTable.Title numeric textStyle={{ 
+                  <DataTable.Title numeric textStyle={{
                     fontSize: deviceType.type === 'mobile' ? 13 : 14,
                     fontWeight: '700',
                     color: COLORS.blackSoft
@@ -1167,27 +1224,27 @@ const DashboardAdminScreen = ({ navigation }) => {
                 </DataTable.Header>
 
                 {dashboardData.moduleStats.map((stat, index) => (
-                  <DataTable.Row 
+                  <DataTable.Row
                     key={index}
-                    style={{ 
+                    style={{
                       borderBottomWidth: 1,
-                      borderBottomColor: COLORS.grayBorder 
+                      borderBottomColor: COLORS.grayBorder
                     }}
                   >
-                    <DataTable.Cell textStyle={{ 
+                    <DataTable.Cell textStyle={{
                       fontSize: deviceType.type === 'mobile' ? 13 : 14,
                       color: COLORS.blackSoft,
                       fontWeight: '500'
                     }}>
                       {safeGetString(stat?.module, 'N/A')}
                     </DataTable.Cell>
-                    <DataTable.Cell numeric textStyle={{ 
+                    <DataTable.Cell numeric textStyle={{
                       fontSize: deviceType.type === 'mobile' ? 13 : 14,
                       color: COLORS.textSecondary
                     }}>
                       {formatNumberLocal(stat?.operations)}
                     </DataTable.Cell>
-                    <DataTable.Cell numeric textStyle={{ 
+                    <DataTable.Cell numeric textStyle={{
                       fontSize: deviceType.type === 'mobile' ? 13 : 14,
                       color: COLORS.success,
                       fontWeight: '700'
@@ -1206,7 +1263,7 @@ const DashboardAdminScreen = ({ navigation }) => {
         {/* TOP PERFORMERS */}
         <View style={[
           styles.performersContainer,
-          { 
+          {
             paddingHorizontal: spacing.outer,
             flexDirection: showPerformersInRow ? 'row' : 'column',
             gap: spacing.inner
@@ -1215,9 +1272,9 @@ const DashboardAdminScreen = ({ navigation }) => {
           {/* Top Clients */}
           <Card style={[styles.performerCard, showPerformersInRow && { flex: 1 }]}>
             <Card.Content style={{ padding: spacing.card }}>
-              <Title style={[styles.sectionTitle, { 
+              <Title style={[styles.sectionTitle, {
                 fontSize: deviceType.type === 'mobile' ? 18 : 20,
-                marginBottom: spacing.inner 
+                marginBottom: spacing.inner
               }]}>
                 Top Clients
               </Title>
@@ -1225,31 +1282,31 @@ const DashboardAdminScreen = ({ navigation }) => {
                 dashboardData.topPerformers.clients.map((client, index) => (
                   <View key={client?.id || index} style={styles.performerItem}>
                     <View style={styles.performerLeft}>
-                      <Avatar.Text 
-                        size={deviceType.type === 'mobile' ? 44 : 48} 
-                        label={safeGetString(client?.nom, 'XX').substring(0, 2).toUpperCase()} 
+                      <Avatar.Text
+                        size={deviceType.type === 'mobile' ? 44 : 48}
+                        label={safeGetString(client?.nom, 'XX').substring(0, 2).toUpperCase()}
                         style={{ backgroundColor: COLORS.primaryLight }}
-                        labelStyle={{ 
+                        labelStyle={{
                           fontSize: deviceType.type === 'mobile' ? 16 : 18,
                           fontWeight: '700',
                           color: COLORS.white
                         }}
                       />
                       <View style={styles.performerInfo}>
-                        <Text style={[styles.performerName, { 
-                          fontSize: deviceType.type === 'mobile' ? 15 : 16 
+                        <Text style={[styles.performerName, {
+                          fontSize: deviceType.type === 'mobile' ? 15 : 16
                         }]}>
                           {safeGetString(client?.nom, 'Client')}
                         </Text>
-                        <Text style={[styles.performerSubtitle, { 
-                          fontSize: deviceType.type === 'mobile' ? 12 : 13 
+                        <Text style={[styles.performerSubtitle, {
+                          fontSize: deviceType.type === 'mobile' ? 12 : 13
                         }]}>
                           {safeParseInt(client?.achats, 0)} achat{safeParseInt(client?.achats, 0) > 1 ? 's' : ''}
                         </Text>
                       </View>
                     </View>
-                    <Text style={[styles.performerValue, { 
-                      fontSize: deviceType.type === 'mobile' ? 15 : 16 
+                    <Text style={[styles.performerValue, {
+                      fontSize: deviceType.type === 'mobile' ? 15 : 16
                     }]}>
                       {formatMontantLocal(client?.montant)}
                     </Text>
@@ -1264,9 +1321,9 @@ const DashboardAdminScreen = ({ navigation }) => {
           {/* Top Produits */}
           <Card style={[styles.performerCard, showPerformersInRow && { flex: 1 }]}>
             <Card.Content style={{ padding: spacing.card }}>
-              <Title style={[styles.sectionTitle, { 
+              <Title style={[styles.sectionTitle, {
                 fontSize: deviceType.type === 'mobile' ? 18 : 20,
-                marginBottom: spacing.inner 
+                marginBottom: spacing.inner
               }]}>
                 Top Produits
               </Title>
@@ -1274,27 +1331,27 @@ const DashboardAdminScreen = ({ navigation }) => {
                 dashboardData.topPerformers.produits.map((produit, index) => (
                   <View key={index} style={styles.performerItem}>
                     <View style={styles.performerLeft}>
-                      <Avatar.Icon 
-                        size={deviceType.type === 'mobile' ? 44 : 48} 
-                        icon="local-offer" 
+                      <Avatar.Icon
+                        size={deviceType.type === 'mobile' ? 44 : 48}
+                        icon="local-offer"
                         style={{ backgroundColor: COLORS.success }}
                         color={COLORS.white}
                       />
                       <View style={styles.performerInfo}>
-                        <Text style={[styles.performerName, { 
-                          fontSize: deviceType.type === 'mobile' ? 15 : 16 
+                        <Text style={[styles.performerName, {
+                          fontSize: deviceType.type === 'mobile' ? 15 : 16
                         }]}>
                           {safeGetString(produit?.nom, 'Produit')}
                         </Text>
-                        <Text style={[styles.performerSubtitle, { 
-                          fontSize: deviceType.type === 'mobile' ? 12 : 13 
+                        <Text style={[styles.performerSubtitle, {
+                          fontSize: deviceType.type === 'mobile' ? 12 : 13
                         }]}>
                           {safeParseInt(produit?.ventes, 0)} vente{safeParseInt(produit?.ventes, 0) > 1 ? 's' : ''}
                         </Text>
                       </View>
                     </View>
-                    <Text style={[styles.performerValue, { 
-                      fontSize: deviceType.type === 'mobile' ? 15 : 16 
+                    <Text style={[styles.performerValue, {
+                      fontSize: deviceType.type === 'mobile' ? 15 : 16
                     }]}>
                       {formatMontantLocal(produit?.montant)}
                     </Text>
@@ -1310,8 +1367,8 @@ const DashboardAdminScreen = ({ navigation }) => {
 
       {/* DIALOGS */}
       <Portal>
-        <Dialog 
-          visible={rejectDialogVisible} 
+        <Dialog
+          visible={rejectDialogVisible}
           onDismiss={() => {
             setRejectDialogVisible(false);
             setMotifRejet('');
@@ -1336,7 +1393,7 @@ const DashboardAdminScreen = ({ navigation }) => {
                 </Text>
               </View>
             )}
-            
+
             <TextInput
               label="Motif du rejet *"
               value={motifRejet}
@@ -1363,7 +1420,7 @@ const DashboardAdminScreen = ({ navigation }) => {
             />
           </Dialog.Content>
           <Dialog.Actions>
-            <Button 
+            <Button
               onPress={() => {
                 setRejectDialogVisible(false);
                 setMotifRejet('');
@@ -1373,13 +1430,78 @@ const DashboardAdminScreen = ({ navigation }) => {
             >
               Annuler
             </Button>
-            <Button 
-              onPress={confirmerRejet} 
+            <Button
+              onPress={confirmerRejet}
               textColor={COLORS.danger}
               mode="contained"
               buttonColor={COLORS.danger}
             >
               Confirmer le rejet
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* DIALOG NOTIFICATION */}
+        <Dialog
+          visible={notificationDialogVisible}
+          onDismiss={() => setNotificationDialogVisible(false)}
+          style={{ backgroundColor: COLORS.white }}
+        >
+          <Dialog.Title style={{ color: COLORS.primary, fontWeight: '700' }}>
+            Envoyer une notification
+          </Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ marginBottom: 16, color: COLORS.textSecondary }}>
+              Envoyez une annonce importante à tous les employés par email.
+            </Text>
+
+            <TextInput
+              label="Sujet"
+              value={notificationSubject}
+              onChangeText={setNotificationSubject}
+              mode="outlined"
+              placeholder="Ex: Maintenance système..."
+              outlineColor={COLORS.grayBorder}
+              activeOutlineColor={COLORS.primary}
+              style={{ marginBottom: 12 }}
+            />
+
+            <TextInput
+              label="Message"
+              value={notificationMessage}
+              onChangeText={setNotificationMessage}
+              mode="outlined"
+              multiline
+              numberOfLines={6}
+              placeholder="Votre message ici..."
+              outlineColor={COLORS.grayBorder}
+              activeOutlineColor={COLORS.primary}
+            />
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
+              <MaterialIcons name="people" size={20} color={COLORS.primary} />
+              <Text style={{ marginLeft: 8, color: COLORS.primary, fontWeight: '600' }}>
+                Destinataires: Tous les employés actifs
+              </Text>
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => setNotificationDialogVisible(false)}
+              textColor={COLORS.textSecondary}
+              disabled={notificationLoading}
+            >
+              Annuler
+            </Button>
+            <Button
+              onPress={handleSendNotification}
+              mode="contained"
+              buttonColor={COLORS.primary}
+              loading={notificationLoading}
+              disabled={notificationLoading}
+              icon="send"
+            >
+              Envoyer
             </Button>
           </Dialog.Actions>
         </Dialog>

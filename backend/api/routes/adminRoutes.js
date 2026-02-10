@@ -1246,4 +1246,74 @@ router.get('/summary', authenticate, authorize('admin'), async (req, res) => {
     }
 });
 
+/**
+ * POST /api/admin/notify
+ * Envoyer une notification par email aux employés
+ */
+router.post('/notify', authenticate, authorize('admin'), async (req, res) => {
+    try {
+        const { recipients, subject, message } = req.body;
+
+        if (!subject || !message) {
+            return res.status(400).json({
+                success: false,
+                message: 'Le sujet et le message sont obligatoires.'
+            });
+        }
+
+        let emailList = [];
+
+        // Si recipients est 'all', utiliser tous les employés actifs
+        // Si tableau, utiliser directement
+        // Si string unique, envelopper dans tableau
+        if (recipients === 'all') {
+            const [users] = await db.query(`
+                SELECT email FROM employes 
+                WHERE statut = 'actif' 
+                AND email IS NOT NULL 
+                AND email != ''
+            `);
+            emailList = users.map(u => u.email);
+        } else if (Array.isArray(recipients)) {
+            emailList = recipients;
+        } else if (recipients) {
+            emailList = [recipients];
+        }
+
+        if (!emailList || emailList.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Aucun destinataire valide trouvé.'
+            });
+        }
+
+        console.log(`📧 Envoi de notification à ${emailList.length} destinataires`);
+
+        // Envoi simple en boucle pour l'instant
+        // Pour une prod massive, utiliser une queue (Bull, RabbitMQ)
+        let sentCount = 0;
+        let errors = 0;
+
+        await Promise.all(emailList.map(async (email) => {
+            const result = await emailService.envoyerNotificationGenerale(email, subject, message);
+            if (result.success) sentCount++;
+            else errors++;
+        }));
+
+        res.status(200).json({
+            success: true,
+            message: `Notification envoyée à ${sentCount} destinataire(s). ${errors > 0 ? `(${errors} échecs)` : ''}`,
+            data: { sent: sentCount, failed: errors }
+        });
+
+    } catch (error) {
+        console.error('❌ Notification error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors de l\'envoi de la notification.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+});
+
 module.exports = router;
