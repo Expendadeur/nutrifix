@@ -58,14 +58,14 @@ class BaseEmployeService {
       const headers = await this.getHeaders();
       const queryString = new URLSearchParams(params).toString();
       const url = queryString ? `${API_URL}${endpoint}?${queryString}` : `${API_URL}${endpoint}`;
-      
+
       const response = await fetch(url, {
         method: 'GET',
         headers
       });
 
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.message || 'Erreur lors de la requête');
       }
@@ -89,7 +89,7 @@ class BaseEmployeService {
       });
 
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.message || 'Erreur lors de la requête');
       }
@@ -113,7 +113,7 @@ class BaseEmployeService {
       });
 
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.message || 'Erreur lors de la requête');
       }
@@ -140,7 +140,7 @@ class BaseEmployeService {
       });
 
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.message || 'Erreur lors de la requête');
       }
@@ -149,6 +149,13 @@ class BaseEmployeService {
     } catch (error) {
       this.handleError(error);
     }
+  }
+
+  /**
+   * Envoie un message à l'administration
+   */
+  async contactAdmin(sujet, message) {
+    return await this.post('/notifications/contact-admin', { sujet, message });
   }
 
   /**
@@ -228,9 +235,9 @@ class BaseEmployeService {
 // CLASSE SERVICE EMPLOYÉ INSS - AMÉLIORÉE
 // ============================================
 class EmployeINSSService extends BaseEmployeService {
-  
+
   // ========== DASHBOARD ==========
-  
+
   /**
    * Dashboard - Récupère les données du dashboard
    */
@@ -240,7 +247,7 @@ class EmployeINSSService extends BaseEmployeService {
   }
 
   // ========== PROFIL ==========
-  
+
   /**
    * Profil - Récupère le profil complet
    */
@@ -257,7 +264,7 @@ class EmployeINSSService extends BaseEmployeService {
   }
 
   // ========== CARTE DIGITALE ==========
-  
+
   /**
    * Carte - Récupère la carte digitale
    */
@@ -267,7 +274,7 @@ class EmployeINSSService extends BaseEmployeService {
   }
 
   // ========== CONGÉS ==========
-  
+
   /**
    * Congés - Récupère le solde de congés
    */
@@ -281,7 +288,7 @@ class EmployeINSSService extends BaseEmployeService {
    */
   async submitLeaveRequest(leaveData) {
     const formData = new FormData();
-    
+
     // Ajouter les champs texte
     Object.keys(leaveData).forEach(key => {
       if (key !== 'piece_jointe' && leaveData[key] !== null && leaveData[key] !== undefined) {
@@ -319,7 +326,7 @@ class EmployeINSSService extends BaseEmployeService {
   }
 
   // ========== SALAIRES ==========
-  
+
   /**
    * Salaires - Récupère les bulletins de salaire
    */
@@ -353,7 +360,7 @@ class EmployeINSSService extends BaseEmployeService {
   }
 
   // ========== PRÉSENCES ==========
-  
+
   /**
    * Présences - Récupère l'historique des présences
    */
@@ -369,15 +376,15 @@ class EmployeINSSService extends BaseEmployeService {
     const today = new Date();
     const mois = today.getMonth() + 1;
     const annee = today.getFullYear();
-    
+
     const data = await this.getPresences({ mois, annee });
     const todayStr = today.toISOString().split('T')[0];
-    
+
     return data.presences?.find(p => p.date === todayStr) || null;
   }
 
   // ========== POINTAGE ==========
-  
+
   /**
    * Pointage - Enregistre l'entrée
    */
@@ -393,7 +400,7 @@ class EmployeINSSService extends BaseEmployeService {
   }
 
   // ========== NOTIFICATIONS ==========
-  
+
   /**
    * Notifications - Récupère les notifications
    */
@@ -414,9 +421,9 @@ class EmployeINSSService extends BaseEmployeService {
 // CLASSE SERVICE EMPLOYÉ TEMPS PARTIEL - INCHANGÉE
 // ============================================
 class TempsPartielService extends BaseEmployeService {
-  
+
   // ========== DASHBOARD ==========
-  
+
   /**
    * Dashboard - Récupère les données du dashboard
    */
@@ -426,7 +433,7 @@ class TempsPartielService extends BaseEmployeService {
   }
 
   // ========== CARTE DIGITALE ==========
-  
+
   /**
    * Carte - Récupère la carte digitale
    */
@@ -436,7 +443,7 @@ class TempsPartielService extends BaseEmployeService {
   }
 
   // ========== POINTAGE ==========
-  
+
   /**
    * Pointage - Récupère le pointage du jour
    */
@@ -460,7 +467,7 @@ class TempsPartielService extends BaseEmployeService {
   }
 
   // ========== HEURES ==========
-  
+
   /**
    * Heures - Récupère l'historique des heures
    */
@@ -476,12 +483,12 @@ class TempsPartielService extends BaseEmployeService {
     const today = new Date();
     const mois = today.getMonth() + 1;
     const annee = today.getFullYear();
-    
+
     return await this.getHeures({ mois, annee });
   }
 
   // ========== SALAIRES ==========
-  
+
   /**
    * Salaires - Récupère l'historique des salaires
    */
@@ -514,7 +521,7 @@ class TempsPartielService extends BaseEmployeService {
   }
 
   // ========== PROFIL ==========
-  
+
   /**
    * Profil - Récupère les informations du profil
    */
@@ -524,7 +531,7 @@ class TempsPartielService extends BaseEmployeService {
   }
 
   // ========== STATISTIQUES ==========
-  
+
   /**
    * Statistiques - Récupère les statistiques détaillées
    */
@@ -548,7 +555,7 @@ class TempsPartielService extends BaseEmployeService {
   }
 
   // ========== UTILITAIRES ==========
-  
+
   /**
    * Utilitaire - Calcule le salaire estimé
    */
@@ -598,7 +605,7 @@ class EmployeService extends BaseEmployeService {
       }
 
       const user = JSON.parse(userData);
-      
+
       if (user.type_employe === 'temps_partiel') {
         return this.tempsPartiel;
       } else if (user.type_employe === 'INSS') {
@@ -633,7 +640,7 @@ class EmployeService extends BaseEmployeService {
    */
   async checkIn(locationData) {
     const service = await this.getServiceForCurrentUser();
-    
+
     if (service instanceof TempsPartielService) {
       return await service.pointageEntree(locationData);
     } else {
@@ -646,7 +653,7 @@ class EmployeService extends BaseEmployeService {
    */
   async checkOut(locationData) {
     const service = await this.getServiceForCurrentUser();
-    
+
     if (service instanceof TempsPartielService) {
       return await service.pointageSortie(locationData);
     } else {
@@ -659,7 +666,7 @@ class EmployeService extends BaseEmployeService {
    */
   async getProfile() {
     const service = await this.getServiceForCurrentUser();
-    
+
     if (service instanceof TempsPartielService) {
       return await service.getProfil();
     } else {
@@ -674,7 +681,7 @@ class EmployeService extends BaseEmployeService {
     try {
       const userData = await AsyncStorage.getItem('userData');
       if (!userData) return null;
-      
+
       const user = JSON.parse(userData);
       return user.type_employe;
     } catch (error) {

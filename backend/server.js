@@ -87,6 +87,7 @@ const financelRoutes = require('./api/routes/financeRoutes');
 const OperationsRoutes = require('./api/routes/operationsRoutes');
 const commercialRoutes = require('./api/routes/commercialRoutes');
 const rhsRoutes = require('./api/routes/rhRoutes');
+const systemRoutes = require('./api/routes/systemRoutes');
 
 // ============================================
 // INITIALISATION DE L'APPLICATION
@@ -165,12 +166,12 @@ if (process.env.NODE_ENV === 'production') {
 app.use(compression());
 
 // Parsing du body
-app.use(express.json({ 
+app.use(express.json({
     limit: process.env.MAX_FILE_SIZE || '10mb',
     strict: true
 }));
-app.use(express.urlencoded({ 
-    extended: true, 
+app.use(express.urlencoded({
+    extended: true,
     limit: process.env.MAX_FILE_SIZE || '10mb'
 }));
 
@@ -227,8 +228,8 @@ app.use(cors({
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
-        'Content-Type', 
-        'Authorization', 
+        'Content-Type',
+        'Authorization',
         'X-Requested-With',
         'Accept',
         'Origin'
@@ -338,17 +339,17 @@ if (process.env.MAINTENANCE_MODE === 'true') {
 // ============================================
 io.on('connection', (socket) => {
     console.log('🔌 Client WebSocket connecté:', socket.id);
-    
+
     socket.on('join-room', (room) => {
         socket.join(room);
         console.log(`📍 Socket ${socket.id} a rejoint: ${room}`);
     });
-    
+
     socket.on('leave-room', (room) => {
         socket.leave(room);
         console.log(`📍 Socket ${socket.id} a quitté: ${room}`);
     });
-    
+
     socket.on('send-notification', (data) => {
         if (data.room) {
             io.to(data.room).emit('new-notification', data);
@@ -358,7 +359,7 @@ io.on('connection', (socket) => {
     socket.on('ping', () => {
         socket.emit('pong');
     });
-    
+
     socket.on('disconnect', (reason) => {
         console.log('🔌 Client déconnecté:', socket.id, 'Raison:', reason);
     });
@@ -407,27 +408,28 @@ app.get('/health', async (req, res) => {
 
 // Routes principales
 app.use('/api/auth', loginLimiter, authRoutes);
-app.use('/api/rh',managerLimiter, rhRoute);
-app.use('/api/flotte',managerLimiter, flotteRoutes);
-app.use('/api/agriculture',managerLimiter, agricultureRoutes);
-app.use('/api/elevage',managerLimiter, elevageRoutes);
-app.use('/api/commercial',managerLimiter, commercialRoutes);
-app.use('/api/finance',managerLimiter, financeRoutes);
-app.use('/api/notifications',managerLimiter, notificationRoutes);
-app.use('/api/comptabilite',managerLimiter, comptabiliteRoutes);
-app.use('/api/comptabilite',managerLimiter, dashboardRoute);
-app.use('/api/chauffeur',managerLimiter, chauffeurRoutes);
-app.use('/api/employe-inss',managerLimiter, employe_inssRoutes);
-app.use('/api/employe-temps-partiel',managerLimiter, employe_temps_partielRoutes);
-app.use('/api/veterinaire',managerLimiter, veterinaireRoutes);
-app.use('/api/fingerprint',managerLimiter, fingerprint_routesRoutes);
-app.use('/api/manager', managerLimiter,managerRoutes);
-app.use('/api/admin',managerLimiter, adminRoutes);
-app.use('/api/parametres',managerLimiter, parametresRoutes);
-app.use('/api/finance', managerLimiter,financelRoutes);
-app.use('/api/operations',managerLimiter, OperationsRoutes);
-app.use('/api/personnel',managerLimiter,rhsRoutes)
-  
+app.use('/api/rh', managerLimiter, rhRoute);
+app.use('/api/flotte', managerLimiter, flotteRoutes);
+app.use('/api/agriculture', managerLimiter, agricultureRoutes);
+app.use('/api/elevage', managerLimiter, elevageRoutes);
+app.use('/api/commercial', managerLimiter, commercialRoutes);
+app.use('/api/finance', managerLimiter, financeRoutes);
+app.use('/api/notifications', managerLimiter, notificationRoutes);
+app.use('/api/comptabilite', managerLimiter, comptabiliteRoutes);
+app.use('/api/comptabilite', managerLimiter, dashboardRoute);
+app.use('/api/chauffeur', managerLimiter, chauffeurRoutes);
+app.use('/api/employe-inss', managerLimiter, employe_inssRoutes);
+app.use('/api/employe-temps-partiel', managerLimiter, employe_temps_partielRoutes);
+app.use('/api/veterinaire', managerLimiter, veterinaireRoutes);
+app.use('/api/fingerprint', managerLimiter, fingerprint_routesRoutes);
+app.use('/api/manager', managerLimiter, managerRoutes);
+app.use('/api/admin', managerLimiter, adminRoutes);
+app.use('/api/parametres', managerLimiter, parametresRoutes);
+app.use('/api/finance', managerLimiter, financelRoutes);
+app.use('/api/operations', managerLimiter, OperationsRoutes);
+app.use('/api/personnel', managerLimiter, rhsRoutes);
+app.use('/api/system', managerLimiter, systemRoutes);
+
 
 // Route de test basique
 app.get('/api', (req, res) => {
@@ -509,9 +511,9 @@ app.use((err, req, res, next) => {
         success: false,
         message: err.message || 'Erreur interne du serveur',
         requestId: req.id,
-        ...(process.env.NODE_ENV === 'development' && { 
+        ...(process.env.NODE_ENV === 'development' && {
             stack: err.stack,
-            error: err 
+            error: err
         })
     });
 });
@@ -523,10 +525,10 @@ app.use((err, req, res, next) => {
 // Graceful shutdown
 const gracefulShutdown = async (signal) => {
     console.log(`\n⚠️ Signal ${signal} reçu. Arrêt gracieux...`);
-    
+
     httpServer.close(async () => {
         console.log('🔌 Serveur HTTP fermé');
-        
+
         try {
             await db.end();
             console.log('🔌 Pool de connexions DB fermé');

@@ -25,7 +25,8 @@ import {
   Searchbar,
   Chip,
   DataTable,
-  ProgressBar
+  ProgressBar,
+  TextInput
 } from 'react-native-paper';
 import { MaterialIcons, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { LineChart, BarChart, PieChart } from 'react-native-chart-kit';
@@ -44,14 +45,14 @@ const API_URL = 'http://localhost:5000/api/manager';
 
 const DashboardManagerScreen = () => {
   const navigation = useNavigation();
-  
+
   // États principaux
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
   const [selectedPeriod, setSelectedPeriod] = useState('month');
   const [showPeriodModal, setShowPeriodModal] = useState(false);
-  
+
   // États pour les salaires
   const [salariesData, setSalariesData] = useState({
     overview: null,
@@ -61,7 +62,7 @@ const DashboardManagerScreen = () => {
     statistics: null,
     paymentRequests: []
   });
-  
+
   // États pour les filtres
   const [filters, setFilters] = useState({
     search: '',
@@ -70,24 +71,30 @@ const DashboardManagerScreen = () => {
     confirme_reception: 'all',
     demande_paiement: 'all'
   });
-  
+
   // États pour les modales
   const [showFiltersModal, setShowFiltersModal] = useState(false);
   const [showSalaryDetailsModal, setShowSalaryDetailsModal] = useState(false);
   const [selectedSalary, setSelectedSalary] = useState(null);
   const [showReportModal, setShowReportModal] = useState(false);
-  
+
   // États pour la sélection multiple
   const [selectedSalaries, setSelectedSalaries] = useState([]);
   const [selectionMode, setSelectionMode] = useState(false);
-  
+
   // États pour les onglets
   const [activeTab, setActiveTab] = useState('overview'); // overview, salaries, analytics, reports
   const [activeSalaryTab, setActiveSalaryTab] = useState('all'); // all, paid, notPaid, requests
 
+  // États pour la communication
+  const [communicationModalVisible, setCommunicationModalVisible] = useState(false);
+  const [messageSubject, setMessageSubject] = useState('');
+  const [messageBody, setMessageBody] = useState('');
+  const [isSending, setIsSending] = useState(false);
+
   useEffect(() => {
     loadAllData();
-    
+
     const interval = setInterval(() => {
       loadAllData(true); // Silent refresh
     }, 30000);
@@ -99,14 +106,14 @@ const DashboardManagerScreen = () => {
   const loadAllData = async (silent = false) => {
     try {
       if (!silent) setLoading(true);
-      
+
       await Promise.all([
         loadDashboardData(),
         loadSalariesOverview(),
         loadSalariesDetailed(),
         loadSalaryStatistics()
       ]);
-      
+
     } catch (error) {
       if (!silent) {
         Alert.alert('Erreur', 'Impossible de charger les données');
@@ -165,7 +172,7 @@ const DashboardManagerScreen = () => {
         headers: { Authorization: `Bearer ${token}` }
       });
       setSalariesData(prev => ({ ...prev, detailed: response.data }));
-      
+
       // Charger aussi les listes spécifiques
       await loadNotPaidSalaries();
       await loadPaidSalaries();
@@ -254,7 +261,7 @@ const DashboardManagerScreen = () => {
         paymentData,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      
+
       if (response.data.success) {
         Alert.alert('Succès', 'Salaire payé avec succès');
         loadAllData(true);
@@ -276,7 +283,7 @@ const DashboardManagerScreen = () => {
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      
+
       if (response.data.success) {
         Alert.alert('Succès', `${selectedSalaries.length} salaire(s) payé(s)`);
         setSelectedSalaries([]);
@@ -294,7 +301,7 @@ const DashboardManagerScreen = () => {
       setLoading(true);
       const token = await getAuthToken();
       const currentDate = new Date();
-      
+
       const response = await axios.post(
         `${API_URL}/generate-salary-report`,
         {
@@ -305,11 +312,11 @@ const DashboardManagerScreen = () => {
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      
+
       if (response.data.success) {
         // Télécharger le fichier
         const { fileName, data } = response.data;
-        
+
         if (isWeb) {
           // Web - télécharger via blob
           const blob = base64ToBlob(data, format === 'excel' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/pdf');
@@ -327,7 +334,7 @@ const DashboardManagerScreen = () => {
           });
           await Sharing.shareAsync(fileUri);
         }
-        
+
         Alert.alert('Succès', 'Rapport généré avec succès');
       }
     } catch (error) {
@@ -382,11 +389,11 @@ const DashboardManagerScreen = () => {
             Dashboard - {dashboardData?.department_name || 'Département'}
           </Text>
           <Text style={styles.headerSubtitle}>
-            {new Date().toLocaleDateString('fr-FR', { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
+            {new Date().toLocaleDateString('fr-FR', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
             })}
           </Text>
         </View>
@@ -407,14 +414,20 @@ const DashboardManagerScreen = () => {
             icon="bell"
             size={24}
             onPress={() => navigation.navigate('Notifications')}
-            color="#FFF"
+            iconColor="#FFF"
+          />
+          <IconButton
+            icon="message-draw"
+            size={24}
+            onPress={() => setCommunicationModalVisible(true)}
+            iconColor="#FFF"
           />
         </View>
       </View>
-      
+
       {/* Onglets de navigation */}
-      <ScrollView 
-        horizontal 
+      <ScrollView
+        horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.tabsContainer}
       >
@@ -432,10 +445,10 @@ const DashboardManagerScreen = () => {
             ]}
             onPress={() => setActiveTab(tab.key)}
           >
-            <MaterialIcons 
-              name={tab.icon} 
-              size={20} 
-              color={activeTab === tab.key ? '#FFF' : 'rgba(255,255,255,0.7)'} 
+            <MaterialIcons
+              name={tab.icon}
+              size={20}
+              color={activeTab === tab.key ? '#FFF' : 'rgba(255,255,255,0.7)'}
             />
             <Text style={[
               styles.tabLabel,
@@ -470,7 +483,7 @@ const DashboardManagerScreen = () => {
         icon: 'check-circle',
         color: '#3498DB',
         trend: dashboardData.kpis.presence_trend,
-        percentage: dashboardData.kpis.total_employees > 0 
+        percentage: dashboardData.kpis.total_employees > 0
           ? Math.round((dashboardData.kpis.present_today / dashboardData.kpis.total_employees) * 100)
           : 0,
         onPress: () => navigation.navigate('EquipeRH', { tab: 'presences' })
@@ -517,8 +530,8 @@ const DashboardManagerScreen = () => {
     }
 
     const columns = getGridColumns();
-    const cardWidth = isWeb 
-      ? `${(100 / columns) - 2}%` 
+    const cardWidth = isWeb
+      ? `${(100 / columns) - 2}%`
       : (screenWidth / columns) - 20;
 
     return (
@@ -555,10 +568,10 @@ const DashboardManagerScreen = () => {
               )}
               {kpi.trend !== undefined && (
                 <View style={styles.kpiTrend}>
-                  <MaterialIcons 
-                    name={kpi.trend >= 0 ? 'trending-up' : 'trending-down'} 
-                    size={16} 
-                    color="#FFF" 
+                  <MaterialIcons
+                    name={kpi.trend >= 0 ? 'trending-up' : 'trending-down'}
+                    size={16}
+                    color="#FFF"
                   />
                   <Text style={styles.kpiTrendText}>
                     {Math.abs(kpi.trend)}%
@@ -567,11 +580,11 @@ const DashboardManagerScreen = () => {
               )}
               {kpi.progress !== undefined && (
                 <View style={styles.progressBar}>
-                  <View 
+                  <View
                     style={[
-                      styles.progressFill, 
+                      styles.progressFill,
                       { width: `${kpi.progress}%` }
-                    ]} 
+                    ]}
                   />
                 </View>
               )}
@@ -593,8 +606,8 @@ const DashboardManagerScreen = () => {
         <Card.Content>
           <View style={styles.cardHeader}>
             <Title style={styles.cardTitle}>Vue d'ensemble Salaires</Title>
-            <Chip 
-              icon="calendar" 
+            <Chip
+              icon="calendar"
               mode="outlined"
               style={styles.periodChip}
             >
@@ -666,11 +679,11 @@ const DashboardManagerScreen = () => {
           {/* Barre de progression */}
           <View style={styles.progressSection}>
             <Text style={styles.progressLabel}>
-              Progression des paiements ({stats.total_employes > 0 
-                ? Math.round((stats.employes_payes / stats.total_employes) * 100) 
+              Progression des paiements ({stats.total_employes > 0
+                ? Math.round((stats.employes_payes / stats.total_employes) * 100)
                 : 0}%)
             </Text>
-            <ProgressBar 
+            <ProgressBar
               progress={stats.total_employes > 0 ? stats.employes_payes / stats.total_employes : 0}
               color="#2ECC71"
               style={styles.progressBarLarge}
@@ -686,7 +699,7 @@ const DashboardManagerScreen = () => {
                   <View style={styles.repartitionLeft}>
                     <Text style={styles.repartitionType}>{item.type_employe}</Text>
                     <Text style={styles.repartitionCount}>
-                      {item.nombre} employé{item.nombre > 1 ? 's' : ''} • 
+                      {item.nombre} employé{item.nombre > 1 ? 's' : ''} •
                       Payés: {item.payes} • En attente: {item.non_payes}
                     </Text>
                   </View>
@@ -741,8 +754,8 @@ const DashboardManagerScreen = () => {
   // Liste des salaires (responsive)
   const renderSalariesList = () => {
     let dataToDisplay = [];
-    
-    switch(activeSalaryTab) {
+
+    switch (activeSalaryTab) {
       case 'all':
         dataToDisplay = salariesData.detailed;
         break;
@@ -824,7 +837,7 @@ const DashboardManagerScreen = () => {
               {selectionMode && (
                 <DataTable.Title style={styles.checkboxColumn}>
                   <TouchableOpacity onPress={toggleSelectAll}>
-                    <MaterialIcons 
+                    <MaterialIcons
                       name={selectedSalaries.length === data.length ? "check-box" : "check-box-outline-blank"}
                       size={24}
                       color="#2E86C1"
@@ -848,14 +861,14 @@ const DashboardManagerScreen = () => {
             </DataTable.Header>
 
             {data.map((salary) => (
-              <DataTable.Row 
+              <DataTable.Row
                 key={salary.id}
                 style={selectedSalaries.includes(salary.id) ? styles.selectedRow : null}
               >
                 {selectionMode && (
                   <DataTable.Cell style={styles.checkboxColumn}>
                     <TouchableOpacity onPress={() => toggleSelectSalary(salary.id)}>
-                      <MaterialIcons 
+                      <MaterialIcons
                         name={selectedSalaries.includes(salary.id) ? "check-box" : "check-box-outline-blank"}
                         size={24}
                         color="#2E86C1"
@@ -869,8 +882,8 @@ const DashboardManagerScreen = () => {
                 <DataTable.Cell style={styles.tableColumnLarge}>
                   <View style={styles.employeeCell}>
                     {salary.employee_photo && (
-                      <Image 
-                        source={{ uri: salary.employee_photo }} 
+                      <Image
+                        source={{ uri: salary.employee_photo }}
                         style={styles.employeePhoto}
                       />
                     )}
@@ -891,7 +904,7 @@ const DashboardManagerScreen = () => {
                   </Text>
                 </DataTable.Cell>
                 <DataTable.Cell style={styles.tableColumnMedium}>
-                  <Chip 
+                  <Chip
                     mode="flat"
                     style={[
                       styles.statusChip,
@@ -905,7 +918,7 @@ const DashboardManagerScreen = () => {
                 {activeSalaryTab === 'paid' && (
                   <>
                     <DataTable.Cell style={styles.tableColumnMedium}>
-                      {salary.date_paiement 
+                      {salary.date_paiement
                         ? new Date(salary.date_paiement).toLocaleDateString('fr-FR')
                         : '-'
                       }
@@ -949,8 +962,8 @@ const DashboardManagerScreen = () => {
             <View style={styles.salaryCardHeader}>
               <View style={styles.salaryCardEmployee}>
                 {salary.employee_photo && (
-                  <Image 
-                    source={{ uri: salary.employee_photo }} 
+                  <Image
+                    source={{ uri: salary.employee_photo }}
                     style={styles.employeePhotoCard}
                   />
                 )}
@@ -962,7 +975,7 @@ const DashboardManagerScreen = () => {
                   </Chip>
                 </View>
               </View>
-              <Chip 
+              <Chip
                 mode="flat"
                 style={[
                   styles.statusChipCard,
@@ -1060,8 +1073,8 @@ const DashboardManagerScreen = () => {
               <View style={styles.requestHeader}>
                 <View style={styles.requestEmployee}>
                   {request.employe_photo && (
-                    <Image 
-                      source={{ uri: request.employe_photo }} 
+                    <Image
+                      source={{ uri: request.employe_photo }}
                       style={styles.employeePhotoRequest}
                     />
                   )}
@@ -1083,7 +1096,7 @@ const DashboardManagerScreen = () => {
                     {formatCurrency(request.montant)}
                   </Text>
                 </View>
-                
+
                 {request.justification && (
                   <View style={styles.requestJustification}>
                     <Text style={styles.requestJustificationLabel}>Justification:</Text>
@@ -1142,7 +1155,7 @@ const DashboardManagerScreen = () => {
         <Card style={[styles.card, styles.chartCard]}>
           <Card.Content>
             <Title style={styles.cardTitle}>Évolution Mensuelle des Salaires</Title>
-            
+
             {evolution_mensuelle && evolution_mensuelle.length > 0 && (
               <LineChart
                 data={{
@@ -1203,7 +1216,7 @@ const DashboardManagerScreen = () => {
         <Card style={[styles.card, styles.chartCard]}>
           <Card.Content>
             <Title style={styles.cardTitle}>Répartition par Type d'Employé</Title>
-            
+
             {par_type_employe && par_type_employe.length > 0 && (
               <>
                 <PieChart
@@ -1260,7 +1273,7 @@ const DashboardManagerScreen = () => {
         <Card style={[styles.card]}>
           <Card.Content>
             <Title style={styles.cardTitle}>Taux de Confirmation des Réceptions</Title>
-            
+
             <View style={styles.confirmationStats}>
               <View style={styles.confirmationStatItem}>
                 <Text style={styles.confirmationStatLabel}>Salaires Payés</Text>
@@ -1282,7 +1295,7 @@ const DashboardManagerScreen = () => {
               </View>
             </View>
 
-            <ProgressBar 
+            <ProgressBar
               progress={(taux_confirmation.taux_confirmation || 0) / 100}
               color="#2ECC71"
               style={styles.confirmationProgressBar}
@@ -1393,7 +1406,7 @@ const DashboardManagerScreen = () => {
   };
 
   const getStatusColor = (status) => {
-    switch(status) {
+    switch (status) {
       case 'payé': return '#2ECC71';
       case 'calculé': return '#F39C12';
       case 'reporté': return '#E74C3C';
@@ -1407,7 +1420,7 @@ const DashboardManagerScreen = () => {
   };
 
   const toggleSelectSalary = (salaryId) => {
-    setSelectedSalaries(prev => 
+    setSelectedSalaries(prev =>
       prev.includes(salaryId)
         ? prev.filter(id => id !== salaryId)
         : [...prev, salaryId]
@@ -1415,10 +1428,10 @@ const DashboardManagerScreen = () => {
   };
 
   const toggleSelectAll = () => {
-    const currentData = activeSalaryTab === 'notPaid' 
-      ? salariesData.notPaid 
+    const currentData = activeSalaryTab === 'notPaid'
+      ? salariesData.notPaid
       : salariesData.detailed;
-    
+
     if (selectedSalaries.length === currentData.length) {
       setSelectedSalaries([]);
     } else {
@@ -1482,7 +1495,7 @@ const DashboardManagerScreen = () => {
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      
+
       Alert.alert('Succès', 'Demande approuvée et salaire payé');
       loadAllData(true);
     } catch (error) {
@@ -1505,7 +1518,7 @@ const DashboardManagerScreen = () => {
             },
             { headers: { Authorization: `Bearer ${token}` } }
           );
-          
+
           Alert.alert('Succès', 'Demande rejetée');
           loadAllData(true);
         } catch (error) {
@@ -1513,6 +1526,39 @@ const DashboardManagerScreen = () => {
         }
       }
     );
+  };
+
+  const handleSendMessage = async () => {
+    if (!messageSubject.trim() || !messageBody.trim()) {
+      Alert.alert('Erreur', 'Veuillez remplir le sujet et le message');
+      return;
+    }
+
+    try {
+      setIsSending(true);
+      const token = await getAuthToken();
+
+      const response = await axios.post(`${API_URL.replace('/api/manager', '')}/api/notifications/contact-admin`, {
+        sujet: messageSubject,
+        message: messageBody
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (response.data.success) {
+        Alert.alert('Succès', 'Votre message a été envoyé à l\'administration');
+        setCommunicationModalVisible(false);
+        setMessageSubject('');
+        setMessageBody('');
+      } else {
+        Alert.alert('Erreur', response.data.message || 'Impossible d\'envoyer le message');
+      }
+    } catch (error) {
+      console.error('❌ Erreur envoi message:', error);
+      Alert.alert('Erreur', 'Une erreur est survenue lors de l\'envoi');
+    } finally {
+      setIsSending(false);
+    }
   };
 
   // ==================== RENDU PRINCIPAL ====================
@@ -1582,6 +1628,70 @@ const DashboardManagerScreen = () => {
               <Button onPress={() => setShowSalaryDetailsModal(false)}>Fermer</Button>
             </>
           )}
+        </Modal>
+
+        {/* Modale Communication Admin */}
+        <Modal
+          visible={communicationModalVisible}
+          onDismiss={() => setCommunicationModalVisible(false)}
+          contentContainerStyle={[styles.commModalContainer, isWeb && { width: 500 }]}
+        >
+          <View style={styles.commModalHeader}>
+            <View style={styles.commModalIconWrapper}>
+              <MaterialIcons name="contact-support" size={24} color="#FFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.commModalTitle}>Contacter l'Admin</Text>
+              <Text style={styles.commModalSubtitle}>Envoyez un message à l'administration</Text>
+            </View>
+            <IconButton
+              icon="close"
+              onPress={() => setCommunicationModalVisible(false)}
+            />
+          </View>
+
+          <ScrollView style={styles.commModalBody}>
+            <Text style={styles.commInputLabel}>Sujet</Text>
+            <TextInput
+              mode="outlined"
+              placeholder="Sujet de votre message..."
+              value={messageSubject}
+              onChangeText={setMessageSubject}
+              style={styles.commInput}
+            />
+
+            <Text style={styles.commInputLabel}>Message</Text>
+            <TextInput
+              mode="outlined"
+              placeholder="Votre message détaillé..."
+              value={messageBody}
+              onChangeText={setMessageBody}
+              multiline
+              numberOfLines={6}
+              style={[styles.commInput, { height: 120 }]}
+            />
+          </ScrollView>
+
+          <View style={styles.commModalFooter}>
+            <Button
+              mode="outlined"
+              onPress={() => setCommunicationModalVisible(false)}
+              style={styles.commFooterBtn}
+              disabled={isSending}
+            >
+              Annuler
+            </Button>
+            <Button
+              mode="contained"
+              onPress={handleSendMessage}
+              style={[styles.commFooterBtn, { flex: 2 }]}
+              loading={isSending}
+              disabled={isSending || !messageSubject.trim() || !messageBody.trim()}
+              icon="send"
+            >
+              Envoyer
+            </Button>
+          </View>
         </Modal>
       </Portal>
     </View>

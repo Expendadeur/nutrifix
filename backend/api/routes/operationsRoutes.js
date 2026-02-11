@@ -439,7 +439,7 @@ router.get('/vehicules', authenticate, authorize('admin', 'manager', 'chauffeur'
         }
 
         sql += ' ORDER BY v.marque, v.modele';
-        
+
         // Pagination – injecter les valeurs numériques directement dans la requête
         const offset = (page - 1) * limit;
         sql += ` LIMIT ${limit} OFFSET ${offset}`;
@@ -573,7 +573,8 @@ router.post('/vehicules', authenticate, authorize('admin', 'manager'), async (re
             id_chauffeur_attitre,
             id_departement,
             statut,
-            disponible
+            disponible,
+            photo
         } = req.body;
 
         // Validation
@@ -602,8 +603,8 @@ router.post('/vehicules', authenticate, authorize('admin', 'manager'), async (re
                 immatriculation, marque, modele, annee, couleur,
                 type_vehicule, capacite_carburant, consommation_moyenne,
                 kilometrage_actuel, date_achat, prix_achat, valeur_actuelle,
-                id_chauffeur_attitre, id_departement, statut, disponible
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                id_chauffeur_attitre, id_departement, statut, disponible, photo
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         const result = await db.query(sql, [
@@ -622,7 +623,8 @@ router.post('/vehicules', authenticate, authorize('admin', 'manager'), async (re
             id_chauffeur_attitre,
             id_departement,
             statut || 'actif',
-            disponible !== undefined ? disponible : 1
+            disponible !== undefined ? disponible : 1,
+            photo
         ]);
 
         // Enregistrer dans le journal si prix d'achat fourni
@@ -682,7 +684,8 @@ router.put('/vehicules/:id', authenticate, authorize('admin', 'manager'), async 
             id_chauffeur_attitre,
             id_departement,
             statut,
-            disponible
+            disponible,
+            photo
         } = req.body;
 
         // Vérifier si le véhicule existe
@@ -709,7 +712,8 @@ router.put('/vehicules/:id', authenticate, authorize('admin', 'manager'), async 
                 id_chauffeur_attitre = ?,
                 id_departement = ?,
                 statut = ?,
-                disponible = ?
+                disponible = ?,
+                photo = ?
             WHERE id = ?
         `;
 
@@ -728,6 +732,7 @@ router.put('/vehicules/:id', authenticate, authorize('admin', 'manager'), async 
             id_departement,
             statut,
             disponible,
+            photo,
             id
         ]);
 
@@ -778,11 +783,11 @@ router.delete('/vehicules/:id', authenticate, authorize('admin'), async (req, re
  */
 router.get('/mouvements-vehicules', authenticate, authorize('admin', 'manager', 'chauffeur'), async (req, res) => {
     try {
-        const { 
-            id_vehicule, 
-            id_chauffeur, 
-            statut, 
-            startDate, 
+        const {
+            id_vehicule,
+            id_chauffeur,
+            statut,
+            startDate,
             endDate
         } = req.query;
 
@@ -944,9 +949,9 @@ router.post('/mouvements-vehicules', authenticate, authorize('admin', 'manager',
 
         // Enregistrer frais dans journal si retour avec frais
         if (type_mouvement === 'retour') {
-            const totalFrais = (parseFloat(cout_carburant) || 0) + 
-                             (parseFloat(cout_peages) || 0) + 
-                             (parseFloat(autres_frais) || 0);
+            const totalFrais = (parseFloat(cout_carburant) || 0) +
+                (parseFloat(cout_peages) || 0) +
+                (parseFloat(autres_frais) || 0);
 
             if (totalFrais > 0) {
                 const [vehiculeInfo] = await db.query(
@@ -1367,7 +1372,8 @@ router.post('/parcelles', authenticate, authorize('admin', 'manager'), async (re
             taux_humidite,
             irrigation_installee,
             proprietaire,
-            loyer_annuel
+            loyer_annuel,
+            photo
         } = req.body;
 
         // Validation
@@ -1432,7 +1438,8 @@ router.put('/parcelles/:id', authenticate, authorize('admin', 'manager'), async 
             irrigation_installee,
             statut,
             proprietaire,
-            loyer_annuel
+            loyer_annuel,
+            photo
         } = req.body;
 
         const sql = `
@@ -1660,7 +1667,7 @@ router.put('/cultures/:id/stade', authenticate, authorize('admin', 'manager', 'a
         const { stade_croissance, commentaires } = req.body;
 
         const validStades = ['semis', 'levage', 'croissance', 'floraison', 'maturation', 'recolte'];
-        
+
         if (!validStades.includes(stade_croissance)) {
             return res.status(400).json({
                 success: false,
@@ -1695,9 +1702,9 @@ router.put('/cultures/:id/stade', authenticate, authorize('admin', 'manager', 'a
  */
 router.get('/animaux', authenticate, authorize('admin', 'manager', 'veterinaire'), async (req, res) => {
     try {
-        const { 
-            espece, 
-            race, 
+        const {
+            espece,
+            race,
             sexe,
             statut,
             statut_sante,
@@ -1755,7 +1762,7 @@ router.get('/animaux', authenticate, authorize('admin', 'manager', 'veterinaire'
         }
 
         sql += ' ORDER BY a.date_naissance DESC';
-        
+
         const offset = (page - 1) * limit;
         // injecter LIMIT / OFFSET directement
         sql += ` LIMIT ${limit} OFFSET ${offset}`;

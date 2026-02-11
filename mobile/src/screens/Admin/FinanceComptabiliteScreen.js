@@ -249,16 +249,23 @@ const FinanceComptabiliteScreen = ({ navigation, route, onLogout }) => {
   const [endDate, setEndDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [datePickerField, setDatePickerField] = useState('');
+  const [datePickerValue, setDatePickerValue] = useState(new Date());
+
+  const openDatePicker = (field, initialValue = null) => {
+    setDatePickerField(field);
+    setDatePickerValue(initialValue instanceof Date ? initialValue : (initialValue ? new Date(initialValue) : new Date()));
+    setShowDatePicker(true);
+  };
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(isMobile ? 10 : 20);
 
-const [clientsList, setClientsList] = useState([]);
-const [fournisseursList, setFournisseursList] = useState([]);
-const [tiersList, setTiersList] = useState([]);
-const [sourcesList, setSourcesList] = useState([]);
-const [facturesList, setFacturesList] = useState([]);
+  const [clientsList, setClientsList] = useState([]);
+  const [fournisseursList, setFournisseursList] = useState([]);
+  const [tiersList, setTiersList] = useState([]);
+  const [sourcesList, setSourcesList] = useState([]);
+  const [facturesList, setFacturesList] = useState([]);
 
   // ============================================
   // AUTH & TOKEN - ✅ CORRIGÉ
@@ -429,105 +436,105 @@ const [facturesList, setFacturesList] = useState([]);
   /**
  * ENDPOINT 1: GET /clients - Charger les clients pour les sélecteurs
  */
-const loadClients = async () => {
-  if (!token) return;
-  try {
-    const response = await axios.get(`${API_BASE_URL}/finance/clients`, getAxiosConfig());
-    if (response.data.success) {
-      setClientsList(response.data.data || []);
-    } else if (Array.isArray(response.data)) {
-      setClientsList(response.data);
+  const loadClients = async () => {
+    if (!token) return;
+    try {
+      const response = await axios.get(`${API_BASE_URL}/finance/clients`, getAxiosConfig());
+      if (response.data.success) {
+        setClientsList(response.data.data || []);
+      } else if (Array.isArray(response.data)) {
+        setClientsList(response.data);
+      }
+    } catch (error) {
+      console.error('❌ Erreur clients:', error);
+      setClientsList([]);
     }
-  } catch (error) {
-    console.error('❌ Erreur clients:', error);
-    setClientsList([]);
-  }
-};
+  };
 
-/**
- * ENDPOINT 2: GET /fournisseurs - Charger les fournisseurs pour les sélecteurs
- */
-const loadFournisseurs = async () => {
-  if (!token) return;
-  try {
-    const response = await axios.get(`${API_BASE_URL}/finance/fournisseurs`, getAxiosConfig());
-    if (response.data.success) {
-      setFournisseursList(response.data.data || []);
-    } else if (Array.isArray(response.data)) {
-      setFournisseursList(response.data);
+  /**
+   * ENDPOINT 2: GET /fournisseurs - Charger les fournisseurs pour les sélecteurs
+   */
+  const loadFournisseurs = async () => {
+    if (!token) return;
+    try {
+      const response = await axios.get(`${API_BASE_URL}/finance/fournisseurs`, getAxiosConfig());
+      if (response.data.success) {
+        setFournisseursList(response.data.data || []);
+      } else if (Array.isArray(response.data)) {
+        setFournisseursList(response.data);
+      }
+    } catch (error) {
+      console.error('❌ Erreur fournisseurs:', error);
+      setFournisseursList([]);
     }
-  } catch (error) {
-    console.error('❌ Erreur fournisseurs:', error);
-    setFournisseursList([]);
-  }
-};
+  };
 
-/**
- * Charger la liste des tiers (clients ou fournisseurs selon le type)
- */
-const loadTiersList = async (typeFacture) => {
-  if (typeFacture === 'vente') {
-    await loadClients();
-    setTiersList(clientsList);
-  } else {
-    await loadFournisseurs();
-    setTiersList(fournisseursList);
-  }
-};
-
-/**
- * Charger la liste des sources (clients/fournisseurs/employés) pour les paiements
- */
-const loadSourceList = async (sourceType) => {
-  if (!token) return;
-  try {
-    let list = [];
-    
-    if (sourceType === 'client') {
+  /**
+   * Charger la liste des tiers (clients ou fournisseurs selon le type)
+   */
+  const loadTiersList = async (typeFacture) => {
+    if (typeFacture === 'vente') {
       await loadClients();
-      list = clientsList;
-    } else if (sourceType === 'fournisseur') {
+      setTiersList(clientsList);
+    } else {
       await loadFournisseurs();
-      list = fournisseursList;
+      setTiersList(fournisseursList);
     }
-    
-    setSourcesList(list);
-  } catch (error) {
-    console.error('❌ Erreur chargement sources:', error);
-    setSourcesList([]);
-  }
-};
+  };
 
-/**
- * Charger les factures non payées pour un client (pour les paiements)
- */
-const loadFacturesList = async (idSource) => {
-  if (!token || !idSource) return;
+  /**
+   * Charger la liste des sources (clients/fournisseurs/employés) pour les paiements
+   */
+  const loadSourceList = async (sourceType) => {
+    if (!token) return;
+    try {
+      let list = [];
 
-  try {
-    const response = await axios.get(`${API_BASE_URL}/finance/factures`, {
-      params: {
-        id_client: idSource,
-        statut_paiement: 'impayee',
-      },
-      ...getAxiosConfig(),
-    });
+      if (sourceType === 'client') {
+        await loadClients();
+        list = clientsList;
+      } else if (sourceType === 'fournisseur') {
+        await loadFournisseurs();
+        list = fournisseursList;
+      }
 
-    if (response.data.success) {
-      setFacturesList(response.data.data || []);
+      setSourcesList(list);
+    } catch (error) {
+      console.error('❌ Erreur chargement sources:', error);
+      setSourcesList([]);
     }
-  } catch (error) {
-    console.error('❌ Erreur factures du client:', error);
-    setFacturesList([]);
-  }
-};
+  };
 
-useEffect(() => {
-  if (token && !tokenLoading) {
-    loadClients();
-    loadFournisseurs();
-  }
-}, [token, tokenLoading]);
+  /**
+   * Charger les factures non payées pour un client (pour les paiements)
+   */
+  const loadFacturesList = async (idSource) => {
+    if (!token || !idSource) return;
+
+    try {
+      const response = await axios.get(`${API_BASE_URL}/finance/factures`, {
+        params: {
+          id_client: idSource,
+          statut_paiement: 'impayee',
+        },
+        ...getAxiosConfig(),
+      });
+
+      if (response.data.success) {
+        setFacturesList(response.data.data || []);
+      }
+    } catch (error) {
+      console.error('❌ Erreur factures du client:', error);
+      setFacturesList([]);
+    }
+  };
+
+  useEffect(() => {
+    if (token && !tokenLoading) {
+      loadClients();
+      loadFournisseurs();
+    }
+  }, [token, tokenLoading]);
 
   // ============================================
   // API CALLS - FACTURES
@@ -1486,7 +1493,7 @@ useEffect(() => {
         <View style={styles.dateButtonsRow}>
           <Button
             mode="outlined"
-            onPress={() => { setDatePickerField('start'); setShowDatePicker(true); }}
+            onPress={() => openDatePicker('start', startDate)}
             style={styles.dateButton}
             icon="calendar-today"
           >
@@ -1494,7 +1501,7 @@ useEffect(() => {
           </Button>
           <Button
             mode="outlined"
-            onPress={() => { setDatePickerField('end'); setShowDatePicker(true); }}
+            onPress={() => openDatePicker('end', endDate)}
             style={styles.dateButton}
             icon="calendar-today"
           >
@@ -1596,7 +1603,7 @@ useEffect(() => {
         <View style={styles.dateButtonsRow}>
           <Button
             mode="outlined"
-            onPress={() => { setDatePickerField('start'); setShowDatePicker(true); }}
+            onPress={() => openDatePicker('start', startDate)}
             style={styles.dateButton}
             icon="calendar-today"
           >
@@ -1604,7 +1611,7 @@ useEffect(() => {
           </Button>
           <Button
             mode="outlined"
-            onPress={() => { setDatePickerField('end'); setShowDatePicker(true); }}
+            onPress={() => openDatePicker('end', endDate)}
             style={styles.dateButton}
             icon="calendar-today"
           >
@@ -1944,7 +1951,7 @@ useEffect(() => {
         <View style={styles.dateButtonsRow}>
           <Button
             mode="outlined"
-            onPress={() => { setDatePickerField('start'); setShowDatePicker(true); }}
+            onPress={() => openDatePicker('start', startDate)}
             style={styles.dateButton}
             icon="calendar-today"
           >
@@ -1952,7 +1959,7 @@ useEffect(() => {
           </Button>
           <Button
             mode="outlined"
-            onPress={() => { setDatePickerField('end'); setShowDatePicker(true); }}
+            onPress={() => openDatePicker('end', endDate)}
             style={styles.dateButton}
             icon="calendar-today"
           >
@@ -2356,659 +2363,653 @@ useEffect(() => {
   /**
  * MODALE FACTURE COMPLÈTE
  */
-const renderFactureModal = () => (
-  <Portal>
-    <Modal
-      visible={factureModalVisible}
-      onDismiss={() => {
-        setFactureModalVisible(false);
-        setSelectedFacture(null);
-      }}
-      contentContainerStyle={styles.modal}
-    >
-      <ScrollView>
-        {/* HEADER */}
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Nouvelle Facture</Text>
-          <IconButton
-            icon="close"
-            size={20}
-            onPress={() => {
-              setFactureModalVisible(false);
-              setSelectedFacture(null);
-            }}
-          />
-        </View>
-
-        {/* FORM CONTENT */}
-        <View style={styles.modalForm}>
-          
-          {/* TYPE DE FACTURE */}
-          <Text style={styles.selectLabel}>Type de Facture</Text>
-          <SegmentedButtons
-            value={factureForm.type_facture}
-            onValueChange={(value) => {
-              setFactureForm({
-                ...factureForm,
-                type_facture: value,
-              });
-              loadTiersList(value);
-            }}
-            buttons={[
-              { value: 'vente', label: 'Vente (Client)' },
-              { value: 'achat', label: 'Achat (Fournisseur)' },
-            ]}
-            style={styles.segmentedBtn}
-          />
-
-          {/* SÉLECTION CLIENT/FOURNISSEUR */}
-          <Text style={styles.selectLabel}>
-            {factureForm.type_facture === 'vente' ? 'Sélectionner Client' : 'Sélectionner Fournisseur'}
-          </Text>
-          <Menu
-            visible={menuVisible && menuType === 'tiers'}
-            onDismiss={() => setMenuVisible(false)}
-            anchor={
-              <Button
-                mode="outlined"
-                onPress={() => {
-                  setMenuType('tiers');
-                  setMenuVisible(true);
-                  loadTiersList(factureForm.type_facture);
-                }}
-                icon="account-multiple"
-                contentStyle={{ justifyContent: 'flex-start' }}
-              >
-                {factureForm.client_nom
-                  ? `${factureForm.client_nom}`
-                  : 'Sélectionner...'}
-              </Button>
-            }
-          >
-            {tiersList && tiersList.length > 0 ? (
-              tiersList.map((tiers) => (
-                <Menu.Item
-                  key={tiers.id}
-                  onPress={() => {
-                    setFactureForm({
-                      ...factureForm,
-                      [factureForm.type_facture === 'vente' ? 'id_client' : 'id_fournisseur']: tiers.id,
-                      client_nom: tiers.nom_client || tiers.nom_fournisseur || tiers.nom,
-                      client_adresse: tiers.adresse || '',
-                      client_email: tiers.email || '',
-                      client_telephone: tiers.telephone || '',
-                    });
-                    setMenuVisible(false);
-                  }}
-                  title={`${tiers.nom_client || tiers.nom_fournisseur || tiers.nom}`}
-                  description={`${tiers.adresse || 'N/A'}`}
-                />
-              ))
-            ) : (
-              <Menu.Item
-                onPress={() => setMenuVisible(false)}
-                title="Aucun tiers disponible"
-                disabled
-              />
-            )}
-          </Menu>
-
-          {/* AFFICHAGE INFOS TIERS SÉLECTIONNÉ */}
-          {factureForm.client_nom && (
-            <Card style={styles.tierInfoCard}>
-              <Card.Content>
-                <View style={styles.tierHeader}>
-                  <MaterialIcons 
-                    name={factureForm.type_facture === 'vente' ? 'person' : 'business'} 
-                    size={24} 
-                    color={COLORS.success} 
-                  />
-                  <Text style={styles.tierName}>{factureForm.client_nom}</Text>
-                </View>
-                
-                {factureForm.client_adresse && (
-                  <View style={styles.tierInfoRow}>
-                    <MaterialIcons name="location-on" size={16} color={COLORS.subtext} />
-                    <Text style={styles.tierInfo}>{factureForm.client_adresse}</Text>
-                  </View>
-                )}
-                
-                {factureForm.client_email && (
-                  <View style={styles.tierInfoRow}>
-                    <MaterialIcons name="email" size={16} color={COLORS.subtext} />
-                    <Text style={styles.tierInfo}>{factureForm.client_email}</Text>
-                  </View>
-                )}
-                
-                {factureForm.client_telephone && (
-                  <View style={styles.tierInfoRow}>
-                    <MaterialIcons name="phone" size={16} color={COLORS.subtext} />
-                    <Text style={styles.tierInfo}>{factureForm.client_telephone}</Text>
-                  </View>
-                )}
-              </Card.Content>
-            </Card>
-          )}
-
-          {/* MONTANTS */}
-          <Divider style={styles.divider} />
-          <Text style={styles.selectLabel}>Montants</Text>
-          
-          <TextInput
-            label="Montant HT (BIF)"
-            value={factureForm.montant_ht}
-            onChangeText={(text) => {
-              setFactureForm({ ...factureForm, montant_ht: text });
-              const ht = parseFloat(text) || 0;
-              const tva = parseFloat(factureForm.montant_tva) || 0;
-              setFactureForm((prev) => ({
-                ...prev,
-                montant_ttc: (ht + tva).toString(),
-              }));
-            }}
-            keyboardType="decimal-pad"
-            mode="outlined"
-            style={styles.input}
-            left={<TextInput.Icon icon="currency-bif" />}
-          />
-
-          <TextInput
-            label="Montant TVA (BIF)"
-            value={factureForm.montant_tva}
-            onChangeText={(text) => {
-              setFactureForm({ ...factureForm, montant_tva: text });
-              const ht = parseFloat(factureForm.montant_ht) || 0;
-              const tva = parseFloat(text) || 0;
-              setFactureForm((prev) => ({
-                ...prev,
-                montant_ttc: (ht + tva).toString(),
-              }));
-            }}
-            keyboardType="decimal-pad"
-            mode="outlined"
-            style={styles.input}
-            left={<TextInput.Icon icon="percent" />}
-          />
-
-          <TextInput
-            label="Montant TTC (BIF)"
-            value={factureForm.montant_ttc}
-            editable={false}
-            mode="outlined"
-            style={[styles.input, styles.inputDisabled]}
-            left={<TextInput.Icon icon="check-circle" color={COLORS.success} />}
-          />
-
-          {/* MODE DE PAIEMENT */}
-          <Divider style={styles.divider} />
-          <Text style={styles.selectLabel}>Mode de Paiement</Text>
-          <SegmentedButtons
-            value={factureForm.mode_reglement}
-            onValueChange={(value) =>
-              setFactureForm({ ...factureForm, mode_reglement: value })
-            }
-            buttons={[
-              { value: 'especes', label: 'Espèces' },
-              { value: 'virement', label: 'Virement' },
-              { value: 'cheque', label: 'Chèque' },
-            ]}
-            style={styles.segmentedBtn}
-          />
-
-          {/* DATE D'ÉCHÉANCE */}
-          <Divider style={styles.divider} />
-          <Text style={styles.selectLabel}>Date d'Échéance</Text>
-          <Button
-            mode="outlined"
-            onPress={() => {
-              setDatePickerField('facture_echeance');
-              setShowDatePicker(true);
-            }}
-            icon="calendar-today"
-            style={styles.dateButton}
-          >
-            {formatDateLongue(factureForm.date_echeance)}
-          </Button>
-
-          {/* DESCRIPTION */}
-          <TextInput
-            label="Description (optionnel)"
-            value={factureForm.description || ''}
-            onChangeText={(text) =>
-              setFactureForm({ ...factureForm, description: text })
-            }
-            multiline
-            numberOfLines={2}
-            mode="outlined"
-            style={styles.input}
-          />
-
-          {/* ACTIONS */}
-          <View style={styles.modalActions}>
-            <Button
-              mode="contained"
-              onPress={handleCreateFacture}
-              buttonColor={COLORS.success}
-              loading={loading}
-              disabled={loading || !factureForm.client_nom || !factureForm.montant_ttc}
-              style={styles.modalBtn}
-              icon="check"
-            >
-              Créer Facture
-            </Button>
-            <Button
-              mode="outlined"
+  const renderFactureModal = () => (
+    <Portal>
+      <Modal
+        visible={factureModalVisible}
+        onDismiss={() => {
+          setFactureModalVisible(false);
+          setSelectedFacture(null);
+        }}
+        contentContainerStyle={styles.modal}
+      >
+        <ScrollView>
+          {/* HEADER */}
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Nouvelle Facture</Text>
+            <IconButton
+              icon="close"
+              size={20}
               onPress={() => {
                 setFactureModalVisible(false);
                 setSelectedFacture(null);
               }}
-              disabled={loading}
-              style={styles.modalBtn}
-              icon="close"
-            >
-              Annuler
-            </Button>
+            />
           </View>
-        </View>
-      </ScrollView>
-    </Modal>
-  </Portal>
-);
 
-/**
- * MODALE PAIEMENT COMPLÈTE
- */
-const renderPaiementModal = () => (
-  <Portal>
-    <Modal
-      visible={paiementModalVisible}
-      onDismiss={() => {
-        setPaiementModalVisible(false);
-        setSelectedPaiement(null);
-      }}
-      contentContainerStyle={styles.modal}
-    >
-      <ScrollView>
-        {/* HEADER */}
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>
-            {selectedPaiement ? 'Modifier Paiement' : 'Nouveau Paiement'}
-          </Text>
-          <IconButton
-            icon="close"
-            size={20}
-            onPress={() => {
-              setPaiementModalVisible(false);
-              setSelectedPaiement(null);
-            }}
-          />
-        </View>
+          {/* FORM CONTENT */}
+          <View style={styles.modalForm}>
 
-        {/* FORM CONTENT */}
-        <View style={styles.modalForm}>
-          
-          {/* TYPE DE PAIEMENT */}
-          <Text style={styles.selectLabel}>Type de Paiement</Text>
-          <SegmentedButtons
-            value={paiementForm.type_paiement}
-            onValueChange={(value) =>
-              setPaiementForm({ ...paiementForm, type_paiement: value })
-            }
-            buttons={[
-              { value: 'recette', label: 'Recette (Reçu)' },
-              { value: 'depense', label: 'Dépense (Payé)' },
-            ]}
-            style={styles.segmentedBtn}
-          />
+            {/* TYPE DE FACTURE */}
+            <Text style={styles.selectLabel}>Type de Facture</Text>
+            <SegmentedButtons
+              value={factureForm.type_facture}
+              onValueChange={(value) => {
+                setFactureForm({
+                  ...factureForm,
+                  type_facture: value,
+                });
+                loadTiersList(value);
+              }}
+              buttons={[
+                { value: 'vente', label: 'Vente (Client)' },
+                { value: 'achat', label: 'Achat (Fournisseur)' },
+              ]}
+              style={styles.segmentedBtn}
+            />
 
-          {/* TYPE DE SOURCE */}
-          <Text style={styles.selectLabel}>Source du Paiement</Text>
-          <SegmentedButtons
-            value={paiementForm.source_type}
-            onValueChange={(value) => {
-              setPaiementForm({
-                ...paiementForm,
-                source_type: value,
-                id_source: null,
-                source_nom: '',
-              });
-              loadSourceList(value);
-            }}
-            buttons={[
-              { value: 'client', label: 'Client' },
-              { value: 'fournisseur', label: 'Fournisseur' },
-              { value: 'employe', label: 'Employé' },
-              { value: 'autre', label: 'Autre' },
-            ]}
-            style={styles.segmentedBtn}
-          />
-
-          {/* SÉLECTION SOURCE SPÉCIFIQUE */}
-          <Text style={styles.selectLabel}>
-            Sélectionner {paiementForm.source_type.charAt(0).toUpperCase() + paiementForm.source_type.slice(1)}
-          </Text>
-          <Menu
-            visible={menuVisible && menuType === 'source'}
-            onDismiss={() => setMenuVisible(false)}
-            anchor={
-              <Button
-                mode="outlined"
-                onPress={() => {
-                  setMenuType('source');
-                  setMenuVisible(true);
-                  loadSourceList(paiementForm.source_type);
-                }}
-                icon="account"
-                contentStyle={{ justifyContent: 'flex-start' }}
-              >
-                {paiementForm.source_nom || 'Sélectionner...'}
-              </Button>
-            }
-          >
-            {sourcesList && sourcesList.length > 0 ? (
-              sourcesList.map((source) => (
-                <Menu.Item
-                  key={source.id}
+            {/* SÉLECTION CLIENT/FOURNISSEUR */}
+            <Text style={styles.selectLabel}>
+              {factureForm.type_facture === 'vente' ? 'Sélectionner Client' : 'Sélectionner Fournisseur'}
+            </Text>
+            <Menu
+              visible={menuVisible && menuType === 'tiers'}
+              onDismiss={() => setMenuVisible(false)}
+              anchor={
+                <Button
+                  mode="outlined"
                   onPress={() => {
-                    setPaiementForm({
-                      ...paiementForm,
-                      id_source: source.id,
-                      source_nom: source.nom_client || source.nom_fournisseur || source.nom,
-                      source_adresse: source.adresse || '',
-                      source_email: source.email || '',
-                      source_telephone: source.telephone || '',
-                      source_solde_due: source.solde_du || source.solde_actuel || 0,
-                    });
-                    setMenuVisible(false);
-                    if (paiementForm.source_type === 'client') {
-                      loadFacturesList(source.id);
-                    }
+                    setMenuType('tiers');
+                    setMenuVisible(true);
+                    loadTiersList(factureForm.type_facture);
                   }}
-                  title={source.nom_client || source.nom_fournisseur || source.nom}
-                  description={
-                    (source.solde_du || source.solde_actuel) > 0
-                      ? `Dû: ${formatMontant(source.solde_du || source.solde_actuel)}`
-                      : 'Pas de dette'
-                  }
-                />
-              ))
-            ) : (
-              <Menu.Item
-                onPress={() => setMenuVisible(false)}
-                title="Aucune source disponible"
-                disabled
-              />
-            )}
-          </Menu>
-
-          {/* AFFICHAGE INFOS SOURCE */}
-          {paiementForm.source_nom && (
-            <Card style={styles.sourceInfoCard}>
-              <Card.Content>
-                <View style={styles.tierHeader}>
-                  <MaterialIcons 
-                    name={paiementForm.source_type === 'client' ? 'person' : 'business'} 
-                    size={24} 
-                    color={COLORS.info} 
-                  />
-                  <Text style={styles.sourceName}>{paiementForm.source_nom}</Text>
-                </View>
-                
-                {paiementForm.source_adresse && (
-                  <View style={styles.tierInfoRow}>
-                    <MaterialIcons name="location-on" size={16} color={COLORS.subtext} />
-                    <Text style={styles.sourceInfo}>{paiementForm.source_adresse}</Text>
-                  </View>
-                )}
-                
-                {paiementForm.source_email && (
-                  <View style={styles.tierInfoRow}>
-                    <MaterialIcons name="email" size={16} color={COLORS.subtext} />
-                    <Text style={styles.sourceInfo}>{paiementForm.source_email}</Text>
-                  </View>
-                )}
-                
-                {paiementForm.source_telephone && (
-                  <View style={styles.tierInfoRow}>
-                    <MaterialIcons name="phone" size={16} color={COLORS.subtext} />
-                    <Text style={styles.sourceInfo}>{paiementForm.source_telephone}</Text>
-                  </View>
-                )}
-
-                {paiementForm.source_type === 'client' && paiementForm.source_solde_due > 0 && (
-                  <View style={styles.soldeDu}>
-                    <Text style={styles.soldeDuLabel}>Solde dû:</Text>
-                    <Text style={[styles.soldeDuAmount, { color: COLORS.danger }]}>
-                      {formatMontant(paiementForm.source_solde_due)}
-                    </Text>
-                  </View>
-                )}
-              </Card.Content>
-            </Card>
-          )}
-
-          {/* SÉLECTION FACTURE ASSOCIÉE (OPTIONNEL - CLIENTS SEULEMENT) */}
-          {paiementForm.source_type === 'client' && (
-            <>
-              <Divider style={styles.divider} />
-              <Text style={styles.selectLabel}>Facture Associée (Optionnel)</Text>
-              <Menu
-                visible={menuVisible && menuType === 'facture'}
-                onDismiss={() => setMenuVisible(false)}
-                anchor={
-                  <Button
-                    mode="outlined"
-                    onPress={() => {
-                      setMenuType('facture');
-                      setMenuVisible(true);
-                      loadFacturesList(paiementForm.id_source);
-                    }}
-                    icon="receipt"
-                    contentStyle={{ justifyContent: 'flex-start' }}
-                  >
-                    {paiementForm.facture_numero || 'Sélectionner facture...'}
-                  </Button>
-                }
-              >
-                {facturesList && facturesList.length > 0 ? (
-                  facturesList.map((facture) => (
-                    <Menu.Item
-                      key={facture.id}
-                      onPress={() => {
-                        setPaiementForm({
-                          ...paiementForm,
-                          id_facture: facture.id,
-                          facture_numero: facture.numero_facture,
-                          facture_montant_due: facture.montant_du || facture.montant_ttc,
-                        });
-                        setMenuVisible(false);
-                      }}
-                      title={facture.numero_facture}
-                      description={`Dû: ${formatMontant(facture.montant_du || facture.montant_ttc)}`}
-                    />
-                  ))
-                ) : (
-                  <Menu.Item
-                    onPress={() => setMenuVisible(false)}
-                    title="Aucune facture à payer"
-                    disabled
-                  />
-                )}
-              </Menu>
-            </>
-          )}
-
-          {/* MONTANT */}
-          <Divider style={styles.divider} />
-          <Text style={styles.selectLabel}>Montant (BIF)</Text>
-          <TextInput
-            label="Montant"
-            value={paiementForm.montant}
-            onChangeText={(text) =>
-              setPaiementForm({ ...paiementForm, montant: text })
-            }
-            keyboardType="decimal-pad"
-            mode="outlined"
-            style={styles.input}
-            left={<TextInput.Icon icon="currency-bif" />}
-          />
-
-          {/* AFFICHAGE MONTANT DÛ ET RESTANT */}
-          {paiementForm.facture_montant_due > 0 && (
-            <Card style={styles.montantInfo}>
-              <Card.Content>
-                <View style={styles.montantRow}>
-                  <Text style={styles.montantLabel}>Montant dû:</Text>
-                  <Text style={styles.montantValue}>
-                    {formatMontant(paiementForm.facture_montant_due)}
-                  </Text>
-                </View>
-                
-                {paiementForm.montant && (
-                  <View style={[styles.montantRow, { marginTop: 8 }]}>
-                    <Text style={styles.montantLabel}>Montant payé:</Text>
-                    <Text style={styles.montantValue}>
-                      {formatMontant(parseFloat(paiementForm.montant) || 0)}
-                    </Text>
-                  </View>
-                )}
-
-                {paiementForm.montant && (
-                  <View style={[styles.montantRow, { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: COLORS.border }]}>
-                    <Text style={styles.montantLabel}>Restant:</Text>
-                    <Text
-                      style={[
-                        styles.montantValue,
-                        {
-                          color:
-                            parseFloat(paiementForm.montant) >= paiementForm.facture_montant_due
-                              ? COLORS.success
-                              : COLORS.warning,
-                        },
-                      ]}
-                    >
-                      {formatMontant(
-                        Math.max(0, paiementForm.facture_montant_due - parseFloat(paiementForm.montant || 0))
-                      )}
-                    </Text>
-                  </View>
-                )}
-              </Card.Content>
-            </Card>
-          )}
-
-          {/* MODE DE PAIEMENT */}
-          <Divider style={styles.divider} />
-          <Text style={styles.selectLabel}>Mode de Paiement</Text>
-          <SegmentedButtons
-            value={paiementForm.mode_paiement}
-            onValueChange={(value) =>
-              setPaiementForm({ ...paiementForm, mode_paiement: value })
-            }
-            buttons={[
-              { value: 'especes', label: 'Espèces' },
-              { value: 'virement', label: 'Virement' },
-              { value: 'cheque', label: 'Chèque' },
-              { value: 'mobilebank', label: 'Mobile Money' },
-            ]}
-            style={styles.segmentedBtn}
-          />
-
-          {/* DÉTAILS CONDITIONNELS DU MODE */}
-          {paiementForm.mode_paiement === 'cheque' && (
-            <TextInput
-              label="Numéro de chèque"
-              value={paiementForm.reference_mode}
-              onChangeText={(text) =>
-                setPaiementForm({ ...paiementForm, reference_mode: text })
+                  icon="account-multiple"
+                  contentStyle={{ justifyContent: 'flex-start' }}
+                >
+                  {factureForm.client_nom
+                    ? `${factureForm.client_nom}`
+                    : 'Sélectionner...'}
+                </Button>
               }
+            >
+              {tiersList && tiersList.length > 0 ? (
+                tiersList.map((tiers) => (
+                  <Menu.Item
+                    key={tiers.id}
+                    onPress={() => {
+                      setFactureForm({
+                        ...factureForm,
+                        [factureForm.type_facture === 'vente' ? 'id_client' : 'id_fournisseur']: tiers.id,
+                        client_nom: tiers.nom_client || tiers.nom_fournisseur || tiers.nom,
+                        client_adresse: tiers.adresse || '',
+                        client_email: tiers.email || '',
+                        client_telephone: tiers.telephone || '',
+                      });
+                      setMenuVisible(false);
+                    }}
+                    title={`${tiers.nom_client || tiers.nom_fournisseur || tiers.nom}`}
+                    description={`${tiers.adresse || 'N/A'}`}
+                  />
+                ))
+              ) : (
+                <Menu.Item
+                  onPress={() => setMenuVisible(false)}
+                  title="Aucun tiers disponible"
+                  disabled
+                />
+              )}
+            </Menu>
+
+            {/* AFFICHAGE INFOS TIERS SÉLECTIONNÉ */}
+            {factureForm.client_nom && (
+              <Card style={styles.tierInfoCard}>
+                <Card.Content>
+                  <View style={styles.tierHeader}>
+                    <MaterialIcons
+                      name={factureForm.type_facture === 'vente' ? 'person' : 'business'}
+                      size={24}
+                      color={COLORS.success}
+                    />
+                    <Text style={styles.tierName}>{factureForm.client_nom}</Text>
+                  </View>
+
+                  {factureForm.client_adresse && (
+                    <View style={styles.tierInfoRow}>
+                      <MaterialIcons name="location-on" size={16} color={COLORS.subtext} />
+                      <Text style={styles.tierInfo}>{factureForm.client_adresse}</Text>
+                    </View>
+                  )}
+
+                  {factureForm.client_email && (
+                    <View style={styles.tierInfoRow}>
+                      <MaterialIcons name="email" size={16} color={COLORS.subtext} />
+                      <Text style={styles.tierInfo}>{factureForm.client_email}</Text>
+                    </View>
+                  )}
+
+                  {factureForm.client_telephone && (
+                    <View style={styles.tierInfoRow}>
+                      <MaterialIcons name="phone" size={16} color={COLORS.subtext} />
+                      <Text style={styles.tierInfo}>{factureForm.client_telephone}</Text>
+                    </View>
+                  )}
+                </Card.Content>
+              </Card>
+            )}
+
+            {/* MONTANTS */}
+            <Divider style={styles.divider} />
+            <Text style={styles.selectLabel}>Montants</Text>
+
+            <TextInput
+              label="Montant HT (BIF)"
+              value={factureForm.montant_ht}
+              onChangeText={(text) => {
+                setFactureForm({ ...factureForm, montant_ht: text });
+                const ht = parseFloat(text) || 0;
+                const tva = parseFloat(factureForm.montant_tva) || 0;
+                setFactureForm((prev) => ({
+                  ...prev,
+                  montant_ttc: (ht + tva).toString(),
+                }));
+              }}
+              keyboardType="decimal-pad"
+              mode="outlined"
+              style={styles.input}
+              left={<TextInput.Icon icon="currency-bif" />}
+            />
+
+            <TextInput
+              label="Montant TVA (BIF)"
+              value={factureForm.montant_tva}
+              onChangeText={(text) => {
+                setFactureForm({ ...factureForm, montant_tva: text });
+                const ht = parseFloat(factureForm.montant_ht) || 0;
+                const tva = parseFloat(text) || 0;
+                setFactureForm((prev) => ({
+                  ...prev,
+                  montant_ttc: (ht + tva).toString(),
+                }));
+              }}
+              keyboardType="decimal-pad"
+              mode="outlined"
+              style={styles.input}
+              left={<TextInput.Icon icon="percent" />}
+            />
+
+            <TextInput
+              label="Montant TTC (BIF)"
+              value={factureForm.montant_ttc}
+              editable={false}
+              mode="outlined"
+              style={[styles.input, styles.inputDisabled]}
+              left={<TextInput.Icon icon="check-circle" color={COLORS.success} />}
+            />
+
+            {/* MODE DE PAIEMENT */}
+            <Divider style={styles.divider} />
+            <Text style={styles.selectLabel}>Mode de Paiement</Text>
+            <SegmentedButtons
+              value={factureForm.mode_reglement}
+              onValueChange={(value) =>
+                setFactureForm({ ...factureForm, mode_reglement: value })
+              }
+              buttons={[
+                { value: 'especes', label: 'Espèces' },
+                { value: 'virement', label: 'Virement' },
+                { value: 'cheque', label: 'Chèque' },
+              ]}
+              style={styles.segmentedBtn}
+            />
+
+            {/* DATE D'ÉCHÉANCE */}
+            <Divider style={styles.divider} />
+            <Text style={styles.selectLabel}>Date d'Échéance</Text>
+            <Button
+              mode="outlined"
+              onPress={() => openDatePicker('facture_echeance', factureForm.date_echeance)}
+              icon="calendar-today"
+              style={styles.dateButton}
+            >
+              {formatDateLongue(factureForm.date_echeance)}
+            </Button>
+
+            {/* DESCRIPTION */}
+            <TextInput
+              label="Description (optionnel)"
+              value={factureForm.description || ''}
+              onChangeText={(text) =>
+                setFactureForm({ ...factureForm, description: text })
+              }
+              multiline
+              numberOfLines={2}
               mode="outlined"
               style={styles.input}
             />
-          )}
 
-          {paiementForm.mode_paiement === 'virement' && (
-            <>
-              <TextInput
-                label="Banque"
-                value={paiementForm.banque || ''}
-                onChangeText={(text) =>
-                  setPaiementForm({ ...paiementForm, banque: text })
-                }
+            {/* ACTIONS */}
+            <View style={styles.modalActions}>
+              <Button
+                mode="contained"
+                onPress={handleCreateFacture}
+                buttonColor={COLORS.success}
+                loading={loading}
+                disabled={loading || !factureForm.client_nom || !factureForm.montant_ttc}
+                style={styles.modalBtn}
+                icon="check"
+              >
+                Créer Facture
+              </Button>
+              <Button
                 mode="outlined"
-                style={styles.input}
-              />
-              <TextInput
-                label="Numéro de virement"
-                value={paiementForm.numero_virement || ''}
-                onChangeText={(text) =>
-                  setPaiementForm({ ...paiementForm, numero_virement: text })
-                }
-                mode="outlined"
-                style={styles.input}
-              />
-            </>
-          )}
+                onPress={() => {
+                  setFactureModalVisible(false);
+                  setSelectedFacture(null);
+                }}
+                disabled={loading}
+                style={styles.modalBtn}
+                icon="close"
+              >
+                Annuler
+              </Button>
+            </View>
+          </View>
+        </ScrollView>
+      </Modal>
+    </Portal>
+  );
 
-          {/*DATE */}
-          <Divider style={styles.divider} />
-          <Text style={styles.selectLabel}>Date du Paiement</Text>
-          <Button
-            mode="outlined"
-            onPress={() => {
-              setDatePickerField('paiement_date');
-              setShowDatePicker(true);
-            }}
-            icon="calendar-today"
-            style={styles.dateButton}
-          >
-            {formatDateLongue(paiementForm.date_paiement)}
-          </Button>
-
-          {/* DESCRIPTION */}
-          <TextInput
-            label="Description/Observations"
-            value={paiementForm.description}
-            onChangeText={(text) =>
-              setPaiementForm({ ...paiementForm, description: text })
-            }
-            multiline
-            numberOfLines={2}
-            mode="outlined"
-            style={styles.input}
-          />
-
-          {/* ACTIONS */}
-          <View style={styles.modalActions}>
-            <Button
-              mode="contained"
-              onPress={handleSavePaiement}
-              buttonColor={COLORS.success}
-              loading={loading}
-              disabled={loading || !paiementForm.source_nom || !paiementForm.montant}
-              style={styles.modalBtn}
-              icon="check"
-            >
-              {selectedPaiement ? 'Modifier' : 'Enregistrer'} Paiement
-            </Button>
-            <Button
-              mode="outlined"
+  /**
+   * MODALE PAIEMENT COMPLÈTE
+   */
+  const renderPaiementModal = () => (
+    <Portal>
+      <Modal
+        visible={paiementModalVisible}
+        onDismiss={() => {
+          setPaiementModalVisible(false);
+          setSelectedPaiement(null);
+        }}
+        contentContainerStyle={styles.modal}
+      >
+        <ScrollView>
+          {/* HEADER */}
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>
+              {selectedPaiement ? 'Modifier Paiement' : 'Nouveau Paiement'}
+            </Text>
+            <IconButton
+              icon="close"
+              size={20}
               onPress={() => {
                 setPaiementModalVisible(false);
                 setSelectedPaiement(null);
               }}
-              disabled={loading}
-              style={styles.modalBtn}
-              icon="close"
-            >
-              Annuler
-            </Button>
+            />
           </View>
-        </View>
-      </ScrollView>
-    </Modal>
-  </Portal>
-);
+
+          {/* FORM CONTENT */}
+          <View style={styles.modalForm}>
+
+            {/* TYPE DE PAIEMENT */}
+            <Text style={styles.selectLabel}>Type de Paiement</Text>
+            <SegmentedButtons
+              value={paiementForm.type_paiement}
+              onValueChange={(value) =>
+                setPaiementForm({ ...paiementForm, type_paiement: value })
+              }
+              buttons={[
+                { value: 'recette', label: 'Recette (Reçu)' },
+                { value: 'depense', label: 'Dépense (Payé)' },
+              ]}
+              style={styles.segmentedBtn}
+            />
+
+            {/* TYPE DE SOURCE */}
+            <Text style={styles.selectLabel}>Source du Paiement</Text>
+            <SegmentedButtons
+              value={paiementForm.source_type}
+              onValueChange={(value) => {
+                setPaiementForm({
+                  ...paiementForm,
+                  source_type: value,
+                  id_source: null,
+                  source_nom: '',
+                });
+                loadSourceList(value);
+              }}
+              buttons={[
+                { value: 'client', label: 'Client' },
+                { value: 'fournisseur', label: 'Fournisseur' },
+                { value: 'employe', label: 'Employé' },
+                { value: 'autre', label: 'Autre' },
+              ]}
+              style={styles.segmentedBtn}
+            />
+
+            {/* SÉLECTION SOURCE SPÉCIFIQUE */}
+            <Text style={styles.selectLabel}>
+              Sélectionner {paiementForm.source_type.charAt(0).toUpperCase() + paiementForm.source_type.slice(1)}
+            </Text>
+            <Menu
+              visible={menuVisible && menuType === 'source'}
+              onDismiss={() => setMenuVisible(false)}
+              anchor={
+                <Button
+                  mode="outlined"
+                  onPress={() => {
+                    setMenuType('source');
+                    setMenuVisible(true);
+                    loadSourceList(paiementForm.source_type);
+                  }}
+                  icon="account"
+                  contentStyle={{ justifyContent: 'flex-start' }}
+                >
+                  {paiementForm.source_nom || 'Sélectionner...'}
+                </Button>
+              }
+            >
+              {sourcesList && sourcesList.length > 0 ? (
+                sourcesList.map((source) => (
+                  <Menu.Item
+                    key={source.id}
+                    onPress={() => {
+                      setPaiementForm({
+                        ...paiementForm,
+                        id_source: source.id,
+                        source_nom: source.nom_client || source.nom_fournisseur || source.nom,
+                        source_adresse: source.adresse || '',
+                        source_email: source.email || '',
+                        source_telephone: source.telephone || '',
+                        source_solde_due: source.solde_du || source.solde_actuel || 0,
+                      });
+                      setMenuVisible(false);
+                      if (paiementForm.source_type === 'client') {
+                        loadFacturesList(source.id);
+                      }
+                    }}
+                    title={source.nom_client || source.nom_fournisseur || source.nom}
+                    description={
+                      (source.solde_du || source.solde_actuel) > 0
+                        ? `Dû: ${formatMontant(source.solde_du || source.solde_actuel)}`
+                        : 'Pas de dette'
+                    }
+                  />
+                ))
+              ) : (
+                <Menu.Item
+                  onPress={() => setMenuVisible(false)}
+                  title="Aucune source disponible"
+                  disabled
+                />
+              )}
+            </Menu>
+
+            {/* AFFICHAGE INFOS SOURCE */}
+            {paiementForm.source_nom && (
+              <Card style={styles.sourceInfoCard}>
+                <Card.Content>
+                  <View style={styles.tierHeader}>
+                    <MaterialIcons
+                      name={paiementForm.source_type === 'client' ? 'person' : 'business'}
+                      size={24}
+                      color={COLORS.info}
+                    />
+                    <Text style={styles.sourceName}>{paiementForm.source_nom}</Text>
+                  </View>
+
+                  {paiementForm.source_adresse && (
+                    <View style={styles.tierInfoRow}>
+                      <MaterialIcons name="location-on" size={16} color={COLORS.subtext} />
+                      <Text style={styles.sourceInfo}>{paiementForm.source_adresse}</Text>
+                    </View>
+                  )}
+
+                  {paiementForm.source_email && (
+                    <View style={styles.tierInfoRow}>
+                      <MaterialIcons name="email" size={16} color={COLORS.subtext} />
+                      <Text style={styles.sourceInfo}>{paiementForm.source_email}</Text>
+                    </View>
+                  )}
+
+                  {paiementForm.source_telephone && (
+                    <View style={styles.tierInfoRow}>
+                      <MaterialIcons name="phone" size={16} color={COLORS.subtext} />
+                      <Text style={styles.sourceInfo}>{paiementForm.source_telephone}</Text>
+                    </View>
+                  )}
+
+                  {paiementForm.source_type === 'client' && paiementForm.source_solde_due > 0 && (
+                    <View style={styles.soldeDu}>
+                      <Text style={styles.soldeDuLabel}>Solde dû:</Text>
+                      <Text style={[styles.soldeDuAmount, { color: COLORS.danger }]}>
+                        {formatMontant(paiementForm.source_solde_due)}
+                      </Text>
+                    </View>
+                  )}
+                </Card.Content>
+              </Card>
+            )}
+
+            {/* SÉLECTION FACTURE ASSOCIÉE (OPTIONNEL - CLIENTS SEULEMENT) */}
+            {paiementForm.source_type === 'client' && (
+              <>
+                <Divider style={styles.divider} />
+                <Text style={styles.selectLabel}>Facture Associée (Optionnel)</Text>
+                <Menu
+                  visible={menuVisible && menuType === 'facture'}
+                  onDismiss={() => setMenuVisible(false)}
+                  anchor={
+                    <Button
+                      mode="outlined"
+                      onPress={() => {
+                        setMenuType('facture');
+                        setMenuVisible(true);
+                        loadFacturesList(paiementForm.id_source);
+                      }}
+                      icon="receipt"
+                      contentStyle={{ justifyContent: 'flex-start' }}
+                    >
+                      {paiementForm.facture_numero || 'Sélectionner facture...'}
+                    </Button>
+                  }
+                >
+                  {facturesList && facturesList.length > 0 ? (
+                    facturesList.map((facture) => (
+                      <Menu.Item
+                        key={facture.id}
+                        onPress={() => {
+                          setPaiementForm({
+                            ...paiementForm,
+                            id_facture: facture.id,
+                            facture_numero: facture.numero_facture,
+                            facture_montant_due: facture.montant_du || facture.montant_ttc,
+                          });
+                          setMenuVisible(false);
+                        }}
+                        title={facture.numero_facture}
+                        description={`Dû: ${formatMontant(facture.montant_du || facture.montant_ttc)}`}
+                      />
+                    ))
+                  ) : (
+                    <Menu.Item
+                      onPress={() => setMenuVisible(false)}
+                      title="Aucune facture à payer"
+                      disabled
+                    />
+                  )}
+                </Menu>
+              </>
+            )}
+
+            {/* MONTANT */}
+            <Divider style={styles.divider} />
+            <Text style={styles.selectLabel}>Montant (BIF)</Text>
+            <TextInput
+              label="Montant"
+              value={paiementForm.montant}
+              onChangeText={(text) =>
+                setPaiementForm({ ...paiementForm, montant: text })
+              }
+              keyboardType="decimal-pad"
+              mode="outlined"
+              style={styles.input}
+              left={<TextInput.Icon icon="currency-bif" />}
+            />
+
+            {/* AFFICHAGE MONTANT DÛ ET RESTANT */}
+            {paiementForm.facture_montant_due > 0 && (
+              <Card style={styles.montantInfo}>
+                <Card.Content>
+                  <View style={styles.montantRow}>
+                    <Text style={styles.montantLabel}>Montant dû:</Text>
+                    <Text style={styles.montantValue}>
+                      {formatMontant(paiementForm.facture_montant_due)}
+                    </Text>
+                  </View>
+
+                  {paiementForm.montant && (
+                    <View style={[styles.montantRow, { marginTop: 8 }]}>
+                      <Text style={styles.montantLabel}>Montant payé:</Text>
+                      <Text style={styles.montantValue}>
+                        {formatMontant(parseFloat(paiementForm.montant) || 0)}
+                      </Text>
+                    </View>
+                  )}
+
+                  {paiementForm.montant && (
+                    <View style={[styles.montantRow, { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: COLORS.border }]}>
+                      <Text style={styles.montantLabel}>Restant:</Text>
+                      <Text
+                        style={[
+                          styles.montantValue,
+                          {
+                            color:
+                              parseFloat(paiementForm.montant) >= paiementForm.facture_montant_due
+                                ? COLORS.success
+                                : COLORS.warning,
+                          },
+                        ]}
+                      >
+                        {formatMontant(
+                          Math.max(0, paiementForm.facture_montant_due - parseFloat(paiementForm.montant || 0))
+                        )}
+                      </Text>
+                    </View>
+                  )}
+                </Card.Content>
+              </Card>
+            )}
+
+            {/* MODE DE PAIEMENT */}
+            <Divider style={styles.divider} />
+            <Text style={styles.selectLabel}>Mode de Paiement</Text>
+            <SegmentedButtons
+              value={paiementForm.mode_paiement}
+              onValueChange={(value) =>
+                setPaiementForm({ ...paiementForm, mode_paiement: value })
+              }
+              buttons={[
+                { value: 'especes', label: 'Espèces' },
+                { value: 'virement', label: 'Virement' },
+                { value: 'cheque', label: 'Chèque' },
+                { value: 'mobilebank', label: 'Mobile Money' },
+              ]}
+              style={styles.segmentedBtn}
+            />
+
+            {/* DÉTAILS CONDITIONNELS DU MODE */}
+            {paiementForm.mode_paiement === 'cheque' && (
+              <TextInput
+                label="Numéro de chèque"
+                value={paiementForm.reference_mode}
+                onChangeText={(text) =>
+                  setPaiementForm({ ...paiementForm, reference_mode: text })
+                }
+                mode="outlined"
+                style={styles.input}
+              />
+            )}
+
+            {paiementForm.mode_paiement === 'virement' && (
+              <>
+                <TextInput
+                  label="Banque"
+                  value={paiementForm.banque || ''}
+                  onChangeText={(text) =>
+                    setPaiementForm({ ...paiementForm, banque: text })
+                  }
+                  mode="outlined"
+                  style={styles.input}
+                />
+                <TextInput
+                  label="Numéro de virement"
+                  value={paiementForm.numero_virement || ''}
+                  onChangeText={(text) =>
+                    setPaiementForm({ ...paiementForm, numero_virement: text })
+                  }
+                  mode="outlined"
+                  style={styles.input}
+                />
+              </>
+            )}
+
+            {/*DATE */}
+            <Divider style={styles.divider} />
+            <Text style={styles.selectLabel}>Date du Paiement</Text>
+            <Button
+              mode="outlined"
+              onPress={() => openDatePicker('paiement_date', paiementForm.date_paiement)}
+              icon="calendar-today"
+              style={styles.dateButton}
+            >
+              {formatDateLongue(paiementForm.date_paiement)}
+            </Button>
+
+            {/* DESCRIPTION */}
+            <TextInput
+              label="Description/Observations"
+              value={paiementForm.description}
+              onChangeText={(text) =>
+                setPaiementForm({ ...paiementForm, description: text })
+              }
+              multiline
+              numberOfLines={2}
+              mode="outlined"
+              style={styles.input}
+            />
+
+            {/* ACTIONS */}
+            <View style={styles.modalActions}>
+              <Button
+                mode="contained"
+                onPress={handleSavePaiement}
+                buttonColor={COLORS.success}
+                loading={loading}
+                disabled={loading || !paiementForm.source_nom || !paiementForm.montant}
+                style={styles.modalBtn}
+                icon="check"
+              >
+                {selectedPaiement ? 'Modifier' : 'Enregistrer'} Paiement
+              </Button>
+              <Button
+                mode="outlined"
+                onPress={() => {
+                  setPaiementModalVisible(false);
+                  setSelectedPaiement(null);
+                }}
+                disabled={loading}
+                style={styles.modalBtn}
+                icon="close"
+              >
+                Annuler
+              </Button>
+            </View>
+          </View>
+        </ScrollView>
+      </Modal>
+    </Portal>
+  );
 
   // ============================================
   // RENDER MAIN - ✅ CORRIGÉ
@@ -3085,158 +3086,148 @@ const renderPaiementModal = () => (
       </SafeAreaView>
     );
   }
-return (
-  <SafeAreaView style={styles.container}>
-    <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-   {/* Header - VERSION CORRIGÉE */}
-<View style={[
-  styles.headerBar,
-  isMobile && styles.headerBarMobile,
-]}>
-  <View style={styles.headerInfo}>
-    <Text style={styles.headerTitle}>Finance & Comptabilité</Text>
-    <Text style={styles.headerSubtitle}>Gestion financière complète</Text>
-  </View>
+      {/* Header - VERSION CORRIGÉE */}
+      <View style={[
+        styles.headerBar,
+        isMobile && styles.headerBarMobile,
+      ]}>
+        <View style={styles.headerInfo}>
+          <Text style={styles.headerTitle}>Finance & Comptabilité</Text>
+          <Text style={styles.headerSubtitle}>Gestion financière complète</Text>
+        </View>
 
-  {/* Navigation Tabs - VERSION COMPACTE */}
-  <View style={styles.headerActions}>
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.tabsContainer}
-      scrollEnabled={true}
-      nestedScrollEnabled={true}
-    >
-      {[
-        { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
-        { id: 'factures', label: 'Factures', icon: 'receipt' },
-        { id: 'paiements', label: 'Paiements', icon: 'payment' },
-        { id: 'journal', label: 'Journal', icon: 'book' },
-        { id: 'balance', label: 'Balance', icon: 'account-balance' },
-        { id: 'grand-livre', label: 'Grand Livre', icon: 'library-books' },
-        { id: 'rapports', label: 'Rapports', icon: 'assessment' },
-      ].map((tab) => (
-        <TouchableOpacity
-          key={tab.id}
-          style={[
-            styles.tabItem,
-            activeTab === tab.id && styles.activeTabItem,
-          ]}
-          onPress={() => {
-            setActiveTab(tab.id);
-            setCurrentPage(1);
-          }}
-        >
-          <MaterialIcons
-            name={tab.icon}
-            size={18}
-            color={activeTab === tab.id ? '#FFFFFF' : '#64748B'}
+        {/* Navigation Tabs - VERSION COMPACTE */}
+        <View style={styles.headerActions}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabsContainer}
+            scrollEnabled={true}
+            nestedScrollEnabled={true}
+          >
+            {[
+              { id: 'dashboard', label: 'Tableau de bord', icon: 'dashboard' },
+              { id: 'factures', label: 'Factures', icon: 'receipt' },
+              { id: 'paiements', label: 'Paiements', icon: 'payment' },
+              { id: 'journal', label: 'Journal', icon: 'book' },
+              { id: 'balance', label: 'Balance', icon: 'account-balance' },
+              { id: 'grand-livre', label: 'Grand Livre', icon: 'library-books' },
+              { id: 'rapports', label: 'Rapports', icon: 'assessment' },
+            ].map((tab) => (
+              <TouchableOpacity
+                key={tab.id}
+                style={[
+                  styles.tabItem,
+                  activeTab === tab.id && styles.activeTabItem,
+                ]}
+                onPress={() => {
+                  setActiveTab(tab.id);
+                  setCurrentPage(1);
+                }}
+              >
+                <MaterialIcons
+                  name={tab.icon}
+                  size={18}
+                  color={activeTab === tab.id ? '#FFFFFF' : '#64748B'}
+                />
+                {!isMobile && (
+                  <Text style={[
+                    styles.tabLabel,
+                    activeTab === tab.id && styles.activeTabLabel,
+                  ]}>
+                    {tab.label}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <IconButton
+            icon="refresh"
+            size={20}
+            iconColor={COLORS.primary}
+            onPress={onRefresh}
+            disabled={loading || refreshing}
+            style={styles.refreshBtn}
           />
-          {!isMobile && (
-            <Text style={[
-              styles.tabLabel,
-              activeTab === tab.id && styles.activeTabLabel,
-            ]}>
-              {tab.label}
-            </Text>
-          )}
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
+        </View>
+      </View>
 
-    <IconButton
-      icon="refresh"
-      size={20}
-      iconColor={COLORS.primary}
-      onPress={onRefresh}
-      disabled={loading || refreshing}
-      style={styles.refreshBtn}
-    />
-  </View>
-</View>
+      {renderContent()}
 
-    {renderContent()}
+      {/* FAB pour ajouts rapides */}
+      {(activeTab === 'paiements' || activeTab === 'factures') && (
+        <FAB
+          icon="plus"
+          style={styles.fab}
+          onPress={activeTab === 'paiements' ? handleAddPaiement : handleAddFacture}
+          color="#FFFFFF"
+        />
+      )}
 
-    {/* FAB pour ajouts rapides */}
-    {(activeTab === 'paiements' || activeTab === 'factures') && (
-      <FAB
-        icon="plus"
-        style={styles.fab}
-        onPress={activeTab === 'paiements' ? handleAddPaiement : handleAddFacture}
-        color="#FFFFFF"
-      />
-    )}
+      {/* ✅ NOUVELLES MODALES COMPLÈTES */}
+      {renderFactureModal()}
+      {renderPaiementModal()}
 
-    {/* ✅ NOUVELLES MODALES COMPLÈTES */}
-    {renderFactureModal()}
-    {renderPaiementModal()}
+      {/* Date Picker */}
+      {showDatePicker && (
+        <DateTimePicker
+          value={datePickerValue}
+          mode="date"
+          display="default"
+          onChange={(event, date) => {
+            setShowDatePicker(false);
+            if (date) {
+              // Gestion des différents types de dates
+              switch (datePickerField) {
+                case 'start':
+                  setStartDate(date);
+                  setCurrentPage(1);
+                  break;
 
-    {/* Date Picker */}
-    {showDatePicker && (
-      <DateTimePicker
-        value={
-          datePickerField === 'start' 
-            ? startDate 
-            : datePickerField === 'end' 
-            ? endDate 
-            : datePickerField === 'facture_echeance'
-            ? factureForm.date_echeance
-            : datePickerField === 'paiement_date'
-            ? paiementForm.date_paiement
-            : new Date()
-        }
-        mode="date"
-        display="default"
-        onChange={(event, date) => {
-          setShowDatePicker(false);
-          if (date) {
-            // Gestion des différents types de dates
-            switch (datePickerField) {
-              case 'start':
-                setStartDate(date);
-                setCurrentPage(1);
-                break;
-              
-              case 'end':
-                setEndDate(date);
-                setCurrentPage(1);
-                break;
-              
-              case 'facture_echeance':
-                setFactureForm({ 
-                  ...factureForm, 
-                  date_echeance: date 
-                });
-                break;
-              
-              case 'paiement_date':
-                setPaiementForm({ 
-                  ...paiementForm, 
-                  date_paiement: date 
-                });
-                break;
-              
-              default:
-                console.warn('Type de date non reconnu:', datePickerField);
-                break;
+                case 'end':
+                  setEndDate(date);
+                  setCurrentPage(1);
+                  break;
+
+                case 'facture_echeance':
+                  setFactureForm({
+                    ...factureForm,
+                    date_echeance: date
+                  });
+                  break;
+
+                case 'paiement_date':
+                  setPaiementForm({
+                    ...paiementForm,
+                    date_paiement: date
+                  });
+                  break;
+
+                default:
+                  console.warn('Type de date non reconnu:', datePickerField);
+                  break;
+              }
             }
+          }}
+          minimumDate={
+            datePickerField === 'end'
+              ? startDate
+              : undefined
           }
-        }}
-        minimumDate={
-          datePickerField === 'end' 
-            ? startDate 
-            : undefined
-        }
-        maximumDate={
-          datePickerField === 'start' 
-            ? endDate 
-            : undefined
-        }
-      />
-    )}
-  </SafeAreaView>
-);
+          maximumDate={
+            datePickerField === 'start'
+              ? endDate
+              : undefined
+          }
+        />
+      )}
+    </SafeAreaView>
+  );
 
 };
 
@@ -3271,104 +3262,104 @@ const styles = StyleSheet.create({
     padding: 40,
     marginVertical: 40,
   },
- headerBar: {
-  flexDirection: 'row',
-  alignItems: 'flex-start', // IMPORTANT: change de 'center' à 'flex-start'
-  justifyContent: 'space-between',
-  padding: 16,
-  paddingTop: Platform.OS === 'ios' ? 0 : 16,
-  backgroundColor: COLORS.card,
-  borderBottomWidth: 1,
-  borderBottomColor: COLORS.border,
-  minHeight: 70, // IMPORTANT: limite la hauteur minimum
-  maxHeight: 120, // IMPORTANT: limite la hauteur maximum
-  ...(Platform.OS === 'web' && { boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }),
-  elevation: 2,
-},
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'flex-start', // IMPORTANT: change de 'center' à 'flex-start'
+    justifyContent: 'space-between',
+    padding: 16,
+    paddingTop: Platform.OS === 'ios' ? 0 : 16,
+    backgroundColor: COLORS.card,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    minHeight: 70, // IMPORTANT: limite la hauteur minimum
+    maxHeight: 120, // IMPORTANT: limite la hauteur maximum
+    ...(Platform.OS === 'web' && { boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }),
+    elevation: 2,
+  },
 
-headerBarMobile: {
-  flexDirection: 'column',
-  alignItems: 'flex-start',
-  gap: 8,
-  minHeight: 'auto',
-  maxHeight: 'auto',
-},
+  headerBarMobile: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 8,
+    minHeight: 'auto',
+    maxHeight: 'auto',
+  },
 
-headerInfo: {
-  flex: 0,
-  minWidth: '25%',
-},
+  headerInfo: {
+    flex: 0,
+    minWidth: '25%',
+  },
 
-headerTitle: {
-  fontSize: isDesktop ? 20 : isMobile ? 16 : 18,
-  fontWeight: '700',
-  color: COLORS.text,
-  letterSpacing: -0.5,
-},
+  headerTitle: {
+    fontSize: isDesktop ? 20 : isMobile ? 16 : 18,
+    fontWeight: '700',
+    color: COLORS.text,
+    letterSpacing: -0.5,
+  },
 
-headerSubtitle: {
-  fontSize: 11,
-  color: COLORS.subtext,
-  marginTop: 2,
-},
+  headerSubtitle: {
+    fontSize: 11,
+    color: COLORS.subtext,
+    marginTop: 2,
+  },
 
-headerActions: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  flex: 1,
-  width: '100%',
-  marginTop: isMobile ? 8 : 0,
-  marginLeft: isMobile ? 0 : 16,
-  gap: 0,
-  minHeight: 44, // IMPORTANT: hauteur minimale pour les boutons
-},
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    width: '100%',
+    marginTop: isMobile ? 8 : 0,
+    marginLeft: isMobile ? 0 : 16,
+    gap: 0,
+    minHeight: 44, // IMPORTANT: hauteur minimale pour les boutons
+  },
 
-// TABS - VERSION COMPACTE
-tabsContainer: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  paddingRight: 8,
-  gap: 2,
-  flexGrow: 0,
-},
+  // TABS - VERSION COMPACTE
+  tabsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 8,
+    gap: 2,
+    flexGrow: 0,
+  },
 
-tabItem: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'center',
-  paddingVertical: 6,
-  paddingHorizontal: 10,
-  borderRadius: 18,
-  marginRight: 2,
-  backgroundColor: 'transparent',
-  minHeight: 36,
-  minWidth: 36,
-},
+  tabItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 18,
+    marginRight: 2,
+    backgroundColor: 'transparent',
+    minHeight: 36,
+    minWidth: 36,
+  },
 
-activeTabItem: {
-  backgroundColor: COLORS.primary,
-  elevation: 2,
-  paddingHorizontal: 12,
-},
+  activeTabItem: {
+    backgroundColor: COLORS.primary,
+    elevation: 2,
+    paddingHorizontal: 12,
+  },
 
-tabLabel: {
-  marginLeft: 4,
-  fontSize: isMobile ? 10 : 11,
-  color: '#64748B',
-  fontWeight: '500',
-},
+  tabLabel: {
+    marginLeft: 4,
+    fontSize: isMobile ? 10 : 11,
+    color: '#64748B',
+    fontWeight: '500',
+  },
 
-activeTabLabel: {
-  color: '#FFFFFF',
-  fontWeight: '600',
-},
+  activeTabLabel: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
 
-refreshBtn: {
-  margin: 0,
-  padding: 4,
-  minHeight: 40,
-  minWidth: 40,
-},
+  refreshBtn: {
+    margin: 0,
+    padding: 4,
+    minHeight: 40,
+    minWidth: 40,
+  },
   // CARDS & GRIDS
   scrollView: {
     flex: 1,

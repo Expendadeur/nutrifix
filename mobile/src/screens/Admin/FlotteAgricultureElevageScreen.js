@@ -51,6 +51,10 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
 
   const { user, isLoading: authLoading } = requireAuth(navigation, { role: 'admin' });
 
+  // API configuration
+  const API_BASE_URL = 'http://localhost:5000/api';
+  const API_URL = `${API_BASE_URL}/operations`;
+
   // ============================================
   // STATES PRINCIPAUX
   // ============================================
@@ -121,8 +125,14 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
     id_chauffeur_attitre: null,
     id_departement: null,
     statut: 'actif',
-    disponible: true
+    disponible: true,
+    photo: null
   });
+
+  // Validation d'unicité
+  const [checkingImmat, setCheckingImmat] = useState(false);
+  const [immatError, setImmatError] = useState(null);
+  const [isImmatUnique, setIsImmatUnique] = useState(true);
 
   // Formulaire Mouvement
   const [mouvementForm, setMouvementForm] = useState({
@@ -207,8 +217,13 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
     taux_humidite: '',
     irrigation_installee: false,
     proprietaire: 'propre',
-    loyer_annuel: ''
+    loyer_annuel: '',
+    photo: null
   });
+
+  const [checkingParcelleRef, setCheckingParcelleRef] = useState(false);
+  const [parcelleRefError, setParcelleRefError] = useState(null);
+  const [isParcelleRefUnique, setIsParcelleRefUnique] = useState(true);
 
   // Formulaire Culture
   const [cultureForm, setCultureForm] = useState({
@@ -273,6 +288,94 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
     certificat_veterinaire: null
   });
 
+  const [checkingAnimalId, setCheckingAnimalId] = useState(false);
+  const [animalIdError, setAnimalIdError] = useState(null);
+  const [isAnimalIdUnique, setIsAnimalIdUnique] = useState(true);
+
+  // ============================================
+  // UNICITÉ - LOGIQUE
+  // ============================================
+  const checkImmatriculationUniqueness = async (immat) => {
+    if (!immat || vehiculeMode !== 'add') return;
+    try {
+      setCheckingImmat(true);
+      setImmatError(null);
+      const response = await axios.get(`${API_BASE_URL}/system/check-uniqueness?table=vehicules&field=immatriculation&value=${immat}`, {
+        headers: { Authorization: `Bearer ${await AsyncStorage.getItem('userToken')}` }
+      });
+      if (response.data.success) {
+        setIsImmatUnique(response.data.isUnique);
+        if (!response.data.isUnique) setImmatError('Déjà utilisé');
+      }
+    } catch (error) { console.error(error); } finally { setCheckingImmat(false); }
+  };
+
+  const checkAnimalIdUniqueness = async (id) => {
+    if (!id || animalMode !== 'add') return;
+    try {
+      setCheckingAnimalId(true);
+      setAnimalIdError(null);
+      const response = await axios.get(`${API_BASE_URL}/system/check-uniqueness?table=animaux&field=numero_identification&value=${id}`, {
+        headers: { Authorization: `Bearer ${await AsyncStorage.getItem('userToken')}` }
+      });
+      if (response.data.success) {
+        setIsAnimalIdUnique(response.data.isUnique);
+        if (!response.data.isUnique) setAnimalIdError('Déjà utilisé');
+      }
+    } catch (error) { console.error(error); } finally { setCheckingAnimalId(false); }
+  };
+
+  const checkParcelleRefUniqueness = async (ref) => {
+    if (!ref || parcelleMode !== 'add') return;
+    try {
+      setCheckingParcelleRef(true);
+      setParcelleRefError(null);
+      const response = await axios.get(`${API_BASE_URL}/system/check-uniqueness?table=parcelles&field=reference&value=${ref}`, {
+        headers: { Authorization: `Bearer ${await AsyncStorage.getItem('userToken')}` }
+      });
+      if (response.data.success) {
+        setIsParcelleRefUnique(response.data.isUnique);
+        if (!response.data.isUnique) setParcelleRefError('Déjà utilisée');
+      }
+    } catch (error) { console.error(error); } finally { setCheckingParcelleRef(false); }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (vehiculeForm.immatriculation && vehiculeMode === 'add') {
+        checkImmatriculationUniqueness(vehiculeForm.immatriculation);
+      } else {
+        setIsImmatUnique(true);
+        setImmatError(null);
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [vehiculeForm.immatriculation, vehiculeMode]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (animalForm.numero_identification && animalMode === 'add') {
+        checkAnimalIdUniqueness(animalForm.numero_identification);
+      } else {
+        setIsAnimalIdUnique(true);
+        setAnimalIdError(null);
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [animalForm.numero_identification, animalMode]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (parcelleForm.reference && parcelleMode === 'add') {
+        checkParcelleRefUniqueness(parcelleForm.reference);
+      } else {
+        setIsParcelleRefUnique(true);
+        setParcelleRefError(null);
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [parcelleForm.reference, parcelleMode]);
+
   // Formulaire Suivi Sanitaire
   const [suiviForm, setSuiviForm] = useState({
     id_animal: null,
@@ -329,9 +432,8 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [datePickerField, setDatePickerField] = useState('');
   const [datePickerMode, setDatePickerMode] = useState('date');
+  const [datePickerValue, setDatePickerValue] = useState(new Date());
   const [currentForm, setCurrentForm] = useState(null);
-
-  const API_URL = 'http://localhost:5000/api/operations';
 
   // ============================================
   // API CALLS - UTILITAIRES
@@ -849,6 +951,10 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
       }
 
       if (vehiculeMode === 'add') {
+        if (!isImmatUnique) {
+          Alert.alert('Erreur', 'Cette immatriculation est déjà utilisée.');
+          return;
+        }
         await apiCall('/vehicules', 'POST', vehiculeForm);
         Alert.alert('Succès', 'Véhicule ajouté avec succès');
       } else {
@@ -1042,6 +1148,10 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
       }
 
       if (parcelleMode === 'add') {
+        if (!isParcelleRefUnique) {
+          Alert.alert('Erreur', 'Cette référence est déjà utilisée.');
+          return;
+        }
         await apiCall('/parcelles', 'POST', parcelleForm);
         Alert.alert('Succès', 'Parcelle créée');
       } else {
@@ -1182,6 +1292,10 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
       }
 
       if (animalMode === 'add') {
+        if (!isAnimalIdUnique) {
+          Alert.alert('Erreur', 'Ce numéro d\'identification est déjà utilisé.');
+          return;
+        }
         await apiCall('/animaux', 'POST', animalForm);
         Alert.alert('Succès', 'Animal enregistré');
       } else {
@@ -1335,29 +1449,43 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
     }
   };
 
-  const handlePickImage = async (formSetter, formData) => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission refusée', 'Nous avons besoin de cette permission');
-      return;
+  const handlePickImage = async (formSetter, formData, source = 'library') => {
+    let result;
+    if (source === 'camera') {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission refusée', 'Nous avons besoin d\'accéder à votre caméra.');
+        return;
+      }
+      result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+    } else {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission refusée', 'Nous avons besoin d\'accéder à votre galerie.');
+        return;
+      }
+      result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
     }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8,
-    });
 
     if (!result.canceled) {
       formSetter({ ...formData, photo: result.assets[0].uri });
     }
   };
 
-  const openDatePicker = (field, mode = 'date', formType = null) => {
+  const openDatePicker = (field, mode = 'date', formType = null, initialValue = null) => {
     setDatePickerField(field);
     setDatePickerMode(mode);
     setCurrentForm(formType);
+    setDatePickerValue(initialValue instanceof Date ? initialValue : (initialValue ? new Date(initialValue) : new Date()));
     setShowDatePicker(true);
   };
 
@@ -1970,7 +2098,12 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
                 onChangeText={(text) => setVehiculeForm({ ...vehiculeForm, immatriculation: text })}
                 style={styles.input}
                 mode="outlined"
+                error={!!immatError}
+                right={checkingImmat ? <TextInput.Icon icon={() => <ActivityIndicator size="small" color="#2E86C1" />} /> :
+                  !isImmatUnique ? <TextInput.Icon icon="alert-circle" color="#E74C3C" /> :
+                    vehiculeForm.immatriculation && vehiculeMode === 'add' ? <TextInput.Icon icon="check-circle" color="#27AE60" /> : null}
               />
+              {immatError && <Text style={styles.errorTextSmall}>{immatError}</Text>}
 
               <View style={styles.rowInputs}>
                 <TextInput
@@ -2049,6 +2182,36 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
                 keyboardType="numeric"
               />
 
+              <Text style={styles.inputLabel}>Photo du véhicule</Text>
+              <View style={styles.photoPickerContainer}>
+                <TouchableOpacity
+                  style={styles.photoPickerBtn}
+                  onPress={() => handlePickImage(setVehiculeForm, vehiculeForm, 'camera')}
+                >
+                  <MaterialIcons name="photo-camera" size={24} color="#2E86C1" />
+                  <Text style={styles.photoPickerText}>Caméra</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.photoPickerBtn}
+                  onPress={() => handlePickImage(setVehiculeForm, vehiculeForm, 'library')}
+                >
+                  <MaterialIcons name="photo-library" size={24} color="#2E86C1" />
+                  <Text style={styles.photoPickerText}>Galerie</Text>
+                </TouchableOpacity>
+                {vehiculeForm.photo && (
+                  <View style={styles.photoPreviewContainer}>
+                    <Image source={{ uri: vehiculeForm.photo }} style={styles.photoPreview} />
+                    <IconButton
+                      icon="close-circle"
+                      iconColor="#E74C3C"
+                      size={20}
+                      style={styles.removePhotoIcon}
+                      onPress={() => setVehiculeForm({ ...vehiculeForm, photo: null })}
+                    />
+                  </View>
+                )}
+              </View>
+
               <View style={styles.rowInputs}>
                 <TextInput
                   label="Prix d'achat"
@@ -2058,14 +2221,14 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
                   mode="outlined"
                   keyboardType="numeric"
                 />
-                <TextInput
-                  label="Valeur actuelle"
-                  value={vehiculeForm.valeur_actuelle}
-                  onChangeText={(text) => setVehiculeForm({ ...vehiculeForm, valeur_actuelle: text })}
-                  style={[styles.input, styles.halfInput]}
+                <Button
                   mode="outlined"
-                  keyboardType="numeric"
-                />
+                  onPress={() => openDatePicker('date_achat', 'date', 'vehicule', vehiculeForm.date_achat)}
+                  style={[styles.input, styles.halfInput, { justifyContent: 'center' }]}
+                  icon="calendar"
+                >
+                  Achat: {formatDate(vehiculeForm.date_achat)}
+                </Button>
               </View>
 
               {/* Sélection département */}
@@ -2102,7 +2265,12 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
                 <Button onPress={() => setVehiculeModalVisible(false)} style={styles.modalButton}>
                   Annuler
                 </Button>
-                <Button mode="contained" onPress={handleSaveVehicule} style={styles.modalButton}>
+                <Button
+                  mode="contained"
+                  onPress={handleSaveVehicule}
+                  style={styles.modalButton}
+                  disabled={vehiculeMode === 'add' && !isImmatUnique}
+                >
                   Enregistrer
                 </Button>
               </View>
@@ -2200,6 +2368,15 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
             ]}
             style={styles.segmentedButtons}
           />
+
+          <Button
+            mode="outlined"
+            onPress={() => openDatePicker('date_mission', 'date', 'mouvement', mouvementForm.date_mission)}
+            style={styles.input}
+            icon="calendar"
+          >
+            Date mission: {formatDate(mouvementForm.date_mission)}
+          </Button>
 
           <Text style={styles.inputLabel}>Chauffeur *</Text>
           <ScrollView horizontal style={styles.chipContainer}>
@@ -2375,6 +2552,15 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
             style={styles.segmentedButtons}
           />
 
+          <Button
+            mode="outlined"
+            onPress={() => openDatePicker('date_intervention', 'date', 'maintenance', maintenanceForm.date_intervention)}
+            style={styles.input}
+            icon="calendar"
+          >
+            Date intervention: {formatDate(maintenanceForm.date_intervention)}
+          </Button>
+
           <TextInput
             label="Description *"
             value={maintenanceForm.description}
@@ -2522,7 +2708,7 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
 
           <Button
             mode="outlined"
-            onPress={() => openDatePicker('date_debut', 'date', 'assurance')}
+            onPress={() => openDatePicker('date_debut', 'date', 'assurance', assuranceForm.date_debut)}
             style={styles.input}
             icon="calendar"
           >
@@ -2531,7 +2717,7 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
 
           <Button
             mode="outlined"
-            onPress={() => openDatePicker('date_expiration', 'date', 'assurance')}
+            onPress={() => openDatePicker('date_expiration', 'date', 'assurance', assuranceForm.date_expiration)}
             style={styles.input}
             icon="calendar"
           >
@@ -2578,6 +2764,10 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
                   onChangeText={(text) => setParcelleForm({ ...parcelleForm, reference: text })}
                   style={[styles.input, styles.halfInput]}
                   mode="outlined"
+                  error={!!parcelleRefError}
+                  right={checkingParcelleRef ? <TextInput.Icon icon={() => <ActivityIndicator size="small" color="#2E86C1" />} /> :
+                    !isParcelleRefUnique ? <TextInput.Icon icon="alert-circle" color="#E74C3C" /> :
+                      parcelleForm.reference && parcelleMode === 'add' ? <TextInput.Icon icon="check-circle" color="#27AE60" /> : null}
                 />
                 <TextInput
                   label="Nom de la parcelle *"
@@ -2679,11 +2869,47 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
                 />
               )}
 
+              <Text style={styles.inputLabel}>Photo de la parcelle</Text>
+              <View style={styles.photoPickerContainer}>
+                <TouchableOpacity
+                  style={styles.photoPickerBtn}
+                  onPress={() => handlePickImage(setParcelleForm, parcelleForm, 'camera')}
+                >
+                  <MaterialIcons name="photo-camera" size={24} color="#2E86C1" />
+                  <Text style={styles.photoPickerText}>Caméra</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.photoPickerBtn}
+                  onPress={() => handlePickImage(setParcelleForm, parcelleForm, 'library')}
+                >
+                  <MaterialIcons name="photo-library" size={24} color="#2E86C1" />
+                  <Text style={styles.photoPickerText}>Galerie</Text>
+                </TouchableOpacity>
+                {parcelleForm.photo && (
+                  <View style={styles.photoPreviewContainer}>
+                    <Image source={{ uri: parcelleForm.photo }} style={styles.photoPreview} />
+                    <IconButton
+                      icon="close-circle"
+                      iconColor="#E74C3C"
+                      size={20}
+                      style={styles.removePhotoIcon}
+                      onPress={() => setParcelleForm({ ...parcelleForm, photo: null })}
+                    />
+                  </View>
+                )}
+              </View>
+              {parcelleRefError && <Text style={styles.errorTextSmall}>{parcelleRefError}</Text>}
+
               <View style={styles.modalActions}>
                 <Button onPress={() => setParcelleModalVisible(false)} style={styles.modalButton}>
                   Annuler
                 </Button>
-                <Button mode="contained" onPress={handleSaveParcelle} style={styles.modalButton}>
+                <Button
+                  mode="contained"
+                  onPress={handleSaveParcelle}
+                  style={styles.modalButton}
+                  disabled={parcelleMode === 'add' && !isParcelleRefUnique}
+                >
                   Enregistrer
                 </Button>
               </View>
@@ -2774,7 +3000,7 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
 
           <Button
             mode="outlined"
-            onPress={() => openDatePicker('date_semaison', 'date', 'culture')}
+            onPress={() => openDatePicker('date_semaison', 'date', 'culture', cultureForm.date_semaison)}
             style={styles.input}
             icon="calendar"
           >
@@ -2783,7 +3009,7 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
 
           <Button
             mode="outlined"
-            onPress={() => openDatePicker('date_levage_prevue', 'date', 'culture')}
+            onPress={() => openDatePicker('date_levage_prevue', 'date', 'culture', cultureForm.date_levage_prevue)}
             style={styles.input}
             icon="calendar"
           >
@@ -2792,7 +3018,7 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
 
           <Button
             mode="outlined"
-            onPress={() => openDatePicker('date_recolte_prevue', 'date', 'culture')}
+            onPress={() => openDatePicker('date_recolte_prevue', 'date', 'culture', cultureForm.date_recolte_prevue)}
             style={styles.input}
             icon="calendar"
           >
@@ -2869,6 +3095,10 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
                   onChangeText={(text) => setAnimalForm({ ...animalForm, numero_identification: text })}
                   style={[styles.input, styles.halfInput]}
                   mode="outlined"
+                  error={!!animalIdError}
+                  right={checkingAnimalId ? <TextInput.Icon icon={() => <ActivityIndicator size="small" color="#2E86C1" />} /> :
+                    !isAnimalIdUnique ? <TextInput.Icon icon="alert-circle" color="#E74C3C" /> :
+                      animalForm.numero_identification && animalMode === 'add' ? <TextInput.Icon icon="check-circle" color="#27AE60" /> : null}
                 />
                 <TextInput
                   label="Nom de l'animal"
@@ -2915,7 +3145,7 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
 
               <Button
                 mode="outlined"
-                onPress={() => openDatePicker('date_naissance', 'date', 'animal')}
+                onPress={() => openDatePicker('date_naissance', 'date', 'animal', animalForm.date_naissance)}
                 style={styles.input}
                 icon="calendar"
               >
@@ -2983,7 +3213,7 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
 
                   <Button
                     mode="outlined"
-                    onPress={() => openDatePicker('date_acquisition', 'date', 'animal')}
+                    onPress={() => openDatePicker('date_acquisition', 'date', 'animal', animalForm.date_acquisition)}
                     style={styles.input}
                     icon="calendar"
                   >
@@ -2992,24 +3222,47 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
                 </>
               )}
 
-              <Button
-                mode="outlined"
-                onPress={() => handlePickImage(setAnimalForm, animalForm)}
-                style={styles.input}
-                icon="camera"
-              >
-                {animalForm.photo ? 'Photo ajoutée' : 'Ajouter une photo'}
-              </Button>
-
-              {animalForm.photo && (
-                <Image source={{ uri: animalForm.photo }} style={{ width: '100%', height: 200, borderRadius: 8, marginBottom: 15 }} />
-              )}
+              <Text style={styles.inputLabel}>Photo de l'animal</Text>
+              <View style={styles.photoPickerContainer}>
+                <TouchableOpacity
+                  style={styles.photoPickerBtn}
+                  onPress={() => handlePickImage(setAnimalForm, animalForm, 'camera')}
+                >
+                  <MaterialIcons name="photo-camera" size={24} color="#2E86C1" />
+                  <Text style={styles.photoPickerText}>Caméra</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.photoPickerBtn}
+                  onPress={() => handlePickImage(setAnimalForm, animalForm, 'library')}
+                >
+                  <MaterialIcons name="photo-library" size={24} color="#2E86C1" />
+                  <Text style={styles.photoPickerText}>Galerie</Text>
+                </TouchableOpacity>
+                {animalForm.photo && (
+                  <View style={styles.photoPreviewContainer}>
+                    <Image source={{ uri: animalForm.photo }} style={styles.photoPreview} />
+                    <IconButton
+                      icon="close-circle"
+                      iconColor="#E74C3C"
+                      size={20}
+                      style={styles.removePhotoIcon}
+                      onPress={() => setAnimalForm({ ...animalForm, photo: null })}
+                    />
+                  </View>
+                )}
+              </View>
+              {animalIdError && <Text style={styles.errorTextSmall}>{animalIdError}</Text>}
 
               <View style={styles.modalActions}>
                 <Button onPress={() => setAnimalModalVisible(false)} style={styles.modalButton}>
                   Annuler
                 </Button>
-                <Button mode="contained" onPress={handleSaveAnimal} style={styles.modalButton}>
+                <Button
+                  mode="contained"
+                  onPress={handleSaveAnimal}
+                  style={styles.modalButton}
+                  disabled={animalMode === 'add' && !isAnimalIdUnique}
+                >
                   Enregistrer
                 </Button>
               </View>
@@ -3375,7 +3628,7 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
 
           <Button
             mode="outlined"
-            onPress={() => openDatePicker('date_intervention', 'date', 'suivi')}
+            onPress={() => openDatePicker('date_intervention', 'date', 'suivi', suiviForm.date_intervention)}
             style={styles.input}
             icon="calendar"
           >
@@ -3437,7 +3690,7 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
 
           <Button
             mode="outlined"
-            onPress={() => openDatePicker('date_prochaine_visite', 'date', 'suivi')}
+            onPress={() => openDatePicker('date_prochaine_visite', 'date', 'suivi', suiviForm.date_prochaine_visite)}
             style={styles.input}
             icon="calendar"
           >
@@ -3499,7 +3752,7 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
 
           <Button
             mode="outlined"
-            onPress={() => openDatePicker('date_production', 'date', 'productionLait')}
+            onPress={() => openDatePicker('date_production', 'date', 'productionLait', productionLaitForm.date_production)}
             style={styles.input}
             icon="calendar"
           >
@@ -3641,7 +3894,7 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
 
           <Button
             mode="outlined"
-            onPress={() => openDatePicker('date_recolte', 'date', 'productionOeufs')}
+            onPress={() => openDatePicker('date_recolte', 'date', 'productionOeufs', productionOeufsForm.date_recolte)}
             style={styles.input}
             icon="calendar"
           >
@@ -3892,7 +4145,7 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
       {/* Date Picker */}
       {showDatePicker && (
         <DateTimePicker
-          value={new Date()}
+          value={datePickerValue}
           mode={datePickerMode}
           display="default"
           onChange={handleDateChange}
@@ -4590,6 +4843,53 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     gap: 16,
   },
+  photoPickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+    flexWrap: 'wrap',
+  },
+  photoPickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F7FF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D4E6F1',
+    gap: 6,
+  },
+  photoPickerText: {
+    color: '#2E86C1',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  photoPreviewContainer: {
+    position: 'relative',
+    marginLeft: 8,
+  },
+  photoPreview: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E1E8EE',
+  },
+  removePhotoIcon: {
+    position: 'absolute',
+    top: -12,
+    right: -12,
+    margin: 0,
+  },
+  errorTextSmall: {
+    color: '#E74C3C',
+    fontSize: 12,
+    marginTop: -8,
+    marginBottom: 10,
+    marginLeft: 4,
+  }
 });
 
 export default FlotteAgricultureElevageScreen;

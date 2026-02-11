@@ -27,6 +27,8 @@ import {
 } from 'react-native-paper';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import comptabiliteService from '../../services/comptabiliteService';
 
 const RapprochementBancaireScreen = () => {
@@ -42,7 +44,9 @@ const RapprochementBancaireScreen = () => {
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [dialogVisible, setDialogVisible] = useState(false);
   const [rapprochementDate, setRapprochementDate] = useState(new Date());
+  const [showRapprochementPicker, setShowRapprochementPicker] = useState(false);
   const [totaux, setTotaux] = useState({ recettes: 0, depenses: 0, solde: 0 });
+  const [exportLoading, setExportLoading] = useState(false);
 
   const comptes = [
     'Tous les comptes',
@@ -65,7 +69,7 @@ const RapprochementBancaireScreen = () => {
         startDate: startDate.toISOString().split('T')[0],
         endDate: endDate.toISOString().split('T')[0]
       });
-      
+
       setPaiements(data.paiements || []);
       setTotaux(data.totaux || { recettes: 0, depenses: 0, solde: 0 });
     } catch (error) {
@@ -122,17 +126,46 @@ const RapprochementBancaireScreen = () => {
 
   const exportToExcel = async () => {
     try {
-      // Logique d'export
-      Alert.alert('Export', 'Export en cours...');
+      setExportLoading(true);
+
+      const response = await comptabiliteService.exportRapprochementExcel({
+        compte: filterCompte === 'Tous les comptes' ? null : filterCompte,
+        startDate: startDate.toISOString().split('T')[0],
+        endDate: endDate.toISOString().split('T')[0],
+        statut: filterStatus
+      });
+
+      if (response && response.data) {
+        const filename = response.filename || `Rapprochement_Bancaire_${new Date().toISOString().split('T')[0]}.xlsx`;
+        const fileUri = FileSystem.documentDirectory + filename;
+
+        // Convertir base64 en fichier
+        await FileSystem.writeAsStringAsync(fileUri, response.data, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        // Partager le fichier
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(fileUri, {
+            mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            dialogTitle: 'Exporter le rapprochement bancaire',
+          });
+        } else {
+          Alert.alert('Succès', `Fichier sauvegardé: ${filename}`);
+        }
+      }
     } catch (error) {
-      Alert.alert('Erreur', 'Impossible d\'exporter');
+      console.error('Export Excel error:', error);
+      Alert.alert('Erreur', 'Impossible d\'exporter les données en Excel');
+    } finally {
+      setExportLoading(false);
     }
   };
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('fr-FR', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'BIF',
       minimumFractionDigits: 2
     }).format(amount || 0);
   };
@@ -146,17 +179,17 @@ const RapprochementBancaireScreen = () => {
   };
 
   const filteredPayments = paiements.filter(payment => {
-    const matchesSearch = 
+    const matchesSearch =
       payment.reference_paiement?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       payment.source_nom?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       payment.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    
+
     return matchesSearch;
   });
 
   const renderPaymentItem = ({ item }) => {
     const isSelected = selectedPayments.includes(item.id);
-    
+
     return (
       <TouchableOpacity
         style={[styles.paymentItem, isSelected && styles.paymentItemSelected]}
@@ -174,8 +207,8 @@ const RapprochementBancaireScreen = () => {
           <View style={styles.paymentHeader}>
             <Text style={styles.paymentRef}>{item.reference_paiement}</Text>
             {item.rapproche && (
-              <Chip 
-                mode="flat" 
+              <Chip
+                mode="flat"
                 style={styles.rapprocheChip}
                 textStyle={styles.rapprocheChipText}
               >
@@ -242,10 +275,10 @@ const RapprochementBancaireScreen = () => {
   const renderHeader = () => (
     <View style={styles.header}>
       <Title style={styles.headerTitle}>Rapprochement Bancaire</Title>
-      
+
       {/* Filtres de période */}
       <View style={styles.periodFilter}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.dateButton}
           onPress={() => setShowStartPicker(true)}
         >
@@ -255,7 +288,7 @@ const RapprochementBancaireScreen = () => {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.dateButton}
           onPress={() => setShowEndPicker(true)}
         >
@@ -267,8 +300,8 @@ const RapprochementBancaireScreen = () => {
       </View>
 
       {/* Sélection de compte */}
-      <ScrollView 
-        horizontal 
+      <ScrollView
+        horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.compteFilter}
       >
@@ -472,6 +505,18 @@ const RapprochementBancaireScreen = () => {
         />
       )}
 
+      {showRapprochementPicker && (
+        <DateTimePicker
+          value={rapprochementDate}
+          mode="date"
+          display="default"
+          onChange={(event, selectedDate) => {
+            setShowRapprochementPicker(false);
+            if (selectedDate) setRapprochementDate(selectedDate);
+          }}
+        />
+      )}
+
       {/* Dialog de confirmation */}
       <Portal>
         <Dialog visible={dialogVisible} onDismiss={() => setDialogVisible(false)}>
@@ -485,9 +530,9 @@ const RapprochementBancaireScreen = () => {
             <Text style={styles.dialogSubtext}>
               Date du rapprochement:
             </Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.dialogDateButton}
-              onPress={() => {/* Show date picker */}}
+              onPress={() => setShowRapprochementPicker(true)}
             >
               <MaterialIcons name="calendar-today" size={20} color="#2E86C1" />
               <Text style={styles.dialogDateText}>
@@ -497,7 +542,7 @@ const RapprochementBancaireScreen = () => {
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setDialogVisible(false)}>Annuler</Button>
-            <Button 
+            <Button
               onPress={confirmRapprochement}
               loading={loading}
               textColor="#27AE60"
@@ -507,6 +552,16 @@ const RapprochementBancaireScreen = () => {
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
+      {/* Indicateur d'export */}
+      {exportLoading && (
+        <View style={styles.exportOverlay}>
+          <View style={styles.exportContainer}>
+            <ActivityIndicator size="large" color="#2E86C1" />
+            <Text style={styles.exportText}>Export Excel en cours...</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 };
@@ -833,6 +888,30 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#2C3E50',
     marginLeft: 10,
+  },
+  exportOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  exportContainer: {
+    backgroundColor: '#FFFFFF',
+    padding: 25,
+    borderRadius: 12,
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  exportText: {
+    fontFamily: 'Times New Roman',
+    fontSize: 16,
+    color: '#2C3E50',
+    marginTop: 15,
   },
 });
 

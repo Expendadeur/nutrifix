@@ -850,6 +850,12 @@ const CommercialScreen = ({ navigation, route }) => {
   // ============================================
   // DATE PICKER HANDLER
   // ============================================
+  const openDatePicker = (field, initialValue = null) => {
+    setDatePickerField(field);
+    setDatePickerValue(initialValue instanceof Date ? initialValue : (initialValue ? new Date(initialValue) : new Date()));
+    setShowDatePicker(true);
+  };
+
   const handleDateChange = (event, selectedDate) => {
     setShowDatePicker(false);
 
@@ -2468,11 +2474,7 @@ const CommercialScreen = ({ navigation, route }) => {
             <View style={styles.formRow}>
               <TouchableOpacity
                 style={[styles.input, styles.inputHalf]}
-                onPress={() => {
-                  setDatePickerField('date_commande');
-                  setDatePickerValue(new Date(commandeVenteForm.date_commande));
-                  setShowDatePicker(true);
-                }}
+                onPress={() => openDatePicker('date_commande', commandeVenteForm.date_commande)}
               >
                 <Text style={styles.inputLabel}>Date Commande</Text>
                 <Text style={styles.inputValue}>
@@ -2482,15 +2484,7 @@ const CommercialScreen = ({ navigation, route }) => {
 
               <TouchableOpacity
                 style={[styles.input, styles.inputHalf]}
-                onPress={() => {
-                  setDatePickerField('date_livraison_prevue');
-                  setDatePickerValue(
-                    commandeVenteForm.date_livraison_prevue
-                      ? new Date(commandeVenteForm.date_livraison_prevue)
-                      : new Date()
-                  );
-                  setShowDatePicker(true);
-                }}
+                onPress={() => openDatePicker('date_livraison_prevue', commandeVenteForm.date_livraison_prevue)}
               >
                 <Text style={styles.inputLabel}>Livraison Prévue</Text>
                 <Text style={styles.inputValue}>

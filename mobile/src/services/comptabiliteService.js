@@ -10,7 +10,7 @@ const comptabiliteService = {
    */
   getJournalComptableComplet: async (params) => {
     try {
-      const response = await api.get('/finance/journal-comptable-complet', { 
+      const response = await api.get('/finance/journal-comptable-complet', {
         params: {
           categorie: params.categorie || 'all',
           type_mouvement: params.type_mouvement || 'all',
@@ -90,7 +90,7 @@ const comptabiliteService = {
    */
   getStatistiquesJournal: async (params) => {
     try {
-      const response = await api.get('/finance/journal-comptable/statistiques', { 
+      const response = await api.get('/finance/journal-comptable/statistiques', {
         params: {
           categorie: params.categorie || 'all',
           type_mouvement: params.type_mouvement || 'all',
@@ -159,7 +159,7 @@ const comptabiliteService = {
    */
   getBalanceComptable: async (params) => {
     try {
-      const response = await api.get('/finance/balance-comptable', { 
+      const response = await api.get('/finance/balance-comptable', {
         params: {
           startDate: params.startDate || null,
           endDate: params.endDate || null,
@@ -180,7 +180,7 @@ const comptabiliteService = {
    */
   getGrandLivre: async (params) => {
     try {
-      const response = await api.get('/finance/grand-livre', { 
+      const response = await api.get('/finance/grand-livre', {
         params: {
           compte: params.compte || null,
           startDate: params.startDate || null,
@@ -191,6 +191,26 @@ const comptabiliteService = {
       return response.data;
     } catch (error) {
       console.error('Erreur getGrandLivre:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Exporte les transactions de rapprochement bancaire en Excel
+   * @param {Object} params - Paramètres de filtrage
+   * @returns {Promise} - Fichier Excel en base64
+   */
+  exportRapprochementExcel: async (params) => {
+    try {
+      const response = await api.post('/finance/rapprochement-bancaire/export-excel', {
+        compte: params.compte || null,
+        startDate: params.startDate || null,
+        endDate: params.endDate || null,
+        statut: params.statut || 'all'
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Erreur exportRapprochementExcel:', error);
       throw error;
     }
   }

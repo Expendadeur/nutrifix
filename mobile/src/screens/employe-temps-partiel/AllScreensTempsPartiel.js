@@ -18,7 +18,10 @@ import {
   ActivityIndicator,
   Chip,
   Button,
-  Divider
+  Divider,
+  Portal,
+  TextInput,
+  IconButton
 } from 'react-native-paper';
 import { MaterialIcons, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -39,6 +42,12 @@ const DashboardTempsPartiel = ({ navigation }) => {
   const [todayPointage, setTodayPointage] = useState(null);
   const [paiementsEnAttente, setPaiementsEnAttente] = useState([]);
   const [isWorking, setIsWorking] = useState(false);
+
+  // États pour la communication
+  const [communicationModalVisible, setCommunicationModalVisible] = useState(false);
+  const [messageSubject, setMessageSubject] = useState('');
+  const [messageBody, setMessageBody] = useState('');
+  const [isSending, setIsSending] = useState(false);
 
   useEffect(() => {
     loadDashboard();
@@ -82,7 +91,7 @@ const DashboardTempsPartiel = ({ navigation }) => {
 
       // Obtenir la localisation
       const location = await Location.getCurrentPositionAsync({});
-      
+
       const result = await tempsPartielService.pointageEntree({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
@@ -95,6 +104,32 @@ const DashboardTempsPartiel = ({ navigation }) => {
     } catch (error) {
       console.error('Erreur pointage entrée:', error);
       Alert.alert('Erreur', error.message || 'Impossible d\'enregistrer le pointage');
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!messageSubject.trim() || !messageBody.trim()) {
+      Alert.alert('Erreur', 'Veuillez remplir le sujet et le message');
+      return;
+    }
+
+    try {
+      setIsSending(true);
+      const result = await tempsPartielService.contactAdmin(messageSubject, messageBody);
+
+      if (result.success) {
+        Alert.alert('Succès', 'Votre message a été envoyé à l\'administration');
+        setCommunicationModalVisible(false);
+        setMessageSubject('');
+        setMessageBody('');
+      } else {
+        Alert.alert('Erreur', result.message || 'Impossible d\'envoyer le message');
+      }
+    } catch (error) {
+      console.error('❌ Erreur envoi message:', error);
+      Alert.alert('Erreur', 'Une erreur est survenue lors de l\'envoi');
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -115,7 +150,7 @@ const DashboardTempsPartiel = ({ navigation }) => {
               }
 
               const location = await Location.getCurrentPositionAsync({});
-              
+
               const result = await tempsPartielService.pointageSortie({
                 latitude: location.coords.latitude,
                 longitude: location.coords.longitude,
@@ -448,13 +483,21 @@ const DashboardTempsPartiel = ({ navigation }) => {
           <Text style={styles.greeting}>Bonjour,</Text>
           <Text style={styles.userName}>{dashboardData?.nom_complet}</Text>
         </View>
-        <Chip
-          icon="schedule"
-          style={styles.typeChip}
-          textStyle={styles.typeChipText}
-        >
-          Temps Partiel
-        </Chip>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <IconButton
+            icon="message-draw"
+            size={24}
+            iconColor="#9B59B6"
+            onPress={() => setCommunicationModalVisible(true)}
+          />
+          <Chip
+            icon="schedule"
+            style={styles.typeChip}
+            textStyle={styles.typeChipText}
+          >
+            Temps Partiel
+          </Chip>
+        </View>
       </View>
 
       {/* Alerte contrat */}
@@ -471,6 +514,78 @@ const DashboardTempsPartiel = ({ navigation }) => {
 
       {/* Actions rapides */}
       {renderQuickActions()}
+
+      {/* Modale Communication Admin */}
+      <Portal>
+        <Modal
+          visible={communicationModalVisible}
+          onDismiss={() => setCommunicationModalVisible(false)}
+          contentContainerStyle={styles.commModalContainer}
+        >
+          <View style={styles.commModalHeader}>
+            <View style={styles.commModalIconWrapper}>
+              <MaterialIcons name="contact-support" size={24} color="#FFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.commModalTitle}>Contacter l'Admin</Text>
+              <Text style={styles.commModalSubtitle}>Envoyez un message à l'administration</Text>
+            </View>
+            <IconButton
+              icon="close"
+              onPress={() => setCommunicationModalVisible(false)}
+            />
+          </View>
+
+          <ScrollView style={styles.commModalBody}>
+            <Text style={styles.commInputLabel}>Sujet</Text>
+            <TextInput
+              mode="outlined"
+              placeholder="Sujet de votre message..."
+              value={messageSubject}
+              onChangeText={setMessageSubject}
+              style={styles.commInput}
+              outlineColor="#ECF0F1"
+              activeOutlineColor="#9B59B6"
+            />
+
+            <Text style={styles.commInputLabel}>Message</Text>
+            <TextInput
+              mode="outlined"
+              placeholder="Votre message détaillé..."
+              value={messageBody}
+              onChangeText={setMessageBody}
+              multiline
+              numberOfLines={6}
+              style={[styles.commInput, { height: 120 }]}
+              outlineColor="#ECF0F1"
+              activeOutlineColor="#9B59B6"
+            />
+          </ScrollView>
+
+          <View style={styles.commModalFooter}>
+            <Button
+              mode="outlined"
+              onPress={() => setCommunicationModalVisible(false)}
+              style={styles.commFooterBtn}
+              disabled={isSending}
+              textColor="#9B59B6"
+            >
+              Annuler
+            </Button>
+            <Button
+              mode="contained"
+              onPress={handleSendMessage}
+              style={[styles.commFooterBtn, { flex: 2 }]}
+              buttonColor="#9B59B6"
+              loading={isSending}
+              disabled={isSending || !messageSubject.trim() || !messageBody.trim()}
+              icon="send"
+            >
+              Envoyer
+            </Button>
+          </View>
+        </Modal>
+      </Portal>
     </ScrollView>
   );
 };
@@ -559,14 +674,14 @@ const HeuresPointageScreen = () => {
 
   const calculateDuration = (entree, sortie) => {
     if (!entree || !sortie) return '--';
-    
+
     const [heuresE, minutesE] = entree.split(':').map(Number);
     const [heuresS, minutesS] = sortie.split(':').map(Number);
-    
+
     const totalMinutes = (heuresS * 60 + minutesS) - (heuresE * 60 + minutesE);
     const heures = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
-    
+
     return `${heures}h${minutes > 0 ? minutes : ''}`;
   };
 
@@ -612,7 +727,7 @@ const HeuresPointageScreen = () => {
             size={24}
             color={
               selectedYear === new Date().getFullYear() &&
-              selectedMonth === new Date().getMonth()
+                selectedMonth === new Date().getMonth()
                 ? '#BDC3C7'
                 : '#2C3E50'
             }
@@ -629,7 +744,7 @@ const HeuresPointageScreen = () => {
       <Card style={styles.summaryCard}>
         <Card.Content>
           <Title style={styles.summaryTitle}>Résumé du mois</Title>
-          
+
           <View style={styles.summaryGrid}>
             <View style={styles.summaryItem}>
               <MaterialIcons name="access-time" size={24} color="#9B59B6" />
@@ -680,14 +795,14 @@ const HeuresPointageScreen = () => {
     const daysInMonth = getDaysInMonth(selectedMonth, selectedYear);
     const firstDay = getFirstDayOfMonth(selectedMonth, selectedYear);
     const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
-    
+
     const calendarDays = [];
-    
+
     // Jours vides avant le premier jour du mois
     for (let i = 0; i < firstDay; i++) {
       calendarDays.push({ empty: true, key: `empty-${i}` });
     }
-    
+
     // Jours du mois
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -699,7 +814,7 @@ const HeuresPointageScreen = () => {
       <Card style={styles.calendarCard}>
         <Card.Content>
           <Title style={styles.calendarTitle}>Calendrier de présence</Title>
-          
+
           {/* En-têtes des jours */}
           <View style={styles.calendarHeader}>
             {dayNames.map((name, index) => (
@@ -785,7 +900,7 @@ const HeuresPointageScreen = () => {
       <Card style={styles.listCard}>
         <Card.Content>
           <Title style={styles.listTitle}>Détails des présences</Title>
-          
+
           {presences.map((presence, index) => (
             <TouchableOpacity
               key={index}
@@ -1041,7 +1156,7 @@ const PaiementsScreen = () => {
   };
 
   const getStatutColor = (statut) => {
-    switch(statut) {
+    switch (statut) {
       case 'paye': return '#2ECC71';
       case 'calcule': return '#3498DB';
       case 'en_attente': return '#F39C12';
@@ -1050,7 +1165,7 @@ const PaiementsScreen = () => {
   };
 
   const getStatutLabel = (statut) => {
-    switch(statut) {
+    switch (statut) {
       case 'paye': return 'Payé';
       case 'calcule': return 'Calculé';
       case 'en_attente': return 'En attente';
@@ -1344,7 +1459,7 @@ const styles = StyleSheet.create({
     color: '#7F8C8D',
     fontSize: 16,
   },
-  
+
   // Header styles
   header: {
     flexDirection: 'row',
@@ -2280,6 +2395,70 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
+
+  // Communication Modal Styles
+  commModalContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    margin: 20,
+    overflow: 'hidden',
+    alignSelf: 'center',
+    width: '90%',
+    maxWidth: 600,
+    maxHeight: '80%'
+  },
+  commModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#F9FAFB',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6'
+  },
+  commModalIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#9B59B6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12
+  },
+  commModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827'
+  },
+  commModalSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2
+  },
+  commModalBody: {
+    padding: 20
+  },
+  commInputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+    marginTop: 8
+  },
+  commInput: {
+    backgroundColor: '#FFF',
+    marginBottom: 16
+  },
+  commModalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    backgroundColor: '#F9FAFB'
+  },
+  commFooterBtn: {
+    borderRadius: 10
+  }
 });
 
 export default AllScreensTempsPartiel;

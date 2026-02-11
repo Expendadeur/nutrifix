@@ -17,7 +17,7 @@ const { sendExpoPushNotification } = require('../utils/notifications');
 router.post('/register-device', authenticate, async (req, res) => {
     try {
         const { pushToken, platform, deviceId } = req.body;
-        
+
         // Validation stricte
         if (!pushToken || typeof pushToken !== 'string') {
             return res.status(400).json({
@@ -40,7 +40,7 @@ router.post('/register-device', authenticate, async (req, res) => {
             SELECT id FROM devices 
             WHERE push_token = ? AND id_utilisateur = ?
         `;
-        const [existing] = await db.query(checkSql, [pushToken, req.userId]);
+        const existing = await db.query(checkSql, [pushToken, req.userId]);
 
         if (existing && existing.length > 0) {
             // Mettre à jour le device existant
@@ -143,66 +143,66 @@ router.delete('/unregister-device', authenticate, async (req, res) => {
  * GET /api/notifications
  */
 router.get('/', authenticate, async (req, res) => {
-  try {
-    const {
-      type_notification,
-      statut,
-      priorite,
-      startDate,
-      endDate,
-      page,
-      limit,
-      unreadOnly
-    } = req.query;
+    try {
+        const {
+            type_notification,
+            statut,
+            priorite,
+            startDate,
+            endDate,
+            page,
+            limit,
+            unreadOnly
+        } = req.query;
 
-    // =============================
-    // Pagination sécurisée
-    // =============================
-    const pPage =
-      Number.isInteger(Number(page)) && Number(page) > 0 ? Number(page) : 1;
+        // =============================
+        // Pagination sécurisée
+        // =============================
+        const pPage =
+            Number.isInteger(Number(page)) && Number(page) > 0 ? Number(page) : 1;
 
-    const pLimit =
-      Number.isInteger(Number(limit)) && Number(limit) > 0 ? Number(limit) : 20;
+        const pLimit =
+            Number.isInteger(Number(limit)) && Number(limit) > 0 ? Number(limit) : 20;
 
-    const offset = (pPage - 1) * pLimit;
+        const offset = (pPage - 1) * pLimit;
 
-    // =============================
-    // WHERE + params
-    // =============================
-    let whereSql = ' WHERE n.id_utilisateur = ? ';
-    const params = [req.userId];
+        // =============================
+        // WHERE + params
+        // =============================
+        let whereSql = ' WHERE n.id_utilisateur = ? ';
+        const params = [req.userId];
 
-    if (type_notification) {
-      whereSql += ' AND n.type_notification = ?';
-      params.push(type_notification);
-    }
+        if (type_notification) {
+            whereSql += ' AND n.type_notification = ?';
+            params.push(type_notification);
+        }
 
-    if (statut) {
-      whereSql += ' AND n.statut = ?';
-      params.push(statut);
-    } else if (unreadOnly === 'true') {
-      whereSql += ' AND n.statut = "non_lu"';
-    }
+        if (statut) {
+            whereSql += ' AND n.statut = ?';
+            params.push(statut);
+        } else if (unreadOnly === 'true') {
+            whereSql += ' AND n.statut = "non_lu"';
+        }
 
-    if (priorite) {
-      whereSql += ' AND n.priorite = ?';
-      params.push(priorite);
-    }
+        if (priorite) {
+            whereSql += ' AND n.priorite = ?';
+            params.push(priorite);
+        }
 
-    if (startDate && startDate !== '') {
-      whereSql += ' AND n.date_creation >= ?';
-      params.push(startDate);
-    }
+        if (startDate && startDate !== '') {
+            whereSql += ' AND n.date_creation >= ?';
+            params.push(startDate);
+        }
 
-    if (endDate && endDate !== '') {
-      whereSql += ' AND n.date_creation <= ?';
-      params.push(endDate);
-    }
+        if (endDate && endDate !== '') {
+            whereSql += ' AND n.date_creation <= ?';
+            params.push(endDate);
+        }
 
-    // =============================
-    // DATA
-    // =============================
-    const sql = `
+        // =============================
+        // DATA
+        // =============================
+        const sql = `
       SELECT 
         n.*,
         CASE 
@@ -224,37 +224,38 @@ router.get('/', authenticate, async (req, res) => {
       LIMIT ${offset}, ${pLimit}
     `;
 
-    // =============================
-    // COUNT
-    // =============================
-    const countSql = `
+        // =============================
+        // COUNT
+        // =============================
+        const countSql = `
       SELECT COUNT(*) AS total
       FROM notifications n
       ${whereSql}
     `;
 
-    const [notifications] = await db.query(sql, params);
-    const [[{ total }]] = await db.query(countSql, params);
+        const notifications = await db.query(sql, params);
+        const countResult = await db.query(countSql, params);
+        const total = countResult[0]?.total || 0;
 
-    res.status(200).json({
-      success: true,
-      data: notifications,
-      pagination: {
-        total,
-        page: pPage,
-        limit: pLimit,
-        pages: Math.ceil(total / pLimit)
-      }
-    });
+        res.status(200).json({
+            success: true,
+            data: notifications,
+            pagination: {
+                total,
+                page: pPage,
+                limit: pLimit,
+                pages: Math.ceil(total / pLimit)
+            }
+        });
 
-  } catch (error) {
-    console.error('❌ Get notifications error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur lors de la récupération des notifications',
-      error: error.message
-    });
-  }
+    } catch (error) {
+        console.error('❌ Get notifications error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors de la récupération des notifications',
+            error: error.message
+        });
+    }
 });
 
 
@@ -276,11 +277,11 @@ router.get('/stats', authenticate, async (req, res) => {
             WHERE id_utilisateur = ?
         `;
 
-        const [stats] = await db.query(sql, [req.userId]);
+        const stats = await db.query(sql, [req.userId]);
 
         res.status(200).json({
             success: true,
-            data: stats
+            data: stats[0]
         });
 
     } catch (error) {
@@ -627,6 +628,80 @@ router.post('/broadcast', authenticate, authorize('admin'), async (req, res) => 
         res.status(500).json({
             success: false,
             message: 'Erreur lors de la diffusion'
+        });
+    }
+});
+
+/**
+ * Envoyer un message à l'administration (Contact Admin/RH)
+ * POST /api/notifications/contact-admin
+ */
+router.post('/contact-admin', authenticate, async (req, res) => {
+    try {
+        const { sujet, message } = req.body;
+        const userId = req.userId;
+
+        if (!sujet || !message) {
+            return res.status(400).json({
+                success: false,
+                message: 'Le sujet et le message sont obligatoires.'
+            });
+        }
+
+        // Récupérer tous les administrateurs actifs
+        const admins = await db.query(
+            "SELECT id FROM employes WHERE role = 'admin' AND statut = 'actif'"
+        );
+
+        if (!admins || admins.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Aucun administrateur disponible pour recevoir votre message.'
+            });
+        }
+
+        // Récupérer les informations de l'expéditeur
+        const sender = await db.query(
+            "SELECT nom_complet, role FROM employes WHERE id = ?",
+            [userId]
+        );
+        const senderInfo = (sender && sender[0]) ? `${sender[0].nom_complet} (${sender[0].role})` : 'Un employé';
+
+        // Créer les notifications pour chaque admin
+        const insertPromises = admins.map(admin => {
+            return db.query(
+                `INSERT INTO notifications (
+                    id_utilisateur, type_notification, titre, message,
+                    priorite, date_creation, statut
+                ) VALUES (?, 'message', ?, ?, 'normale', NOW(), 'non_lu')`,
+                [admin.id, `Nouveau message: ${sujet}`, `De: ${senderInfo}\n\n${message}`]
+            );
+        });
+
+        await Promise.all(insertPromises);
+
+        // Notifier via Socket.io si disponible
+        if (req.io) {
+            admins.forEach(admin => {
+                req.io.to(`user-${admin.id}`).emit('new-notification', {
+                    type_notification: 'message',
+                    titre: `Message de ${senderInfo}`,
+                    message: sujet,
+                    timestamp: new Date().toISOString()
+                });
+            });
+        }
+
+        res.status(201).json({
+            success: true,
+            message: 'Votre message a été envoyé à l\'administration avec succès.'
+        });
+
+    } catch (error) {
+        console.error('❌ Contact admin error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Une erreur est survenue lors de l\'envoi de votre message.'
         });
     }
 });

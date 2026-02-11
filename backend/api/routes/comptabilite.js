@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const db = require('../../database/db');
+const ExcelJS = require('exceljs');
 
 // =============================================
 // DASHBOARD COMPTABLE
@@ -100,7 +101,7 @@ router.get('/dashboard', authenticate, authorize('admin', 'comptable'), async (r
 
         // Alertes comptables
         const alertes = [];
-        
+
         // Factures échues
         if (creances.creances_echues > 0) {
             alertes.push({
@@ -154,11 +155,11 @@ router.get('/dashboard', authenticate, authorize('admin', 'comptable'), async (r
 
 router.get('/rapprochement-bancaire', authenticate, authorize('admin', 'comptable'), async (req, res) => {
     try {
-        const { 
-            compte, 
-            startDate, 
+        const {
+            compte,
+            startDate,
             endDate,
-            statut = 'non_rapproche' 
+            statut = 'non_rapproche'
         } = req.query;
 
         // Paiements à rapprocher
@@ -276,16 +277,137 @@ router.post('/rapprochement-bancaire/rapprocher', authenticate, authorize('admin
     }
 });
 
+/**
+ * POST /rapprochement-bancaire/export-excel - Exporter les transactions en Excel
+ */
+router.post('/rapprochement-bancaire/export-excel', authenticate, authorize('admin', 'comptable'), async (req, res) => {
+    try {
+        const {
+            compte,
+            startDate,
+            endDate,
+            statut = 'all'
+        } = req.body;
+
+        // Requête pour récupérer les données à exporter
+        let sql = `
+            SELECT 
+                p.*,
+                CASE 
+                    WHEN p.source_type = 'client' THEN c.nom_client
+                    WHEN p.source_type = 'fournisseur' THEN f.nom_fournisseur
+                    ELSE p.source_type
+                END as source_nom,
+                f_fact.numero_facture
+            FROM paiements p
+            LEFT JOIN clients c ON p.source_type = 'client' AND p.id_source = c.id
+            LEFT JOIN fournisseurs f ON p.source_type = 'fournisseur' AND p.id_source = f.id
+            LEFT JOIN factures f_fact ON p.id_facture = f_fact.id
+            WHERE p.statut = 'valide'
+        `;
+        const params = [];
+
+        if (statut === 'non_rapproche') {
+            sql += ' AND p.rapproche = FALSE';
+        } else if (statut === 'rapproche') {
+            sql += ' AND p.rapproche = TRUE';
+        }
+
+        if (compte) {
+            sql += ' AND p.numero_compte = ?';
+            params.push(compte);
+        }
+
+        if (startDate) {
+            sql += ' AND p.date_paiement >= ?';
+            params.push(startDate);
+        }
+
+        if (endDate) {
+            sql += ' AND p.date_paiement <= ?';
+            params.push(endDate);
+        }
+
+        sql += ' ORDER BY p.date_paiement DESC';
+
+        const paiements = await db.query(sql, params);
+
+        // Création du classeur Excel
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = 'NUTRIFIX';
+        workbook.created = new Date();
+
+        const worksheet = workbook.addWorksheet('Rapprochement Bancaire');
+
+        // Styles
+        const headerStyle = {
+            font: { bold: true, color: { argb: 'FFFFFFFF' } },
+            fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E86C1' } },
+            alignment: { horizontal: 'center' }
+        };
+
+        // En-têtes
+        worksheet.columns = [
+            { header: 'Date', key: 'date_paiement', width: 15 },
+            { header: 'Référence', key: 'reference_paiement', width: 20 },
+            { header: 'Source', key: 'source_nom', width: 25 },
+            { header: 'Facture', key: 'numero_facture', width: 20 },
+            { header: 'Mode', key: 'mode_paiement', width: 15 },
+            { header: 'Compte', key: 'numero_compte', width: 20 },
+            { header: 'Type', key: 'type_paiement', width: 12 },
+            { header: 'Montant', key: 'montant', width: 15 },
+            { header: 'Statut', key: 'rapproche', width: 15 }
+        ];
+
+        worksheet.getRow(1).eachCell((cell) => {
+            cell.style = headerStyle;
+        });
+
+        // Données
+        paiements.forEach(p => {
+            worksheet.addRow({
+                date_paiement: new Date(p.date_paiement).toLocaleDateString('fr-FR'),
+                reference_paiement: p.reference_paiement,
+                source_nom: p.source_nom,
+                numero_facture: p.numero_facture || '-',
+                mode_paiement: p.mode_paiement,
+                numero_compte: p.numero_compte || '-',
+                type_paiement: p.type_paiement === 'recette' ? 'Recette' : 'Dépense',
+                montant: parseFloat(p.montant),
+                rapproche: p.rapproche ? 'Rapproché' : 'En attente'
+            });
+        });
+
+        // Formater la colonne montant
+        worksheet.getColumn('montant').numFmt = '#,##0.00 "BIF"';
+
+        // Générer le buffer et l'envoyer en base64
+        const buffer = await workbook.xlsx.writeBuffer();
+        res.status(200).json({
+            success: true,
+            data: buffer.toString('base64'),
+            filename: `Rapprochement_Bancaire_${new Date().toISOString().split('T')[0]}.xlsx`
+        });
+
+    } catch (error) {
+        console.error('Export Excel rapprochement error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors de la génération de l\'export Excel'
+        });
+    }
+});
+
 // =============================================
 // JOURNAL COMPTABLE (MOUVEMENTS)
 // =============================================
 
 router.get('/journal-comptable', authenticate, authorize('admin', 'comptable'), async (req, res) => {
     try {
-        const { 
-            type_mouvement, 
+        const {
+            type_mouvement,
             categorie,
-            startDate, 
+            startDate,
             endDate,
             page = 1,
             limit = 50
@@ -630,9 +752,9 @@ router.post('/setup-impots-table', authenticate, authorize('admin'), async (req,
 
 router.get('/impots', authenticate, authorize('admin', 'comptable'), async (req, res) => {
     try {
-        const { 
-            type_impot, 
-            annee, 
+        const {
+            type_impot,
+            annee,
             statut,
             page = 1,
             limit = 20
@@ -666,7 +788,7 @@ router.get('/impots', authenticate, authorize('admin', 'comptable'), async (req,
         }
 
         sql += ' ORDER BY i.annee DESC, i.periode DESC';
-        
+
         // Pagination
         const offset = (page - 1) * limit;
         sql += ' LIMIT ? OFFSET ?';
@@ -726,12 +848,12 @@ router.get('/impots', authenticate, authorize('admin', 'comptable'), async (req,
 
 router.post('/impots/calculer', authenticate, authorize('admin', 'comptable'), async (req, res) => {
     try {
-        const { 
-            type_impot, 
-            periode_type, 
-            annee, 
+        const {
+            type_impot,
+            periode_type,
+            annee,
             periode,
-            taux_pourcent 
+            taux_pourcent
         } = req.body;
 
         // Validation
@@ -827,7 +949,7 @@ router.post('/impots/calculer', authenticate, authorize('admin', 'comptable'), a
                     calcule_par, date_calcul
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
             `;
-            
+
             const result = await db.query(insertSql, [
                 type_impot,
                 periode_type,
@@ -861,11 +983,11 @@ router.post('/impots/calculer', authenticate, authorize('admin', 'comptable'), a
 router.post('/impots/:id/payer', authenticate, authorize('admin', 'comptable'), async (req, res) => {
     try {
         const impotId = parseInt(req.params.id);
-        const { 
-            montant_paye, 
-            date_paiement, 
+        const {
+            montant_paye,
+            date_paiement,
             reference_paiement,
-            recu_paiement 
+            recu_paiement
         } = req.body;
 
         if (!montant_paye || !date_paiement || !reference_paiement) {

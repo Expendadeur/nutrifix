@@ -25,12 +25,17 @@ import {
   Surface,
   Chip,
   Divider,
-  ProgressBar
+  ProgressBar,
+  Modal,
+  Portal,
+  TextInput,
+  Button
 } from 'react-native-paper';
-import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { MaterialIcons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LineChart, BarChart, PieChart } from 'react-native-chart-kit';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import api from '../../services/api';
+import { BaseEmployeService } from '../../services/employeService';
 
 // ==================== RESPONSIVE UTILITIES ====================
 const { width: screenWidth } = Dimensions.get('window');
@@ -62,6 +67,12 @@ const DashboardComptableScreen = () => {
   const [chartType, setChartType] = useState('creances');
   const [error, setError] = useState(null);
 
+  // Communication avec l'Admin
+  const [communicationModalVisible, setCommunicationModalVisible] = useState(false);
+  const [messageSubject, setMessageSubject] = useState('');
+  const [messageBody, setMessageBody] = useState('');
+  const [isSending, setIsSending] = useState(false);
+
   // ==================== EFFECTS ====================
   useEffect(() => {
     loadDashboard();
@@ -78,10 +89,10 @@ const DashboardComptableScreen = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       // Appel API réel vers votre endpoint
       const response = await api.get('/comptabilite/dashboard');
-      
+
       if (response.data.success) {
         setDashboardData(response.data.data);
       } else {
@@ -91,7 +102,7 @@ const DashboardComptableScreen = () => {
       console.error('Dashboard error:', error);
       setError(error.response?.data?.message || error.message || 'Erreur de connexion');
       Alert.alert(
-        'Erreur', 
+        'Erreur',
         error.response?.data?.message || 'Impossible de charger le tableau de bord'
       );
     } finally {
@@ -104,6 +115,32 @@ const DashboardComptableScreen = () => {
     setRefreshing(true);
     loadDashboard();
   }, []);
+
+  const handleSendMessage = async () => {
+    if (!messageSubject || !messageBody) {
+      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
+      return;
+    }
+
+    try {
+      setIsSending(true);
+      const response = await BaseEmployeService.contactAdmin(messageSubject, messageBody);
+
+      if (response.success) {
+        Alert.alert('Succès', 'Votre message a été envoyé à l\'administration');
+        setCommunicationModalVisible(false);
+        setMessageSubject('');
+        setMessageBody('');
+      } else {
+        throw new Error(response.message || 'Erreur lors de l\'envoi');
+      }
+    } catch (error) {
+      console.error('Send message error:', error);
+      Alert.alert('Erreur', error.message || 'Impossible d\'envoyer le message');
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   // ==================== UTILITY FUNCTIONS ====================
   const formatCurrency = (amount) => {
@@ -126,7 +163,7 @@ const DashboardComptableScreen = () => {
   };
 
   const getAlertColor = (niveau) => {
-    switch(niveau) {
+    switch (niveau) {
       case 'urgent': return '#E74C3C';
       case 'warning': return '#F39C12';
       case 'info': return '#3498DB';
@@ -135,7 +172,7 @@ const DashboardComptableScreen = () => {
   };
 
   const getAlertIcon = (type) => {
-    switch(type) {
+    switch (type) {
       case 'creances_echues': return 'assignment-late';
       case 'dettes_echues': return 'warning';
       case 'rapprochement': return 'sync-problem';
@@ -190,9 +227,9 @@ const DashboardComptableScreen = () => {
     <Surface style={styles.header}>
       <View style={styles.headerContent}>
         <View style={styles.headerLeft}>
-          <Avatar.Icon 
-            size={getResponsiveValue(50, 55, 60, 65)} 
-            icon="calculator" 
+          <Avatar.Icon
+            size={getResponsiveValue(50, 55, 60, 65)}
+            icon="calculator"
             style={styles.avatar}
           />
           <View style={styles.headerInfo}>
@@ -201,8 +238,15 @@ const DashboardComptableScreen = () => {
             <Text style={styles.period}>{getPeriodLabel()}</Text>
           </View>
         </View>
-        
+
         <View style={styles.headerRight}>
+          <IconButton
+            icon="human-greeting-proximity"
+            size={24}
+            iconColor="#FFF"
+            onPress={() => setCommunicationModalVisible(true)}
+            style={styles.headerIconButton}
+          />
           <IconButton
             icon="bell"
             size={24}
@@ -240,9 +284,9 @@ const DashboardComptableScreen = () => {
             <Title style={styles.alertTitle}>Alertes importantes</Title>
             <Badge style={styles.alertBadge}>{dashboardData.alertes.length}</Badge>
           </View>
-          
+
           {dashboardData.alertes.map((alerte, index) => (
-            <TouchableOpacity 
+            <TouchableOpacity
               key={index}
               style={[
                 styles.alertItem,
@@ -252,10 +296,10 @@ const DashboardComptableScreen = () => {
               activeOpacity={0.7}
             >
               <View style={styles.alertItemContent}>
-                <MaterialIcons 
-                  name={getAlertIcon(alerte.type)} 
-                  size={20} 
-                  color={getAlertColor(alerte.niveau)} 
+                <MaterialIcons
+                  name={getAlertIcon(alerte.type)}
+                  size={20}
+                  color={getAlertColor(alerte.niveau)}
                 />
                 <View style={styles.alertItemInfo}>
                   <Text style={styles.alertMessage}>{alerte.titre}</Text>
@@ -274,7 +318,7 @@ const DashboardComptableScreen = () => {
     <View style={styles.kpiContainer}>
       {/* Trésorerie */}
       <Surface style={[styles.kpiCard, styles.kpiTresorerie]}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.kpiContent}
           onPress={() => navigation.navigate('Tresorerie')}
           activeOpacity={0.8}
@@ -289,10 +333,10 @@ const DashboardComptableScreen = () => {
             </Text>
             {dashboardData?.tresorerie?.variation !== undefined && (
               <View style={styles.kpiVariation}>
-                <MaterialIcons 
-                  name={dashboardData.tresorerie.variation >= 0 ? 'trending-up' : 'trending-down'} 
-                  size={14} 
-                  color={dashboardData.tresorerie.variation >= 0 ? '#2ECC71' : '#E74C3C'} 
+                <MaterialIcons
+                  name={dashboardData.tresorerie.variation >= 0 ? 'trending-up' : 'trending-down'}
+                  size={14}
+                  color={dashboardData.tresorerie.variation >= 0 ? '#2ECC71' : '#E74C3C'}
                 />
                 <Text style={[
                   styles.kpiVariationText,
@@ -308,7 +352,7 @@ const DashboardComptableScreen = () => {
 
       {/* Créances */}
       <Surface style={[styles.kpiCard, styles.kpiCreances]}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.kpiContent}
           onPress={() => navigation.navigate('Factures', { type: 'vente', statut: 'impayee' })}
           activeOpacity={0.8}
@@ -330,7 +374,7 @@ const DashboardComptableScreen = () => {
 
       {/* Dettes */}
       <Surface style={[styles.kpiCard, styles.kpiDettes]}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.kpiContent}
           onPress={() => navigation.navigate('Factures', { type: 'achat', statut: 'impayee' })}
           activeOpacity={0.8}
@@ -352,7 +396,7 @@ const DashboardComptableScreen = () => {
 
       {/* Rapprochements */}
       <Surface style={[styles.kpiCard, styles.kpiRapprochement]}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.kpiContent}
           onPress={() => navigation.navigate('RapprochementBancaire')}
           activeOpacity={0.8}
@@ -468,7 +512,7 @@ const DashboardComptableScreen = () => {
           <Paragraph style={styles.chartSubtitle}>
             Par ancienneté - Total: {formatCurrency(dashboardData.creances.total_creances)}
           </Paragraph>
-          
+
           <PieChart
             data={pieData}
             width={screenWidth - getResponsiveValue(60, 80, 100, 120)}
@@ -506,7 +550,7 @@ const DashboardComptableScreen = () => {
           <Paragraph style={styles.chartSubtitle}>
             Derniers mois
           </Paragraph>
-          
+
           <BarChart
             data={{
               labels: dashboardData.evolution_tresorerie.map(e => e.mois),
@@ -559,7 +603,7 @@ const DashboardComptableScreen = () => {
           <Paragraph style={styles.chartSubtitle}>
             Par catégorie - Période en cours
           </Paragraph>
-          
+
           <PieChart
             data={dashboardData.repartition_depenses.map(item => ({
               name: item.categorie,
@@ -593,7 +637,7 @@ const DashboardComptableScreen = () => {
             </View>
           </TouchableOpacity>
         </View>
-        
+
         <FlatList
           data={dashboardData?.transactions?.slice(0, 5) || []}
           renderItem={renderTransactionItem}
@@ -612,7 +656,7 @@ const DashboardComptableScreen = () => {
   );
 
   const renderTransactionItem = ({ item }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.transactionItem}
       onPress={() => handleTransactionPress(item)}
       activeOpacity={0.7}
@@ -622,10 +666,10 @@ const DashboardComptableScreen = () => {
           styles.transactionIcon,
           { backgroundColor: item.type_paiement === 'recette' ? '#E8F8F5' : '#FDEDEC' }
         ]}>
-          <MaterialIcons 
-            name={item.type_paiement === 'recette' ? 'arrow-downward' : 'arrow-upward'} 
-            size={20} 
-            color={item.type_paiement === 'recette' ? '#2ECC71' : '#E74C3C'} 
+          <MaterialIcons
+            name={item.type_paiement === 'recette' ? 'arrow-downward' : 'arrow-upward'}
+            size={20}
+            color={item.type_paiement === 'recette' ? '#2ECC71' : '#E74C3C'}
           />
         </View>
         <View style={styles.transactionInfo}>
@@ -653,13 +697,75 @@ const DashboardComptableScreen = () => {
     </TouchableOpacity>
   );
 
+  const renderCommunicationModal = () => (
+    <Portal>
+      <Modal
+        visible={communicationModalVisible}
+        onDismiss={() => setCommunicationModalVisible(false)}
+        contentContainerStyle={styles.commModalContainer}
+      >
+        <View style={styles.commModalHeader}>
+          <MaterialCommunityIcons name="message-text" size={28} color="#2E86C1" />
+          <Title style={styles.commModalTitle}>Contacter l'Admin</Title>
+        </View>
+
+        <View style={styles.commModalBody}>
+          <Text style={styles.commModalLabel}>Sujet</Text>
+          <TextInput
+            mode="outlined"
+            placeholder="Sujet de votre message"
+            value={messageSubject}
+            onChangeText={setMessageSubject}
+            style={styles.commInput}
+            outlineColor="#E0E0E0"
+            activeOutlineColor="#2E86C1"
+          />
+
+          <Text style={styles.commModalLabel}>Message</Text>
+          <TextInput
+            mode="outlined"
+            placeholder="Décrivez votre demande ou question ici..."
+            value={messageBody}
+            onChangeText={setMessageBody}
+            multiline
+            numberOfLines={6}
+            style={[styles.commInput, styles.commTextArea]}
+            outlineColor="#E0E0E0"
+            activeOutlineColor="#2E86C1"
+          />
+
+          <View style={styles.commModalActions}>
+            <Button
+              mode="outlined"
+              onPress={() => setCommunicationModalVisible(false)}
+              style={styles.commCancelBtn}
+              labelStyle={{ color: '#7F8C8D' }}
+            >
+              Annuler
+            </Button>
+            <Button
+              mode="contained"
+              onPress={handleSendMessage}
+              loading={isSending}
+              disabled={isSending}
+              style={styles.commSendBtn}
+              buttonColor="#2E86C1"
+            >
+              Envoyer
+            </Button>
+          </View>
+        </View>
+      </Modal>
+    </Portal>
+  );
+
   const renderQuickActions = () => (
     <Card style={styles.quickActionsCard}>
       <Card.Content>
         <Title style={styles.quickActionsTitle}>Actions Rapides</Title>
-        
+
         <View style={styles.quickActionsGrid}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.quickActionButton}
             onPress={() => navigation.navigate('RapprochementBancaire')}
             activeOpacity={0.7}
@@ -675,7 +781,7 @@ const DashboardComptableScreen = () => {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.quickActionButton}
             onPress={() => navigation.navigate('JournalComptable')}
             activeOpacity={0.7}
@@ -686,7 +792,7 @@ const DashboardComptableScreen = () => {
             <Text style={styles.quickActionText}>Journal</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.quickActionButton}
             onPress={() => navigation.navigate('Factures')}
             activeOpacity={0.7}
@@ -697,7 +803,7 @@ const DashboardComptableScreen = () => {
             <Text style={styles.quickActionText}>Factures</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.quickActionButton}
             onPress={() => navigation.navigate('Paiements')}
             activeOpacity={0.7}
@@ -708,7 +814,7 @@ const DashboardComptableScreen = () => {
             <Text style={styles.quickActionText}>Paiements</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.quickActionButton}
             onPress={() => navigation.navigate('Rapports')}
             activeOpacity={0.7}
@@ -719,7 +825,7 @@ const DashboardComptableScreen = () => {
             <Text style={styles.quickActionText}>Rapports</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.quickActionButton}
             onPress={() => navigation.navigate('Cloture')}
             activeOpacity={0.7}
@@ -736,7 +842,7 @@ const DashboardComptableScreen = () => {
 
   // ==================== EVENT HANDLERS ====================
   const handleAlertPress = (alerte) => {
-    switch(alerte.type) {
+    switch (alerte.type) {
       case 'creances_echues':
         navigation.navigate('Factures', { type: 'vente', filter: 'echues' });
         break;
@@ -780,16 +886,16 @@ const DashboardComptableScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#2E86C1" />
-      
+
       {/* Header */}
       {renderHeader()}
-      
-      <ScrollView 
+
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
+          <RefreshControl
+            refreshing={refreshing}
             onRefresh={onRefresh}
             colors={['#2E86C1']}
             tintColor="#2E86C1"
@@ -811,6 +917,9 @@ const DashboardComptableScreen = () => {
 
         {/* Quick Actions */}
         {renderQuickActions()}
+
+        {/* Communication Modal */}
+        {renderCommunicationModal()}
 
         {/* Bottom Spacing */}
         <View style={styles.bottomSpacing} />
@@ -862,7 +971,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  
+
   // Header
   header: {
     backgroundColor: '#2E86C1',
@@ -1215,7 +1324,57 @@ const styles = StyleSheet.create({
     backgroundColor: '#E74C3C',
   },
 
-  // Bottom Spacing
+  // Communication Modal Styles
+  commModalContainer: {
+    backgroundColor: 'white',
+    padding: 20,
+    margin: 20,
+    borderRadius: 16,
+    elevation: 5,
+  },
+  commModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+    paddingBottom: 10,
+  },
+  commModalTitle: {
+    marginLeft: 10,
+    fontSize: 20,
+    color: '#2E86C1',
+  },
+  commModalBody: {
+    gap: 15,
+  },
+  commModalLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2C3E50',
+    marginBottom: -5,
+  },
+  commInput: {
+    backgroundColor: '#FFF',
+  },
+  commTextArea: {
+    height: 120,
+    textAlignVertical: 'top',
+  },
+  commModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    marginTop: 10,
+  },
+  commCancelBtn: {
+    borderColor: '#BDC3C7',
+    borderRadius: 8,
+  },
+  commSendBtn: {
+    borderRadius: 8,
+    paddingHorizontal: 15,
+  },
   bottomSpacing: {
     height: 20,
   },

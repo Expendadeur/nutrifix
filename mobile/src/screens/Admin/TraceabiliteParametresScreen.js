@@ -117,6 +117,13 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
   const [historiqueDetailModal, setHistoriqueDetailModal] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [datePickerField, setDatePickerField] = useState('');
+  const [datePickerValue, setDatePickerValue] = useState(new Date());
+
+  const openDatePicker = (field, initialValue = null) => {
+    setDatePickerField(field);
+    setDatePickerValue(initialValue instanceof Date ? initialValue : (initialValue ? new Date(initialValue) : new Date()));
+    setShowDatePicker(true);
+  };
 
   // ============================================
   // UTILISATEURS - ÉTATS
@@ -904,6 +911,34 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
           inputStyle={{ fontSize: fontSize.body }}
           iconColor="#6366F1"
         />
+      </View>
+
+      {/* Filtres de Date */}
+      <View style={{ flexDirection: 'row', gap: 10, paddingHorizontal: 20, marginTop: 12 }}>
+        <TouchableOpacity
+          style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 10, borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB' }}
+          onPress={() => openDatePicker('start', historiqueFilters.startDate)}
+        >
+          <MaterialIcons name="event" size={20} color="#6366F1" />
+          <View style={{ marginLeft: 8 }}>
+            <Text style={{ fontSize: 10, color: '#6B7280', fontWeight: '600' }}>DEPUIS</Text>
+            <Text style={{ fontSize: 13, color: '#111827', fontWeight: '500' }}>
+              {historiqueFilters.startDate.toLocaleDateString('fr-FR')}
+            </Text>
+          </View>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 10, borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB' }}
+          onPress={() => openDatePicker('end', historiqueFilters.endDate)}
+        >
+          <MaterialIcons name="event" size={20} color="#6366F1" />
+          <View style={{ marginLeft: 8 }}>
+            <Text style={{ fontSize: 10, color: '#6B7280', fontWeight: '600' }}>JUSQU'À</Text>
+            <Text style={{ fontSize: 13, color: '#111827', fontWeight: '500' }}>
+              {historiqueFilters.endDate.toLocaleDateString('fr-FR')}
+            </Text>
+          </View>
+        </TouchableOpacity>
       </View>
 
       {/* Liste avec espacement de 12px */}
@@ -2066,7 +2101,7 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
       {/* Date Picker */}
       {showDatePicker && (
         <DateTimePicker
-          value={datePickerField === 'start' ? historiqueFilters.startDate : historiqueFilters.endDate}
+          value={datePickerValue}
           mode="date"
           display="default"
           onChange={(event, selectedDate) => {

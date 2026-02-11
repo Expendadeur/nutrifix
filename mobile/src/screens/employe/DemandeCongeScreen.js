@@ -436,14 +436,35 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
   const [typeConge, setTypeConge] = useState('annuel');
   const [dateDebut, setDateDebut] = useState(new Date());
   const [dateFin, setDateFin] = useState(new Date());
-  const [showDateDebutPicker, setShowDateDebutPicker] = useState(false);
-  const [showDateFinPicker, setShowDateFinPicker] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [datePickerField, setDatePickerField] = useState(null);
+  const [datePickerValue, setDatePickerValue] = useState(new Date());
   const [raison, setRaison] = useState('');
   const [pieceJointe, setPieceJointe] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [joursCalcules, setJoursCalcules] = useState(0);
 
   const isMobile = windowDimensions.width < 600;
+
+  const openDatePicker = (field, initialValue) => {
+    setDatePickerField(field);
+    setDatePickerValue(initialValue instanceof Date ? initialValue : new Date(initialValue));
+    setShowDatePicker(true);
+  };
+
+  const handleDateChange = (event, selectedDate) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      if (datePickerField === 'dateDebut') {
+        const d = new Date(selectedDate);
+        setDateDebut(d);
+        // Ajuster la date de fin si elle est antérieure à la nouvelle date de début
+        if (d > dateFin) setDateFin(d);
+      } else if (datePickerField === 'dateFin') {
+        setDateFin(new Date(selectedDate));
+      }
+    }
+  };
 
   const typesConge = [
     { value: 'annuel', label: 'Annuel', icon: 'beach-access', color: '#2563EB', bg: '#DBEAFE' },
@@ -596,7 +617,7 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
 
           <TouchableOpacity
             style={modalStyles.dateCard}
-            onPress={() => setShowDateDebutPicker(true)}
+            onPress={() => openDatePicker('dateDebut', dateDebut)}
           >
             <View style={[modalStyles.dateIconCircle, { backgroundColor: COLORS.primaryLight }]}>
               <MaterialIcons name="event" size={22} color={COLORS.primary} />
@@ -608,21 +629,11 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
             <MaterialIcons name="chevron-right" size={24} color={COLORS.textTertiary} />
           </TouchableOpacity>
 
-          {showDateDebutPicker && (
-            <DateTimePicker
-              value={dateDebut}
-              mode="date"
-              minimumDate={new Date()}
-              onChange={(event, selectedDate) => {
-                setShowDateDebutPicker(false);
-                if (selectedDate) setDateDebut(selectedDate);
-              }}
-            />
-          )}
+          {/* Unified DatePicker replaced individual ones */}
 
           <TouchableOpacity
             style={modalStyles.dateCard}
-            onPress={() => setShowDateFinPicker(true)}
+            onPress={() => openDatePicker('dateFin', dateFin)}
           >
             <View style={[modalStyles.dateIconCircle, { backgroundColor: COLORS.primaryLight }]}>
               <MaterialIcons name="event" size={22} color={COLORS.primary} />
@@ -634,15 +645,12 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
             <MaterialIcons name="chevron-right" size={24} color={COLORS.textTertiary} />
           </TouchableOpacity>
 
-          {showDateFinPicker && (
+          {showDatePicker && (
             <DateTimePicker
-              value={dateFin}
+              value={datePickerValue}
               mode="date"
-              minimumDate={dateDebut}
-              onChange={(event, selectedDate) => {
-                setShowDateFinPicker(false);
-                if (selectedDate) setDateFin(selectedDate);
-              }}
+              minimumDate={datePickerField === 'dateFin' ? dateDebut : new Date()}
+              onChange={handleDateChange}
             />
           )}
 

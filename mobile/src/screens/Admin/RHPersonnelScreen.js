@@ -179,8 +179,16 @@ const RHPersonnelScreen = ({ navigation }) => {
   const [employeModalVisible, setEmployeModalVisible] = useState(false);
   const [employeMode, setEmployeMode] = useState('view');
   const [carteModalVisible, setCarteModalVisible] = useState(false);
-  const [showDatePickerField, setShowDatePickerField] = useState(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [datePickerField, setDatePickerField] = useState('');
+  const [datePickerMode, setDatePickerMode] = useState('date');
   const [datePickerValue, setDatePickerValue] = useState(new Date());
+  const [currentForm, setCurrentForm] = useState(null);
+
+  // Validation d'unicité
+  const [checkingMatricule, setCheckingMatricule] = useState(false);
+  const [matriculeError, setMatriculeError] = useState(null);
+  const [isMatriculeUnique, setIsMatriculeUnique] = useState(true);
 
   // DEPARTEMENTS
   const [departements, setDepartements] = useState([]);
@@ -191,7 +199,6 @@ const RHPersonnelScreen = ({ navigation }) => {
   // PRESENCES
   const [presences, setPresences] = useState([]);
   const [selectedDatePresence, setSelectedDatePresence] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // SALAIRES
   const [salaires, setSalaires] = useState([]);
@@ -204,9 +211,71 @@ const RHPersonnelScreen = ({ navigation }) => {
   // HISTORIQUE
   const [historique, setHistorique] = useState([]);
 
+  // ============================================
+  // DATE PICKER HELPERS
+  // ============================================
+  const openDatePicker = (field, mode = 'date', formType = null, initialValue = null) => {
+    setDatePickerField(field);
+    setDatePickerMode(mode);
+    setCurrentForm(formType);
+    setDatePickerValue(initialValue instanceof Date ? initialValue : (initialValue ? new Date(initialValue) : new Date()));
+    setShowDatePicker(true);
+  };
+
+  const handleDateChange = (event, selectedDate) => {
+    setShowDatePicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      setDatePickerValue(selectedDate);
+      if (currentForm === 'employe') {
+        const dateStr = selectedDate.toISOString().split('T')[0];
+        setEmployeForm({ ...employeForm, [datePickerField]: dateStr });
+      } else if (currentForm === 'presence') {
+        setSelectedDatePresence(selectedDate);
+      } else if (currentForm === 'salaire') {
+        setSelectedMoisSalaire(selectedDate);
+      }
+      if (Platform.OS === 'android') setShowDatePicker(false);
+    }
+  };
+
   // FORMS
   const [employeForm, setEmployeForm] = useState(getEmptyEmployeForm());
   const [departementForm, setDepartementForm] = useState(getEmptyDepartementForm());
+
+  // ============================================
+  // UNIQUENESS VALIDATION
+  // ============================================
+  const checkMatriculeUniqueness = async (matricule) => {
+    if (!matricule || employeMode !== 'add') return;
+
+    try {
+      setCheckingMatricule(true);
+      setMatriculeError(null);
+      const response = await api.get(`/system/check-uniqueness?table=utilisateurs&field=matricule&value=${matricule}`);
+      if (response.data.success) {
+        setIsMatriculeUnique(response.data.isUnique);
+        if (!response.data.isUnique) {
+          setMatriculeError('Ce matricule est déjà utilisé.');
+        }
+      }
+    } catch (error) {
+      console.error('Error checking matricule:', error);
+    } finally {
+      setCheckingMatricule(false);
+    }
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (employeForm.matricule && employeMode === 'add') {
+        checkMatriculeUniqueness(employeForm.matricule);
+      } else {
+        setIsMatriculeUnique(true);
+        setMatriculeError(null);
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [employeForm.matricule, employeMode]);
 
   // ============================================
   // HELPER FUNCTIONS
@@ -931,7 +1000,7 @@ const RHPersonnelScreen = ({ navigation }) => {
       <View style={[styles.sectionHeader, { paddingHorizontal: 16, paddingVertical: 16 }]}>
         <TouchableOpacity
           style={[styles.datePickerBtn, { paddingHorizontal: 16, paddingVertical: 16 / 2 }]}
-          onPress={() => setShowDatePicker(true)}
+          onPress={() => openDatePicker('presence', 'date', 'presence', selectedDatePresence)}
         >
           <MaterialIcons name="calendar-today" size={20} color="#2E86C1" />
           <Text style={[styles.datePickerText, { fontSize: 18, marginLeft: 16 / 2 }]}>
@@ -1023,7 +1092,7 @@ const RHPersonnelScreen = ({ navigation }) => {
       <View style={[styles.sectionHeader, { paddingHorizontal: 16, paddingVertical: 16 }]}>
         <TouchableOpacity
           style={[styles.datePickerBtn, { paddingHorizontal: 16, paddingVertical: 16 / 2 }]}
-          onPress={() => setShowDatePicker(true)}
+          onPress={() => openDatePicker('salaire', 'date', 'salaire', selectedMoisSalaire)}
         >
           <MaterialIcons name="calendar-today" size={20} color="#2E86C1" />
           <Text style={[styles.datePickerText, { fontSize: 18, marginLeft: 16 / 2 }]}>
@@ -1430,7 +1499,12 @@ const RHPersonnelScreen = ({ navigation }) => {
                         style={styles.input}
                         mode="outlined"
                         editable={employeMode === 'add'}
+                        error={!!matriculeError}
+                        right={checkingMatricule ? <TextInput.Icon icon={() => <ActivityIndicator size="small" color="#2E86C1" />} /> :
+                          !isMatriculeUnique ? <TextInput.Icon icon="alert-circle" color="#E74C3C" /> :
+                            employeForm.matricule && employeMode === 'add' ? <TextInput.Icon icon="check-circle" color="#27AE60" /> : null}
                       />
+                      {matriculeError && <Text style={styles.errorTextSmall}>{matriculeError}</Text>}
                     </View>
                     <View style={{ flex: 1, marginLeft: 8 }}>
                       <TextInput
@@ -1492,10 +1566,7 @@ const RHPersonnelScreen = ({ navigation }) => {
 
                   <TouchableOpacity
                     style={[styles.dateInput, { marginBottom: 16 }]}
-                    onPress={() => {
-                      setShowDatePickerField('date_naissance');
-                      setDatePickerValue(new Date(employeForm.date_naissance || new Date()));
-                    }}
+                    onPress={() => openDatePicker('date_naissance', 'date', 'employe', employeForm.date_naissance)}
                   >
                     <MaterialIcons name="calendar-today" size={20} color="#2E86C1" />
                     <Text style={[styles.dateInputText, { marginLeft: 8 }]}>
@@ -1570,10 +1641,7 @@ const RHPersonnelScreen = ({ navigation }) => {
 
                   <TouchableOpacity
                     style={[styles.dateInput, { marginBottom: 16 }]}
-                    onPress={() => {
-                      setShowDatePickerField('date_embauche');
-                      setDatePickerValue(new Date(employeForm.date_embauche || new Date()));
-                    }}
+                    onPress={() => openDatePicker('date_embauche', 'date', 'employe', employeForm.date_embauche)}
                   >
                     <MaterialIcons name="calendar-today" size={20} color="#2E86C1" />
                     <Text style={[styles.dateInputText, { marginLeft: 8 }]}>
@@ -1682,31 +1750,63 @@ const RHPersonnelScreen = ({ navigation }) => {
                   </Text>
 
                   <Text style={[styles.labelText, { fontSize: 16, marginBottom: 8 }]}>Photo d'identité</Text>
-                  <Button
-                    mode="outlined"
-                    onPress={async () => {
-                      const result = await ImagePicker.launchImageLibraryAsync({
-                        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                        allowsEditing: true,
-                        aspect: [1, 1],
-                        quality: 0.8,
-                      });
-                      if (!result.canceled) {
-                        setEmployeForm({ ...employeForm, photo_identite: result.assets[0].uri });
-                      }
-                    }}
-                    icon="image"
-                    style={{ marginBottom: 16 }}
-                  >
-                    {employeForm.photo_identite ? 'Changer la photo' : 'Ajouter une photo'}
-                  </Button>
 
-                  {employeForm.photo_identite && (
-                    <Image
-                      source={{ uri: employeForm.photo_identite }}
-                      style={{ width: 100, height: 100, borderRadius: 8, marginBottom: 16 }}
-                    />
-                  )}
+                  <View style={styles.photoActionsContainer}>
+                    <TouchableOpacity
+                      style={styles.photoPickerBtn}
+                      onPress={async () => {
+                        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+                        if (status !== 'granted') {
+                          Alert.alert('Erreur', 'Permission de caméra requise.');
+                          return;
+                        }
+                        const result = await ImagePicker.launchCameraAsync({
+                          allowsEditing: true,
+                          aspect: [1, 1],
+                          quality: 0.8,
+                        });
+                        if (!result.canceled) {
+                          setEmployeForm({ ...employeForm, photo_identite: result.assets[0].uri });
+                        }
+                      }}
+                    >
+                      <MaterialIcons name="photo-camera" size={24} color="#2E86C1" />
+                      <Text style={styles.photoPickerBtnText}>Appareil</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.photoPickerBtn}
+                      onPress={async () => {
+                        const result = await ImagePicker.launchImageLibraryAsync({
+                          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                          allowsEditing: true,
+                          aspect: [1, 1],
+                          quality: 0.8,
+                        });
+                        if (!result.canceled) {
+                          setEmployeForm({ ...employeForm, photo_identite: result.assets[0].uri });
+                        }
+                      }}
+                    >
+                      <MaterialIcons name="photo-library" size={24} color="#2E86C1" />
+                      <Text style={styles.photoPickerBtnText}>Galerie</Text>
+                    </TouchableOpacity>
+
+                    {employeForm.photo_identite && (
+                      <View style={styles.photoPreviewWrapper}>
+                        <Image
+                          source={{ uri: employeForm.photo_identite }}
+                          style={styles.photoPreviewSquare}
+                        />
+                        <TouchableOpacity
+                          style={styles.removePhotoBtn}
+                          onPress={() => setEmployeForm({ ...employeForm, photo_identite: null })}
+                        >
+                          <MaterialIcons name="close" size={16} color="#FFF" />
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
 
                   <Text style={[styles.labelText, { fontSize: 16, marginBottom: 8, marginTop: 16 }]}>Document d'identité (PDF)</Text>
                   <Button
@@ -1758,10 +1858,7 @@ const RHPersonnelScreen = ({ navigation }) => {
 
                       <TouchableOpacity
                         style={[styles.dateInput, { marginBottom: 16 }]}
-                        onPress={() => {
-                          setShowDatePickerField('date_depart');
-                          setDatePickerValue(employeForm.date_depart ? new Date(employeForm.date_depart) : new Date());
-                        }}
+                        onPress={() => openDatePicker('date_depart', 'date', 'employe', employeForm.date_depart)}
                       >
                         <MaterialIcons name="calendar-today" size={20} color="#2E86C1" />
                         <Text style={[styles.dateInputText, { marginLeft: 8 }]}>
@@ -1814,7 +1911,7 @@ const RHPersonnelScreen = ({ navigation }) => {
                     buttonColor="#27AE60"
                     style={{ flex: 1, marginRight: 8 }}
                     loading={actionInProgress?.includes('employe')}
-                    disabled={!!actionInProgress}
+                    disabled={!!actionInProgress || (employeMode === 'add' && !isMatriculeUnique)}
                   >
                     {employeMode === 'add' ? 'Créer' : 'Enregistrer'}
                   </Button>
@@ -1830,38 +1927,7 @@ const RHPersonnelScreen = ({ navigation }) => {
               )}
             </View>
 
-            {/* DATE PICKER */}
-            {showDatePickerField && Platform.OS === 'ios' && (
-              <DateTimePicker
-                value={datePickerValue}
-                mode="date"
-                display="spinner"
-                onChange={(event, selectedDate) => {
-                  if (event.type === 'set' && selectedDate) {
-                    const dateStr = selectedDate.toISOString().split('T')[0];
-                    setEmployeForm({ ...employeForm, [showDatePickerField]: dateStr });
-                    setShowDatePickerField(null);
-                  } else if (event.type === 'dismissed') {
-                    setShowDatePickerField(null);
-                  }
-                }}
-              />
-            )}
-
-            {showDatePickerField && Platform.OS === 'android' && (
-              <DateTimePicker
-                value={datePickerValue}
-                mode="date"
-                display="default"
-                onChange={(event, selectedDate) => {
-                  if (selectedDate) {
-                    const dateStr = selectedDate.toISOString().split('T')[0];
-                    setEmployeForm({ ...employeForm, [showDatePickerField]: dateStr });
-                  }
-                  setShowDatePickerField(null);
-                }}
-              />
-            )}
+            {/* DATE PICKER logic moved to main level to avoid duplication */}
           </View>
         </View>
       </Modal>
@@ -2424,19 +2490,10 @@ const RHPersonnelScreen = ({ navigation }) => {
       {/* Date Picker */}
       {showDatePicker && (
         <DateTimePicker
-          value={activeTab === 'presences' ? selectedDatePresence : selectedMoisSalaire}
-          mode="date"
+          value={datePickerValue}
+          mode={datePickerMode}
           display="default"
-          onChange={(event, selectedDate) => {
-            setShowDatePicker(false);
-            if (selectedDate) {
-              if (activeTab === 'presences') {
-                setSelectedDatePresence(selectedDate);
-              } else {
-                setSelectedMoisSalaire(selectedDate);
-              }
-            }
-          }}
+          onChange={handleDateChange}
         />
       )}
 
@@ -3006,15 +3063,57 @@ const styles = StyleSheet.create({
   },
 
   // ====== STYLES MODAL EMPLOYÉ - PHOTO ======
-  photoPreview: {
-    width: 100,
-    height: 100,
+  photoActionsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
+    marginBottom: 16,
+    flexWrap: 'wrap',
+  },
+  photoPickerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F7FF',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
     borderRadius: 8,
-    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#D4E6F1',
+    gap: 8,
+  },
+  photoPickerBtnText: {
+    color: '#2E86C1',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  photoPreviewWrapper: {
+    position: 'relative',
+  },
+  photoPreviewSquare: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#E8E8E8',
   },
-
+  removePhotoBtn: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: '#E74C3C',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 2,
+  },
+  errorTextSmall: {
+    color: '#E74C3C',
+    fontSize: 12,
+    marginTop: 4,
+    marginLeft: 4,
+  },
   photoContainer: {
     marginBottom: 12,
   },

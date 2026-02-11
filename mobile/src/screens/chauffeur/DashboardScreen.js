@@ -14,7 +14,7 @@ import {
     Animated,
     Dimensions
 } from 'react-native';
-import { Card, Button, Badge, Divider, SegmentedButtons } from 'react-native-paper';
+import { Card, Button, Badge, Divider, SegmentedButtons, Modal, Portal, TextInput, IconButton } from 'react-native-paper';
 import { MaterialIcons, FontAwesome5, Entypo } from '@expo/vector-icons';
 import { LineChart, PieChart, BarChart } from 'react-native-chart-kit';
 import * as Location from 'expo-location';
@@ -62,6 +62,12 @@ const DashboardScreen = ({ navigation }) => {
         salary: false,
         salaryHistory: false
     });
+
+    // ÉTATS COMMUNICATION
+    const [communicationModalVisible, setCommunicationModalVisible] = useState(false);
+    const [messageSubject, setMessageSubject] = useState('');
+    const [messageBody, setMessageBody] = useState('');
+    const [isSending, setIsSending] = useState(false);
 
     // États localisation
     const [location, setLocation] = useState(null);
@@ -193,6 +199,35 @@ const DashboardScreen = ({ navigation }) => {
             }
 
             throw error;
+        }
+    };
+
+    const handleSendMessage = async () => {
+        if (!messageSubject.trim() || !messageBody.trim()) {
+            Alert.alert('Erreur', 'Veuillez remplir le sujet et le message');
+            return;
+        }
+
+        try {
+            setIsSending(true);
+            const response = await apiCall('/api/notifications/contact-admin', 'POST', {
+                sujet: messageSubject,
+                message: messageBody
+            });
+
+            if (response.success) {
+                Alert.alert('Succès', 'Votre message a été envoyé à l\'administration');
+                setCommunicationModalVisible(false);
+                setMessageSubject('');
+                setMessageBody('');
+            } else {
+                Alert.alert('Erreur', response.message || 'Impossible d\'envoyer le message');
+            }
+        } catch (error) {
+            console.error('❌ Erreur envoi message:', error);
+            Alert.alert('Erreur', 'Une erreur est survenue lors de l\'envoi');
+        } finally {
+            setIsSending(false);
         }
     };
 
@@ -1769,12 +1804,19 @@ const DashboardScreen = ({ navigation }) => {
                         Dashboard Chauffeur
                     </Text>
                 </View>
-                <TouchableOpacity
-                    style={styles.headerRight}
-                    onPress={() => navigation.navigate('Profil')}
-                >
-                    <MaterialIcons name="account-circle" size={iconSize.large} color="#2E86C1" />
-                </TouchableOpacity>
+                <View style={styles.headerRight}>
+                    <IconButton
+                        icon="message-draw"
+                        size={iconSize.large}
+                        iconColor="#2E86C1"
+                        onPress={() => setCommunicationModalVisible(true)}
+                    />
+                    <TouchableOpacity
+                        onPress={() => navigation.navigate('Profil')}
+                    >
+                        <MaterialIcons name="account-circle" size={iconSize.large} color="#2E86C1" />
+                    </TouchableOpacity>
+                </View>
             </View>
 
             {/* Contenu scrollable */}
@@ -1849,6 +1891,77 @@ const DashboardScreen = ({ navigation }) => {
                     </TouchableOpacity>
                 </View>
             )}
+
+            {/* MODALE COMMUNICATION ADMIN */}
+            <Portal>
+                <Modal
+                    visible={communicationModalVisible}
+                    onDismiss={() => setCommunicationModalVisible(false)}
+                    contentContainerStyle={[styles.commModalContainer, isLargeScreen && { width: 500 }]}
+                >
+                    <View style={styles.commModalHeader}>
+                        <View style={styles.commModalIconWrapper}>
+                            <MaterialIcons name="contact-support" size={24} color="#FFF" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.commModalTitle}>Contacter l'Admin</Text>
+                            <Text style={styles.commModalSubtitle}>Envoyez un message à l'administration</Text>
+                        </View>
+                        <IconButton
+                            icon="close"
+                            onPress={() => setCommunicationModalVisible(false)}
+                        />
+                    </View>
+
+                    <ScrollView style={styles.commModalBody}>
+                        <Text style={styles.commInputLabel}>Sujet</Text>
+                        <TextInput
+                            mode="outlined"
+                            placeholder="Sujet de votre message..."
+                            value={messageSubject}
+                            onChangeText={setMessageSubject}
+                            style={styles.commInput}
+                            outlineColor="#E8EAED"
+                            activeOutlineColor="#2E86C1"
+                        />
+
+                        <Text style={styles.commInputLabel}>Message</Text>
+                        <TextInput
+                            mode="outlined"
+                            placeholder="Votre message détaillé..."
+                            value={messageBody}
+                            onChangeText={setMessageBody}
+                            multiline
+                            numberOfLines={6}
+                            style={[styles.commInput, { height: 120 }]}
+                            outlineColor="#E8EAED"
+                            activeOutlineColor="#2E86C1"
+                        />
+                    </ScrollView>
+
+                    <View style={styles.commModalFooter}>
+                        <Button
+                            mode="outlined"
+                            onPress={() => setCommunicationModalVisible(false)}
+                            style={styles.commFooterBtn}
+                            disabled={isSending}
+                        >
+                            Annuler
+                        </Button>
+                        <Button
+                            mode="contained"
+                            onPress={handleSendMessage}
+                            style={[styles.commFooterBtn, { flex: 2 }]}
+                            buttonColor="#2E86C1"
+                            loading={isSending}
+                            disabled={isSending || !messageSubject.trim() || !messageBody.trim()}
+                            icon="send"
+                        >
+                            Envoyer
+                        </Button>
+                    </View>
+                </Modal>
+            </Portal>
         </View>
     );
 };
@@ -2980,5 +3093,69 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 8,
     },
+
+    // Communication Modal Styles
+    commModalContainer: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
+        margin: 20,
+        overflow: 'hidden',
+        alignSelf: 'center',
+        width: '90%',
+        maxWidth: 600,
+        maxHeight: '80%'
+    },
+    commModalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 20,
+        backgroundColor: '#F9FAFB',
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6'
+    },
+    commModalIconWrapper: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        backgroundColor: '#2E86C1',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12
+    },
+    commModalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#111827'
+    },
+    commModalSubtitle: {
+        fontSize: 12,
+        color: '#6B7280',
+        marginTop: 2
+    },
+    commModalBody: {
+        padding: 20
+    },
+    commInputLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#374151',
+        marginBottom: 8,
+        marginTop: 8
+    },
+    commInput: {
+        backgroundColor: '#FFF',
+        marginBottom: 16
+    },
+    commModalFooter: {
+        flexDirection: 'row',
+        padding: 20,
+        gap: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#F3F4F6',
+        backgroundColor: '#F9FAFB'
+    },
+    commFooterBtn: {
+        borderRadius: 10
+    }
 });
 export default DashboardScreen;

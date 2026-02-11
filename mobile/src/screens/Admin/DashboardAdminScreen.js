@@ -25,6 +25,7 @@ import {
   Portal,
   Dialog,
   TextInput,
+  Modal,
 } from 'react-native-paper';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { LineChart, PieChart } from 'react-native-chart-kit';
@@ -132,7 +133,8 @@ const DashboardAdminScreen = ({ navigation }) => {
   const [notificationSubject, setNotificationSubject] = useState('');
   const [notificationMessage, setNotificationMessage] = useState('');
   const [notificationLoading, setNotificationLoading] = useState(false);
-  const [notificationTarget, setNotificationTarget] = useState('all'); // 'all' or specific email (future)
+  const [notificationTarget, setNotificationTarget] = useState('all');
+  const [notificationSelection, setNotificationSelection] = useState('all'); // 'all' or 'specific'
 
   const { width: windowWidth } = useWindowDimensions();
 
@@ -1441,29 +1443,101 @@ const DashboardAdminScreen = ({ navigation }) => {
           </Dialog.Actions>
         </Dialog>
 
-        {/* DIALOG NOTIFICATION */}
-        <Dialog
+        {/* MODAL NOTIFICATION */}
+        <Modal
           visible={notificationDialogVisible}
           onDismiss={() => setNotificationDialogVisible(false)}
-          style={{ backgroundColor: COLORS.white }}
+          contentContainerStyle={[styles.modalContainer, { width: deviceType.isWeb ? 600 : '90%', alignSelf: 'center' }]}
         >
-          <Dialog.Title style={{ color: COLORS.primary, fontWeight: '700' }}>
-            Envoyer une notification
-          </Dialog.Title>
-          <Dialog.Content>
-            <Text style={{ marginBottom: 16, color: COLORS.textSecondary }}>
-              Envoyez une annonce importante à tous les employés par email.
-            </Text>
+          <View style={styles.modalHeader}>
+            <View style={styles.modalIconWrapper}>
+              <MaterialIcons name="campaign" size={28} color={COLORS.white} />
+            </View>
+            <View style={styles.modalHeaderTextWrapper}>
+              <Text style={styles.modalTitle}>Envoyer une annonce</Text>
+              <Text style={styles.modalSubtitle}>Diffusez une information importante</Text>
+            </View>
+            <IconButton
+              icon="close"
+              onPress={() => setNotificationDialogVisible(false)}
+              iconColor={COLORS.grayDark}
+            />
+          </View>
 
+          <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+            <Text style={styles.inputLabel}>Destinataires</Text>
+            <View style={styles.selectionContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.selectionButton,
+                  notificationSelection === 'all' && styles.selectionButtonSelected
+                ]}
+                onPress={() => {
+                  setNotificationSelection('all');
+                  setNotificationTarget('all');
+                }}
+              >
+                <MaterialIcons
+                  name="groups"
+                  size={20}
+                  color={notificationSelection === 'all' ? COLORS.white : COLORS.grayDark}
+                />
+                <Text style={[
+                  styles.selectionText,
+                  notificationSelection === 'all' && styles.selectionTextSelected
+                ]}>
+                  Tous
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.selectionButton,
+                  notificationSelection === 'specific' && styles.selectionButtonSelected
+                ]}
+                onPress={() => {
+                  setNotificationSelection('specific');
+                  setNotificationTarget('');
+                }}
+              >
+                <MaterialIcons
+                  name="person"
+                  size={20}
+                  color={notificationSelection === 'specific' ? COLORS.white : COLORS.grayDark}
+                />
+                <Text style={[
+                  styles.selectionText,
+                  notificationSelection === 'specific' && styles.selectionTextSelected
+                ]}>
+                  Spécifique
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {notificationSelection === 'specific' && (
+              <TextInput
+                label="Email ou Matricule du destinataire"
+                value={notificationTarget === 'all' ? '' : notificationTarget}
+                onChangeText={setNotificationTarget}
+                mode="outlined"
+                placeholder="Ex: jean.dupont@nutrifix.bi"
+                outlineColor={COLORS.grayBorder}
+                activeOutlineColor={COLORS.primary}
+                style={styles.modalInput}
+                left={<TextInput.Icon icon="alternate-email" />}
+              />
+            )}
+
+            <Text style={styles.inputLabel}>Détails du message</Text>
             <TextInput
               label="Sujet"
               value={notificationSubject}
               onChangeText={setNotificationSubject}
               mode="outlined"
-              placeholder="Ex: Maintenance système..."
+              placeholder="Ex: Maintenance du système"
               outlineColor={COLORS.grayBorder}
               activeOutlineColor={COLORS.primary}
-              style={{ marginBottom: 12 }}
+              style={styles.modalInput}
             />
 
             <TextInput
@@ -1472,23 +1546,20 @@ const DashboardAdminScreen = ({ navigation }) => {
               onChangeText={setNotificationMessage}
               mode="outlined"
               multiline
-              numberOfLines={6}
-              placeholder="Votre message ici..."
+              numberOfLines={8}
+              placeholder="Saisissez votre message ici..."
               outlineColor={COLORS.grayBorder}
               activeOutlineColor={COLORS.primary}
+              style={[styles.modalInput, { height: 150 }]}
             />
+          </ScrollView>
 
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
-              <MaterialIcons name="people" size={20} color={COLORS.primary} />
-              <Text style={{ marginLeft: 8, color: COLORS.primary, fontWeight: '600' }}>
-                Destinataires: Tous les employés actifs
-              </Text>
-            </View>
-          </Dialog.Content>
-          <Dialog.Actions>
+          <View style={styles.modalFooter}>
             <Button
               onPress={() => setNotificationDialogVisible(false)}
-              textColor={COLORS.textSecondary}
+              mode="outlined"
+              textColor={COLORS.grayDark}
+              style={styles.footerButton}
               disabled={notificationLoading}
             >
               Annuler
@@ -1498,13 +1569,14 @@ const DashboardAdminScreen = ({ navigation }) => {
               mode="contained"
               buttonColor={COLORS.primary}
               loading={notificationLoading}
-              disabled={notificationLoading}
+              disabled={notificationLoading || !notificationSubject.trim() || !notificationMessage.trim() || (notificationSelection === 'specific' && !notificationTarget.trim())}
+              style={[styles.footerButton, { flex: 2 }]}
               icon="send"
             >
-              Envoyer
+              Envoyer l'annonce
             </Button>
-          </Dialog.Actions>
-        </Dialog>
+          </View>
+        </Modal>
       </Portal>
 
       {/* SNACKBAR */}
@@ -2043,6 +2115,99 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 24,
     fontWeight: '600',
+  },
+  // Modal Styles
+  modalContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: 24,
+    padding: 0,
+    overflow: 'hidden',
+    maxHeight: '85%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: COLORS.grayBg,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.grayBorder,
+  },
+  modalIconWrapper: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  modalHeaderTextWrapper: {
+    flex: 1,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: COLORS.blackSoft,
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  modalBody: {
+    padding: 20,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.blackSoft,
+    marginBottom: 12,
+    marginTop: 8,
+  },
+  selectionContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  selectionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: COLORS.grayBorder,
+    backgroundColor: COLORS.white,
+    gap: 8,
+  },
+  selectionButtonSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  selectionText: {
+    fontWeight: '700',
+    color: COLORS.grayDark,
+    fontSize: 14,
+  },
+  selectionTextSelected: {
+    color: COLORS.white,
+  },
+  modalInput: {
+    backgroundColor: COLORS.white,
+    marginBottom: 16,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.grayBorder,
+    gap: 12,
+    backgroundColor: COLORS.grayBg,
+  },
+  footerButton: {
+    borderRadius: 12,
+    paddingVertical: 4,
   },
 });
 

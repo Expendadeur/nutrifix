@@ -17,7 +17,12 @@ import {
 } from 'react-native';
 import {
   Card,
-  ActivityIndicator
+  ActivityIndicator,
+  Modal,
+  Portal,
+  TextInput,
+  Button,
+  IconButton
 } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import QRCode from 'react-native-qrcode-svg';
@@ -32,6 +37,12 @@ const DashboardScreen = ({ navigation }) => {
   const [dashboardData, setDashboardData] = useState(null);
   const [profileData, setProfileData] = useState(null);
   const [carteData, setCarteData] = useState(null);
+
+  // Communication States
+  const [communicationModalVisible, setCommunicationModalVisible] = useState(false);
+  const [messageSubject, setMessageSubject] = useState('');
+  const [messageBody, setMessageBody] = useState('');
+  const [isSending, setIsSending] = useState(false);
 
   const { width } = useWindowDimensions();
   const isTablet = width >= 768; // Détection tablette/desktop
@@ -275,6 +286,43 @@ const DashboardScreen = ({ navigation }) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
     return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
+  const handleSendMessage = async () => {
+    if (!messageSubject.trim() || !messageBody.trim()) {
+      Alert.alert('Erreur', 'Veuillez remplir le sujet et le message');
+      return;
+    }
+
+    try {
+      setIsSending(true);
+      const headers = await getAuthHeaders();
+
+      const response = await fetch(`${API_URL.replace('/api', '')}/api/notifications/contact-admin`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          sujet: messageSubject,
+          message: messageBody
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        Alert.alert('Succès', 'Votre message a été envoyé à l\'administration');
+        setCommunicationModalVisible(false);
+        setMessageSubject('');
+        setMessageBody('');
+      } else {
+        Alert.alert('Erreur', data.message || 'Impossible d\'envoyer le message');
+      }
+    } catch (error) {
+      console.error('❌ Erreur envoi message:', error);
+      Alert.alert('Erreur', 'Une erreur est survenue lors de l\'envoi');
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const renderHeader = () => {
@@ -569,7 +617,8 @@ const DashboardScreen = ({ navigation }) => {
       { icon: 'event', label: 'Demander un congé', color: '#3B82F6', onPress: () => navigation.navigate('DemandeConge') },
       { icon: 'description', label: 'Mes bulletins', color: '#10B981', onPress: () => navigation.navigate('Salaires') },
       { icon: 'person', label: 'Mon profil', color: '#8B5CF6', onPress: () => navigation.navigate('Profil') },
-      { icon: 'help', label: 'Aide & Support', color: '#F59E0B', onPress: () => Alert.alert('Support', 'Contactez le service RH') }
+      { icon: 'help', label: 'Aide & Support', color: '#F59E0B', onPress: () => Alert.alert('Support', 'Contactez le service RH') },
+      { icon: 'message', label: 'Contacter Admin', color: '#10B981', onPress: () => setCommunicationModalVisible(true) }
     ];
 
     return (
@@ -635,6 +684,78 @@ const DashboardScreen = ({ navigation }) => {
           {renderQuickActions()}
         </>
       )}
+      {/* COMMUNICATION MODAL */}
+      <Portal>
+        <Modal
+          visible={communicationModalVisible}
+          onDismiss={() => setCommunicationModalVisible(false)}
+          contentContainerStyle={[styles.commModalContainer, { width: width > 600 ? 500 : '90%' }]}
+        >
+          <View style={styles.commModalHeader}>
+            <View style={styles.commModalIconWrapper}>
+              <MaterialIcons name="contact-support" size={24} color="#FFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.commModalTitle}>Contacter l'Administration</Text>
+              <Text style={styles.commModalSubtitle}>Envoyez un message à l'équipe RH/Admin</Text>
+            </View>
+            <IconButton
+              icon="close"
+              onPress={() => setCommunicationModalVisible(false)}
+              iconColor="#6B7280"
+            />
+          </View>
+
+          <ScrollView style={styles.commModalBody}>
+            <Text style={styles.commInputLabel}>Sujet du message</Text>
+            <TextInput
+              mode="outlined"
+              placeholder="Ex: Demande de renseignement, problème technique..."
+              value={messageSubject}
+              onChangeText={setMessageSubject}
+              outlineColor="#E5E7EB"
+              activeOutlineColor="#2563EB"
+              style={styles.commInput}
+            />
+
+            <Text style={styles.commInputLabel}>Votre message</Text>
+            <TextInput
+              mode="outlined"
+              placeholder="Décrivez votre demande en détail..."
+              value={messageBody}
+              onChangeText={setMessageBody}
+              multiline
+              numberOfLines={6}
+              outlineColor="#E5E7EB"
+              activeOutlineColor="#2563EB"
+              style={[styles.commInput, { height: 120 }]}
+            />
+          </ScrollView>
+
+          <View style={styles.commModalFooter}>
+            <Button
+              mode="outlined"
+              onPress={() => setCommunicationModalVisible(false)}
+              style={styles.commFooterBtn}
+              textColor="#6B7280"
+              disabled={isSending}
+            >
+              Annuler
+            </Button>
+            <Button
+              mode="contained"
+              onPress={handleSendMessage}
+              style={[styles.commFooterBtn, { flex: 2 }]}
+              buttonColor="#2563EB"
+              loading={isSending}
+              disabled={isSending || !messageSubject.trim() || !messageBody.trim()}
+              icon="send"
+            >
+              Envoyer
+            </Button>
+          </View>
+        </Modal>
+      </Portal>
     </ScrollView>
   );
 };
@@ -869,7 +990,69 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB'
   },
   actionIcon: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  actionLabel: { fontSize: 12, color: '#111827', textAlign: 'center', fontWeight: '600', lineHeight: 16 }
+  actionLabel: { fontSize: 12, color: '#111827', textAlign: 'center', fontWeight: '600', lineHeight: 16 },
+
+  // Communication Modal Styles
+  commModalContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 0,
+    overflow: 'hidden',
+    alignSelf: 'center',
+    maxHeight: '80%'
+  },
+  commModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#F9FAFB',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6'
+  },
+  commModalIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#2563EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12
+  },
+  commModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827'
+  },
+  commModalSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2
+  },
+  commModalBody: {
+    padding: 20
+  },
+  commInputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+    marginTop: 8
+  },
+  commInput: {
+    backgroundColor: '#FFF',
+    marginBottom: 16
+  },
+  commModalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    backgroundColor: '#F9FAFB'
+  },
+  commFooterBtn: {
+    borderRadius: 10
+  }
 });
 
 export default DashboardScreen;

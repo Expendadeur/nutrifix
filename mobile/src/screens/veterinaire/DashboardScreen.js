@@ -22,7 +22,10 @@ import {
   ActivityIndicator,
   Chip,
   List,
-  Divider
+  Divider,
+  Modal,
+  Portal,
+  TextInput
 } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -32,18 +35,18 @@ import axios from 'axios';
 import { io } from 'socket.io-client';
 
 // Configuration de l'API
-const API_BASE_URL = __DEV__ 
+const API_BASE_URL = __DEV__
   ? Platform.select({
-      ios: 'http://localhost:5000',
-      android: 'http://10.0.2.2:5000',
-      default: 'http://localhost:5000'
-    })
+    ios: 'http://localhost:5000',
+    android: 'http://10.0.2.2:5000',
+    default: 'http://localhost:5000'
+  })
   : 'https://your-production-api.com';
 
 const DashboardScreen = () => {
   const navigation = useNavigation();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  
+
   // États
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -59,6 +62,12 @@ const DashboardScreen = () => {
   const [vaccinationsDues, setVaccinationsDues] = useState([]);
   const [animauxSurveillance, setAnimauxSurveillance] = useState([]);
   const [alertes, setAlertes] = useState([]);
+
+  // États pour la communication
+  const [communicationModalVisible, setCommunicationModalVisible] = useState(false);
+  const [messageSubject, setMessageSubject] = useState('');
+  const [messageBody, setMessageBody] = useState('');
+  const [isSending, setIsSending] = useState(false);
 
   // Déterminer si c'est un écran large (tablette/desktop)
   const isLargeScreen = windowWidth >= 768;
@@ -87,54 +96,54 @@ const DashboardScreen = () => {
     };
   };
 
-  
-const socket = io(API_BASE_URL, {
-  transports: ['websocket'],
-  autoConnect: false,
-  withCredentials: true,
-});
 
-const setupNotificationListener = (userId, onNotification) => {
-  if (!userId) return;
+  const socket = io(API_BASE_URL, {
+    transports: ['websocket'],
+    autoConnect: false,
+    withCredentials: true,
+  });
 
-  // Connexion au serveur WebSocket
-  if (!socket.connected) {
-    socket.connect();
-  }
+  const setupNotificationListener = (userId, onNotification) => {
+    if (!userId) return;
 
-  // Rejoindre la room utilisateur (EXACTEMENT comme ton backend)
-  socket.emit('join-room', `user-${userId}`);
-
-  // Réception des notifications
-  socket.on('new-notification', (data) => {
-    console.log('🔔 Notification temps réel reçue:', data);
-
-    if (typeof onNotification === 'function') {
-      onNotification(data);
+    // Connexion au serveur WebSocket
+    if (!socket.connected) {
+      socket.connect();
     }
-  });
 
-  // Ping / Pong (optionnel mais propre)
-  socket.on('pong', () => {
-    console.log('🏓 Pong reçu du serveur');
-  });
+    // Rejoindre la room utilisateur (EXACTEMENT comme ton backend)
+    socket.emit('join-room', `user-${userId}`);
 
-  socket.emit('ping');
+    // Réception des notifications
+    socket.on('new-notification', (data) => {
+      console.log('🔔 Notification temps réel reçue:', data);
 
-  // Gestion erreurs
-  socket.on('error', (err) => {
-    console.error('❌ WebSocket error:', err);
-  });
+      if (typeof onNotification === 'function') {
+        onNotification(data);
+      }
+    });
 
-  // =========================
-  // CLEANUP (OBLIGATOIRE)
-  // =========================
-  return () => {
-    socket.off('new-notification');
-    socket.emit('leave-room', `user-${userId}`);
-    socket.disconnect();
+    // Ping / Pong (optionnel mais propre)
+    socket.on('pong', () => {
+      console.log('🏓 Pong reçu du serveur');
+    });
+
+    socket.emit('ping');
+
+    // Gestion erreurs
+    socket.on('error', (err) => {
+      console.error('❌ WebSocket error:', err);
+    });
+
+    // =========================
+    // CLEANUP (OBLIGATOIRE)
+    // =========================
+    return () => {
+      socket.off('new-notification');
+      socket.emit('leave-room', `user-${userId}`);
+      socket.disconnect();
+    };
   };
-};
 
   // Charger toutes les données du dashboard
   const loadDashboardData = async () => {
@@ -150,7 +159,7 @@ const setupNotificationListener = (userId, onNotification) => {
 
       if (response.data.success) {
         const data = response.data.data;
-        
+
         setVeterinaire(data.veterinaire || {});
         setStats(data.stats || {});
         setInterventionsToday(data.interventionsToday || []);
@@ -194,9 +203,40 @@ const setupNotificationListener = (userId, onNotification) => {
   // Afficher une alerte et naviguer
   const handleAlertPress = async (alerte) => {
     await markNotificationAsRead(alerte.id);
-    
+
     if (alerte.animal_id) {
       navigation.navigate('AnimalDetails', { animalId: alerte.animal_id });
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!messageSubject.trim() || !messageBody.trim()) {
+      Alert.alert('Erreur', 'Veuillez remplir le sujet et le message');
+      return;
+    }
+
+    try {
+      setIsSending(true);
+      const config = await getAxiosConfig();
+
+      const response = await axios.post(`${API_BASE_URL}/api/notifications/contact-admin`, {
+        sujet: messageSubject,
+        message: messageBody
+      }, config);
+
+      if (response.data.success) {
+        Alert.alert('Succès', 'Votre message a été envoyé à l\'administration');
+        setCommunicationModalVisible(false);
+        setMessageSubject('');
+        setMessageBody('');
+      } else {
+        Alert.alert('Erreur', response.data.message || 'Impossible d\'envoyer le message');
+      }
+    } catch (error) {
+      console.error('❌ Erreur envoi message:', error);
+      Alert.alert('Erreur', 'Une erreur est survenue lors de l\'envoi');
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -209,10 +249,10 @@ const setupNotificationListener = (userId, onNotification) => {
       isLargeScreen && styles.headerLarge
     ]}>
       <View style={styles.headerLeft}>
-        <Avatar.Icon 
-          size={isLargeScreen ? 60 : 50} 
-          icon="account" 
-          style={styles.avatar} 
+        <Avatar.Icon
+          size={isLargeScreen ? 60 : 50}
+          icon="account"
+          style={styles.avatar}
         />
         <View style={styles.headerInfo}>
           <Text style={[
@@ -227,12 +267,18 @@ const setupNotificationListener = (userId, onNotification) => {
           </Text>
         </View>
       </View>
-      
+
       <View style={styles.headerActions}>
         <IconButton
           icon="refresh"
           size={24}
           onPress={onRefresh}
+          style={styles.headerButton}
+        />
+        <IconButton
+          icon="message-draw"
+          size={24}
+          onPress={() => setCommunicationModalVisible(true)}
           style={styles.headerButton}
         />
         <IconButton
@@ -280,10 +326,10 @@ const setupNotificationListener = (userId, onNotification) => {
 
     // Calculer le nombre de colonnes selon la taille de l'écran
     const numColumns = isExtraLargeScreen ? 4 : isLargeScreen ? 2 : 2;
-    const cardWidth = isExtraLargeScreen 
-      ? '24%' 
-      : isLargeScreen 
-        ? '48%' 
+    const cardWidth = isExtraLargeScreen
+      ? '24%'
+      : isLargeScreen
+        ? '48%'
         : '48%';
 
     return (
@@ -296,7 +342,7 @@ const setupNotificationListener = (userId, onNotification) => {
             key={index}
             style={[
               styles.kpiCard,
-              { 
+              {
                 backgroundColor: kpi.color,
                 width: cardWidth,
                 minHeight: isLargeScreen ? 140 : 120
@@ -305,10 +351,10 @@ const setupNotificationListener = (userId, onNotification) => {
             onPress={kpi.onPress}
             activeOpacity={0.7}
           >
-            <MaterialCommunityIcons 
-              name={kpi.icon} 
-              size={isLargeScreen ? 36 : 30} 
-              color="#FFF" 
+            <MaterialCommunityIcons
+              name={kpi.icon}
+              size={isLargeScreen ? 36 : 30}
+              color="#FFF"
             />
             <Text style={[
               styles.kpiValue,
@@ -421,10 +467,10 @@ const setupNotificationListener = (userId, onNotification) => {
 
           {!hasInterventions ? (
             <View style={styles.emptyState}>
-              <MaterialCommunityIcons 
-                name="calendar-check" 
-                size={isLargeScreen ? 60 : 50} 
-                color="#BDC3C7" 
+              <MaterialCommunityIcons
+                name="calendar-check"
+                size={isLargeScreen ? 60 : 50}
+                color="#BDC3C7"
               />
               <Text style={styles.emptyText}>
                 Aucune intervention prévue aujourd'hui
@@ -464,8 +510,8 @@ const setupNotificationListener = (userId, onNotification) => {
                         {intervention.animal_nom} ({intervention.animal_numero})
                       </Text>
                       {intervention.urgent && (
-                        <Chip 
-                          style={styles.urgentChip} 
+                        <Chip
+                          style={styles.urgentChip}
                           textStyle={styles.urgentChipText}
                           compact
                         >
@@ -473,7 +519,7 @@ const setupNotificationListener = (userId, onNotification) => {
                         </Chip>
                       )}
                     </View>
-                    
+
                     <View style={styles.interventionDetails}>
                       <Text style={styles.interventionType}>
                         {intervention.type_label || intervention.type_intervention}
@@ -534,7 +580,7 @@ const setupNotificationListener = (userId, onNotification) => {
 
           {vaccinationsDues.slice(0, 10).map((vaccination, index) => {
             const isUrgent = vaccination.jours_restants <= 7;
-            
+
             return (
               <TouchableOpacity
                 key={vaccination.animal_id || index}
@@ -551,7 +597,7 @@ const setupNotificationListener = (userId, onNotification) => {
                   <View style={styles.vaccinationIconContainer}>
                     <MaterialCommunityIcons name="needle" size={20} color="#F39C12" />
                   </View>
-                  
+
                   <View style={styles.vaccinationInfo}>
                     <Text style={styles.vaccinationAnimal} numberOfLines={1}>
                       {vaccination.animal_nom} - {vaccination.animal_numero}
@@ -923,7 +969,7 @@ const setupNotificationListener = (userId, onNotification) => {
 
   const getRandomColor = (index) => {
     const colors = [
-      '#3498DB', '#2ECC71', '#F39C12', '#E74C3C', 
+      '#3498DB', '#2ECC71', '#F39C12', '#E74C3C',
       '#9B59B6', '#1ABC9C', '#34495E', '#E67E22'
     ];
     return colors[index % colors.length];
@@ -931,12 +977,12 @@ const setupNotificationListener = (userId, onNotification) => {
 
   const formatDateRelative = (dateString) => {
     if (!dateString) return '';
-    
+
     const date = new Date(dateString);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     date.setHours(0, 0, 0, 0);
-    
+
     const diffTime = date - today;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
@@ -945,7 +991,7 @@ const setupNotificationListener = (userId, onNotification) => {
     if (diffDays === -1) return 'Hier';
     if (diffDays > 0 && diffDays < 7) return `Dans ${diffDays} jours`;
     if (diffDays < 0 && diffDays > -7) return `Il y a ${Math.abs(diffDays)} jours`;
-    
+
     return date.toLocaleDateString('fr-FR', {
       day: '2-digit',
       month: 'short',
@@ -955,7 +1001,7 @@ const setupNotificationListener = (userId, onNotification) => {
 
   const formatDate = (dateString) => {
     if (!dateString) return '';
-    
+
     const date = new Date(dateString);
     return date.toLocaleDateString('fr-FR', {
       day: '2-digit',
@@ -986,14 +1032,14 @@ const setupNotificationListener = (userId, onNotification) => {
       >
         {renderHeader()}
         {renderKPICards()}
-        
+
         <View style={styles.largeScreenLayout}>
           <View style={styles.leftColumn}>
             {renderAlertes()}
             {renderInterventionsToday()}
             {renderVaccinationsDues()}
           </View>
-          
+
           <View style={styles.rightColumn}>
             {renderQuickActions()}
             {renderAnimauxSurveillance()}
@@ -1023,6 +1069,76 @@ const setupNotificationListener = (userId, onNotification) => {
       {renderQuickActions()}
       {renderStatistiques()}
       <View style={styles.bottomSpacing} />
+
+      {/* Modale Communication Admin */}
+      <Portal>
+        <Modal
+          visible={communicationModalVisible}
+          onDismiss={() => setCommunicationModalVisible(false)}
+          contentContainerStyle={[styles.commModalContainer, isLargeScreen && { width: 500 }]}
+        >
+          <View style={styles.commModalHeader}>
+            <View style={styles.commModalIconWrapper}>
+              <MaterialIcons name="contact-support" size={24} color="#FFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.commModalTitle}>Contacter l'Admin</Text>
+              <Text style={styles.commModalSubtitle}>Envoyez un message à l'administration</Text>
+            </View>
+            <IconButton
+              icon="close"
+              onPress={() => setCommunicationModalVisible(false)}
+            />
+          </View>
+
+          <ScrollView style={styles.commModalBody}>
+            <Text style={styles.commInputLabel}>Sujet</Text>
+            <TextInput
+              mode="outlined"
+              placeholder="Sujet de votre message..."
+              value={messageSubject}
+              onChangeText={setMessageSubject}
+              style={styles.commInput}
+              outlineColor="#ECF0F1"
+              activeOutlineColor="#3498DB"
+            />
+
+            <Text style={styles.commInputLabel}>Message</Text>
+            <TextInput
+              mode="outlined"
+              placeholder="Votre message détaillé..."
+              value={messageBody}
+              onChangeText={setMessageBody}
+              multiline
+              numberOfLines={6}
+              style={[styles.commInput, { height: 120 }]}
+              outlineColor="#ECF0F1"
+              activeOutlineColor="#3498DB"
+            />
+          </ScrollView>
+
+          <View style={styles.commModalFooter}>
+            <Button
+              mode="outlined"
+              onPress={() => setCommunicationModalVisible(false)}
+              style={styles.commFooterBtn}
+              disabled={isSending}
+            >
+              Annuler
+            </Button>
+            <Button
+              mode="contained"
+              onPress={handleSendMessage}
+              style={[styles.commFooterBtn, { flex: 2 }]}
+              loading={isSending}
+              disabled={isSending || !messageSubject.trim() || !messageBody.trim()}
+              icon="send"
+            >
+              Envoyer
+            </Button>
+          </View>
+        </Modal>
+      </Portal>
     </ScrollView>
   );
 };
@@ -1581,6 +1697,70 @@ const styles = StyleSheet.create({
   bottomSpacing: {
     height: 30,
   },
+
+  // Communication Modal Styles
+  commModalContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    margin: 20,
+    overflow: 'hidden',
+    alignSelf: 'center',
+    width: '90%',
+    maxWidth: 600,
+    maxHeight: '80%'
+  },
+  commModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#F9FAFB',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6'
+  },
+  commModalIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#3498DB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12
+  },
+  commModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827'
+  },
+  commModalSubtitle: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2
+  },
+  commModalBody: {
+    padding: 20
+  },
+  commInputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+    marginTop: 8
+  },
+  commInput: {
+    backgroundColor: '#FFF',
+    marginBottom: 16
+  },
+  commModalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    backgroundColor: '#F9FAFB'
+  },
+  commFooterBtn: {
+    borderRadius: 10
+  }
 });
 
 export default DashboardScreen;
