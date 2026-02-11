@@ -6,8 +6,7 @@ const { authenticate, authorize } = require('../middleware/auth');
 const db = require('../../database/db');
 const bcrypt = require('bcryptjs');
 const QRCode = require('qrcode');
-const EmailService = require('../emailService');
-const emailService = new EmailService();
+const emailService = require('../emailService');
 
 // ============================================
 // MIDDLEWARE DE LOGGING
