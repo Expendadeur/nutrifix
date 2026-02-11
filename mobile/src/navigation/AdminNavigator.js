@@ -29,7 +29,7 @@ const AdminNavigator = ({ onLogout }) => {
     return (
         <Drawer.Navigator
             screenOptions={{
-                headerStyle: { 
+                headerStyle: {
                     backgroundColor: '#2E86C1',
                     elevation: 4,
                     shadowColor: '#000',
@@ -38,7 +38,7 @@ const AdminNavigator = ({ onLogout }) => {
                     shadowRadius: 3,
                 },
                 headerTintColor: '#FFF',
-                headerTitleStyle: { 
+                headerTitleStyle: {
                     fontWeight: 'bold',
                     fontSize: 18,
                 },
@@ -66,7 +66,7 @@ const AdminNavigator = ({ onLogout }) => {
                 return (
                     <View style={styles.drawerContainer}>
                         <CustomDrawerHeader />
-                        
+
                         <View style={styles.drawerItemsContainer}>
                             {state.routes.map((route, index) => {
                                 const { options } = descriptors[route.key];
@@ -74,7 +74,7 @@ const AdminNavigator = ({ onLogout }) => {
                                 const isLogout = route.name === 'Déconnexion';
 
                                 return (
-                                    <View 
+                                    <View
                                         key={route.key}
                                         style={[
                                             styles.drawerItem,
@@ -119,8 +119,8 @@ const AdminNavigator = ({ onLogout }) => {
                 );
             }}
         >
-            <Drawer.Screen 
-                name="Dashboard" 
+            <Drawer.Screen
+                name="Dashboard"
                 component={DashboardAdminScreen}
                 options={{
                     drawerIcon: ({ color, size }) => (
@@ -129,9 +129,9 @@ const AdminNavigator = ({ onLogout }) => {
                     title: 'Tableau de bord'
                 }}
             />
-            
-            <Drawer.Screen 
-                name="Commercial" 
+
+            <Drawer.Screen
+                name="Commercial"
                 component={CommercialClientsScreen}
                 options={{
                     drawerIcon: ({ color, size }) => (
@@ -140,9 +140,9 @@ const AdminNavigator = ({ onLogout }) => {
                     title: 'Commercial & Clients'
                 }}
             />
-            
-            <Drawer.Screen 
-                name="Finance" 
+
+            <Drawer.Screen
+                name="Finance"
                 component={FinanceComptabiliteScreen}
                 options={{
                     drawerIcon: ({ color, size }) => (
@@ -151,9 +151,9 @@ const AdminNavigator = ({ onLogout }) => {
                     title: 'Finance & Comptabilité'
                 }}
             />
-            
-            <Drawer.Screen 
-                name="Flotte" 
+
+            <Drawer.Screen
+                name="Flotte"
                 component={FlotteAgricultureElevageScreen}
                 options={{
                     drawerIcon: ({ color, size }) => (
@@ -162,9 +162,9 @@ const AdminNavigator = ({ onLogout }) => {
                     title: 'Flotte & Agriculture'
                 }}
             />
-            
-            <Drawer.Screen 
-                name="RH" 
+
+            <Drawer.Screen
+                name="RH"
                 component={RHPersonnelScreen}
                 options={{
                     drawerIcon: ({ color, size }) => (
@@ -173,9 +173,9 @@ const AdminNavigator = ({ onLogout }) => {
                     title: 'RH & Personnel'
                 }}
             />
-            
-            <Drawer.Screen 
-                name="Traçabilité" 
+
+            <Drawer.Screen
+                name="Traçabilité"
                 component={TraceabiliteParametresScreen}
                 options={{
                     drawerIcon: ({ color, size }) => (
@@ -184,9 +184,9 @@ const AdminNavigator = ({ onLogout }) => {
                     title: 'Traçabilité & Paramètres'
                 }}
             />
-            
-            <Drawer.Screen 
-                name="Déconnexion" 
+
+            <Drawer.Screen
+                name="Déconnexion"
                 component={() => null}
                 options={{
                     drawerIcon: ({ color, size }) => (

@@ -179,8 +179,8 @@ const RHPersonnelScreen = ({ navigation }) => {
   const [employeModalVisible, setEmployeModalVisible] = useState(false);
   const [employeMode, setEmployeMode] = useState('view');
   const [carteModalVisible, setCarteModalVisible] = useState(false);
-const [showDatePickerField, setShowDatePickerField] = useState(null);
-const [datePickerValue, setDatePickerValue] = useState(new Date());
+  const [showDatePickerField, setShowDatePickerField] = useState(null);
+  const [datePickerValue, setDatePickerValue] = useState(new Date());
 
   // DEPARTEMENTS
   const [departements, setDepartements] = useState([]);
@@ -363,7 +363,7 @@ const [datePickerValue, setDatePickerValue] = useState(new Date());
   // ACTIONS - EMPLOYÉS
   // ============================================
   const filterEmployes = useCallback(() => {
-    let filtered = [...employes];
+    let filtered = Array.isArray(employes) ? [...employes] : [];
 
     if (searchQuery) {
       filtered = filtered.filter(emp =>
@@ -1218,656 +1218,656 @@ const [datePickerValue, setDatePickerValue] = useState(new Date());
   // MODALS (same as before but with improved styling)
   // ============================================
 
-const EmployeModal = () => (
-  <Portal>
-    <Modal
-      visible={employeModalVisible}
-      onDismiss={() => setEmployeModalVisible(false)}
-      transparent
-      animationType="slide"
-    >
-      <View style={styles.modalOverlay}>
-        <View style={[
-          styles.modalContent,
-          {
-            width: '60%',
-            maxWidth: '95%',
-            maxHeight: '95%',
-            paddingHorizontal: 16,
-            paddingVertical: 32,
-          }
-        ]}>
-          <View style={styles.modalHeader}>
-            <Title style={[styles.modalTitle, { fontSize: 28 }]}>
-              {employeMode === 'add' ? 'Ajouter Employé' : employeMode === 'edit' ? 'Modifier Employé' : 'Détails Employé'}
-            </Title>
-            <IconButton
-              icon="close"
-              size={28}
-              onPress={() => setEmployeModalVisible(false)}
-            />
-          </View>
+  const EmployeModal = () => (
+    <Portal>
+      <Modal
+        visible={employeModalVisible}
+        onDismiss={() => setEmployeModalVisible(false)}
+        transparent
+        animationType="slide"
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[
+            styles.modalContent,
+            {
+              width: '60%',
+              maxWidth: '95%',
+              maxHeight: '95%',
+              paddingHorizontal: 16,
+              paddingVertical: 32,
+            }
+          ]}>
+            <View style={styles.modalHeader}>
+              <Title style={[styles.modalTitle, { fontSize: 28 }]}>
+                {employeMode === 'add' ? 'Ajouter Employé' : employeMode === 'edit' ? 'Modifier Employé' : 'Détails Employé'}
+              </Title>
+              <IconButton
+                icon="close"
+                size={28}
+                onPress={() => setEmployeModalVisible(false)}
+              />
+            </View>
 
-          <ScrollView style={{ maxHeight: '75%' }} showsVerticalScrollIndicator={true}>
-            {employeMode === 'view' ? (
-              // ============================================
-              // MODE VIEW
-              // ============================================
-              <View>
-                <View style={styles.modalViewSection}>
-                  <Avatar.Image
-                    size={100}
-                    source={selectedEmploye?.photo_identite ? { uri: selectedEmploye.photo_identite } : require('../../../assets/images/default-avatar.png')}
-                    style={{ alignSelf: 'center', marginBottom: 32 }}
-                  />
+            <ScrollView style={{ maxHeight: '75%' }} showsVerticalScrollIndicator={true}>
+              {employeMode === 'view' ? (
+                // ============================================
+                // MODE VIEW
+                // ============================================
+                <View>
+                  <View style={styles.modalViewSection}>
+                    <Avatar.Image
+                      size={100}
+                      source={selectedEmploye?.photo_identite ? { uri: selectedEmploye.photo_identite } : require('../../../assets/images/default-avatar.png')}
+                      style={{ alignSelf: 'center', marginBottom: 32 }}
+                    />
 
-                  {/* SECTION 1 - INFORMATIONS DE BASE */}
-                  <Text style={[styles.sectionTitle, { fontSize: 18, marginTop: 32 }]}>
-                  Informations de base
-                  </Text>
-                  <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
-                    <View style={{ flex: 1, marginRight: 8 }}>
-                      <Text style={[styles.viewLabel, { fontSize: 16 }]}>Matricule</Text>
-                      <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.matricule}</Text>
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 8 }}>
-                      <Text style={[styles.viewLabel, { fontSize: 16 }]}>CNI</Text>
-                      <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.CNI || 'N/A'}</Text>
-                    </View>
-                  </View>
-
-                  <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
-                    <View style={{ flex: 1, marginRight: 8 }}>
-                      <Text style={[styles.viewLabel, { fontSize: 16 }]}>Nom complet</Text>
-                      <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.nom_complet}</Text>
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 8 }}>
-                      <Text style={[styles.viewLabel, { fontSize: 16 }]}>Téléphone</Text>
-                      <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.telephone}</Text>
-                    </View>
-                  </View>
-
-                  <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
-                    <View style={{ flex: 1, marginRight: 8 }}>
-                      <Text style={[styles.viewLabel, { fontSize: 16 }]}>Email</Text>
-                      <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.email}</Text>
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 8 }}>
-                      <Text style={[styles.viewLabel, { fontSize: 16 }]}>Date de naissance</Text>
-                      <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.date_naissance ? new Date(selectedEmploye.date_naissance).toLocaleDateString('fr-FR') : 'N/A'}</Text>
-                    </View>
-                  </View>
-
-                  {/* SECTION 2 - STATUT ET RÔLE */}
-                  <Text style={[styles.sectionTitle, { fontSize: 18, marginTop: 32 }]}>
-                  Statut et rôle
-                  </Text>
-                  <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
-                    <View style={{ flex: 1, marginRight: 8 }}>
-                      <Text style={[styles.viewLabel, { fontSize: 16 }]}>Type d'employé</Text>
-                      <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.type_employe}</Text>
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 8 }}>
-                      <Text style={[styles.viewLabel, { fontSize: 16 }]}>Rôle</Text>
-                      <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.role}</Text>
-                    </View>
-                  </View>
-
-                  <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
-                    <View style={{ flex: 1, marginRight: 8 }}>
-                      <Text style={[styles.viewLabel, { fontSize: 16 }]}>Statut</Text>
-                      <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.statut}</Text>
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 8 }}>
-                      <Text style={[styles.viewLabel, { fontSize: 16 }]}>Département</Text>
-                      <Text style={[styles.viewValue, { fontSize: 18 }]}>
-                        {departements.find(d => d.id === selectedEmploye?.id_departement)?.nom || 'N/A'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* SECTION 3 - INFORMATIONS PROFESSIONNELLES */}
-                  <Text style={[styles.sectionTitle, { fontSize: 18, marginTop: 32 }]}>
-                  Informations professionnelles
-                  </Text>
-                  <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
-                    <View style={{ flex: 1, marginRight: 8 }}>
-                      <Text style={[styles.viewLabel, { fontSize: 16 }]}>Date d'embauche</Text>
-                      <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.date_embauche ? new Date(selectedEmploye.date_embauche).toLocaleDateString('fr-FR') : 'N/A'}</Text>
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 8 }}>
-                      <Text style={[styles.viewLabel, { fontSize: 16 }]}>Salaire de base</Text>
-                      <Text style={[styles.viewValue, { fontSize: 18 }]}>${selectedEmploye?.salaire_base}</Text>
-                    </View>
-                  </View>
-
-                  <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
-                    <View style={{ flex: 1, marginRight: 8 }}>
-                      <Text style={[styles.viewLabel, { fontSize: 16 }]}>N° CNSS</Text>
-                      <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.numero_cnss || 'N/A'}</Text>
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 8 }}>
-                      <Text style={[styles.viewLabel, { fontSize: 16 }]}>Jours de congés annuels</Text>
-                      <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.jours_conges_annuels || 20}</Text>
-                    </View>
-                  </View>
-
-                  {/* SECTION 4 - ADRESSE */}
-                  <Text style={[styles.sectionTitle, { fontSize: 18, marginTop: 32 }]}>
-                  Adresse
-                  </Text>
-                  <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
-                    <View style={{ flex: 1, marginRight: 8 }}>
-                      <Text style={[styles.viewLabel, { fontSize: 16 }]}>Adresse</Text>
-                      <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.adresse || 'N/A'}</Text>
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 8 }}>
-                      <Text style={[styles.viewLabel, { fontSize: 16 }]}>Ville</Text>
-                      <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.ville || 'N/A'}</Text>
-                    </View>
-                  </View>
-
-                  <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
-                    <View style={{ flex: 1, marginRight: 8 }}>
-                      <Text style={[styles.viewLabel, { fontSize: 16 }]}>Pays</Text>
-                      <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.pays || 'Burundi'}</Text>
-                    </View>
-                  </View>
-
-                  {/* SECTION 5 - INFORMATIONS BANCAIRES */}
-                  <Text style={[styles.sectionTitle, { fontSize: 18, marginTop: 32 }]}>
-                  Informations bancaires
-                  </Text>
-                  <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
-                    <View style={{ flex: 1, marginRight: 8 }}>
-                      <Text style={[styles.viewLabel, { fontSize: 16 }]}>Compte bancaire</Text>
-                      <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.compte_bancaire || 'N/A'}</Text>
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 8 }}>
-                      <Text style={[styles.viewLabel, { fontSize: 16 }]}>Nom de la banque</Text>
-                      <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.nom_banque || 'N/A'}</Text>
-                    </View>
-                  </View>
-
-                  {/* SECTION 7 - DÉPART */}
-                  {selectedEmploye?.statut === 'inactif' && (
-                    <>
-                      <Text style={[styles.sectionTitle, { fontSize: 18, marginTop: 32 }]}>
-                        👋 Information de départ
-                      </Text>
-                      <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
-                        <View style={{ flex: 1, marginRight: 8 }}>
-                          <Text style={[styles.viewLabel, { fontSize: 16 }]}>Date de départ</Text>
-                          <Text style={[styles.viewValue, { fontSize: 18 }]}>
-                            {selectedEmploye?.date_depart ? new Date(selectedEmploye.date_depart).toLocaleDateString('fr-FR') : 'N/A'}
-                          </Text>
-                        </View>
-                        <View style={{ flex: 1, marginLeft: 8 }}>
-                          <Text style={[styles.viewLabel, { fontSize: 16 }]}>Raison du départ</Text>
-                          <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.raison_depart || 'N/A'}</Text>
-                        </View>
+                    {/* SECTION 1 - INFORMATIONS DE BASE */}
+                    <Text style={[styles.sectionTitle, { fontSize: 18, marginTop: 32 }]}>
+                      Informations de base
+                    </Text>
+                    <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <Text style={[styles.viewLabel, { fontSize: 16 }]}>Matricule</Text>
+                        <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.matricule}</Text>
                       </View>
-                    </>
-                  )}
-                </View>
-              </View>
-            ) : (
-              // ============================================
-              // MODE EDIT/ADD
-              // ============================================
-              <View>
-                {/* SECTION 1 */}
-                <Text style={[styles.sectionTitle, { fontSize: 18, marginBottom: 16 }]}>
-                Informations de base
-                </Text>
+                      <View style={{ flex: 1, marginLeft: 8 }}>
+                        <Text style={[styles.viewLabel, { fontSize: 16 }]}>CNI</Text>
+                        <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.CNI || 'N/A'}</Text>
+                      </View>
+                    </View>
 
-                <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
-                  <View style={{ flex: 1, marginRight: 8 }}>
-                    <TextInput
-                      label="Matricule *"
-                      value={employeForm.matricule}
-                      onChangeText={(text) => setEmployeForm({ ...employeForm, matricule: text })}
-                      style={styles.input}
-                      mode="outlined"
-                      editable={employeMode === 'add'}
-                    />
-                  </View>
-                  <View style={{ flex: 1, marginLeft: 8 }}>
-                    <TextInput
-                      label="CNI"
-                      value={employeForm.CNI || ''}
-                      onChangeText={(text) => setEmployeForm({ ...employeForm, CNI: text })}
-                      style={styles.input}
-                      mode="outlined"
-                    />
-                  </View>
-                </View>
+                    <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <Text style={[styles.viewLabel, { fontSize: 16 }]}>Nom complet</Text>
+                        <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.nom_complet}</Text>
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 8 }}>
+                        <Text style={[styles.viewLabel, { fontSize: 16 }]}>Téléphone</Text>
+                        <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.telephone}</Text>
+                      </View>
+                    </View>
 
-                <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
-                  <View style={{ flex: 1, marginRight: 8 }}>
-                    <TextInput
-                      label="Nom Complet *"
-                      value={employeForm.nom_complet}
-                      onChangeText={(text) => setEmployeForm({ ...employeForm, nom_complet: text })}
-                      style={styles.input}
-                      mode="outlined"
-                    />
-                  </View>
-                  <View style={{ flex: 1, marginLeft: 8 }}>
-                    <TextInput
-                      label="Téléphone"
-                      value={employeForm.telephone}
-                      onChangeText={(text) => setEmployeForm({ ...employeForm, telephone: text })}
-                      style={styles.input}
-                      mode="outlined"
-                      keyboardType="phone-pad"
-                    />
-                  </View>
-                </View>
+                    <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <Text style={[styles.viewLabel, { fontSize: 16 }]}>Email</Text>
+                        <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.email}</Text>
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 8 }}>
+                        <Text style={[styles.viewLabel, { fontSize: 16 }]}>Date de naissance</Text>
+                        <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.date_naissance ? new Date(selectedEmploye.date_naissance).toLocaleDateString('fr-FR') : 'N/A'}</Text>
+                      </View>
+                    </View>
 
-                <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
-                  <View style={{ flex: 1, marginRight: 8 }}>
-                    <TextInput
-                      label="Email *"
-                      value={employeForm.email}
-                      onChangeText={(text) => setEmployeForm({ ...employeForm, email: text })}
-                      style={styles.input}
-                      mode="outlined"
-                      keyboardType="email-address"
-                    />
-                  </View>
-                  <View style={{ flex: 1, marginLeft: 8 }}>
-                    {employeMode === 'add' && (
-                      <TextInput
-                        label="Mot de passe *"
-                        value={employeForm.mot_de_passe || ''}
-                        onChangeText={(text) => setEmployeForm({ ...employeForm, mot_de_passe: text })}
-                        style={styles.input}
-                        mode="outlined"
-                        secureTextEntry
-                      />
+                    {/* SECTION 2 - STATUT ET RÔLE */}
+                    <Text style={[styles.sectionTitle, { fontSize: 18, marginTop: 32 }]}>
+                      Statut et rôle
+                    </Text>
+                    <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <Text style={[styles.viewLabel, { fontSize: 16 }]}>Type d'employé</Text>
+                        <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.type_employe}</Text>
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 8 }}>
+                        <Text style={[styles.viewLabel, { fontSize: 16 }]}>Rôle</Text>
+                        <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.role}</Text>
+                      </View>
+                    </View>
+
+                    <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <Text style={[styles.viewLabel, { fontSize: 16 }]}>Statut</Text>
+                        <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.statut}</Text>
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 8 }}>
+                        <Text style={[styles.viewLabel, { fontSize: 16 }]}>Département</Text>
+                        <Text style={[styles.viewValue, { fontSize: 18 }]}>
+                          {Array.isArray(departements) ? departements.find(d => d.id === selectedEmploye?.id_departement)?.nom || 'N/A' : 'N/A'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* SECTION 3 - INFORMATIONS PROFESSIONNELLES */}
+                    <Text style={[styles.sectionTitle, { fontSize: 18, marginTop: 32 }]}>
+                      Informations professionnelles
+                    </Text>
+                    <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <Text style={[styles.viewLabel, { fontSize: 16 }]}>Date d'embauche</Text>
+                        <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.date_embauche ? new Date(selectedEmploye.date_embauche).toLocaleDateString('fr-FR') : 'N/A'}</Text>
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 8 }}>
+                        <Text style={[styles.viewLabel, { fontSize: 16 }]}>Salaire de base</Text>
+                        <Text style={[styles.viewValue, { fontSize: 18 }]}>${selectedEmploye?.salaire_base}</Text>
+                      </View>
+                    </View>
+
+                    <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <Text style={[styles.viewLabel, { fontSize: 16 }]}>N° CNSS</Text>
+                        <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.numero_cnss || 'N/A'}</Text>
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 8 }}>
+                        <Text style={[styles.viewLabel, { fontSize: 16 }]}>Jours de congés annuels</Text>
+                        <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.jours_conges_annuels || 20}</Text>
+                      </View>
+                    </View>
+
+                    {/* SECTION 4 - ADRESSE */}
+                    <Text style={[styles.sectionTitle, { fontSize: 18, marginTop: 32 }]}>
+                      Adresse
+                    </Text>
+                    <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <Text style={[styles.viewLabel, { fontSize: 16 }]}>Adresse</Text>
+                        <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.adresse || 'N/A'}</Text>
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 8 }}>
+                        <Text style={[styles.viewLabel, { fontSize: 16 }]}>Ville</Text>
+                        <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.ville || 'N/A'}</Text>
+                      </View>
+                    </View>
+
+                    <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <Text style={[styles.viewLabel, { fontSize: 16 }]}>Pays</Text>
+                        <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.pays || 'Burundi'}</Text>
+                      </View>
+                    </View>
+
+                    {/* SECTION 5 - INFORMATIONS BANCAIRES */}
+                    <Text style={[styles.sectionTitle, { fontSize: 18, marginTop: 32 }]}>
+                      Informations bancaires
+                    </Text>
+                    <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <Text style={[styles.viewLabel, { fontSize: 16 }]}>Compte bancaire</Text>
+                        <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.compte_bancaire || 'N/A'}</Text>
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 8 }}>
+                        <Text style={[styles.viewLabel, { fontSize: 16 }]}>Nom de la banque</Text>
+                        <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.nom_banque || 'N/A'}</Text>
+                      </View>
+                    </View>
+
+                    {/* SECTION 7 - DÉPART */}
+                    {selectedEmploye?.statut === 'inactif' && (
+                      <>
+                        <Text style={[styles.sectionTitle, { fontSize: 18, marginTop: 32 }]}>
+                          👋 Information de départ
+                        </Text>
+                        <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
+                          <View style={{ flex: 1, marginRight: 8 }}>
+                            <Text style={[styles.viewLabel, { fontSize: 16 }]}>Date de départ</Text>
+                            <Text style={[styles.viewValue, { fontSize: 18 }]}>
+                              {selectedEmploye?.date_depart ? new Date(selectedEmploye.date_depart).toLocaleDateString('fr-FR') : 'N/A'}
+                            </Text>
+                          </View>
+                          <View style={{ flex: 1, marginLeft: 8 }}>
+                            <Text style={[styles.viewLabel, { fontSize: 16 }]}>Raison du départ</Text>
+                            <Text style={[styles.viewValue, { fontSize: 18 }]}>{selectedEmploye?.raison_depart || 'N/A'}</Text>
+                          </View>
+                        </View>
+                      </>
                     )}
                   </View>
                 </View>
-
-                <TouchableOpacity
-                  style={[styles.dateInput, { marginBottom: 16 }]}
-                  onPress={() => {
-                    setShowDatePickerField('date_naissance');
-                    setDatePickerValue(new Date(employeForm.date_naissance || new Date()));
-                  }}
-                >
-                  <MaterialIcons name="calendar-today" size={20} color="#2E86C1" />
-                  <Text style={[styles.dateInputText, { marginLeft: 8 }]}>
-                    Date de naissance: {employeForm.date_naissance ? new Date(employeForm.date_naissance).toLocaleDateString('fr-FR') : 'Non définie'}
+              ) : (
+                // ============================================
+                // MODE EDIT/ADD
+                // ============================================
+                <View>
+                  {/* SECTION 1 */}
+                  <Text style={[styles.sectionTitle, { fontSize: 18, marginBottom: 16 }]}>
+                    Informations de base
                   </Text>
-                </TouchableOpacity>
 
-                {/* SECTION 2 */}
-                <Divider style={{ marginVertical: 24 }} />
-                <Text style={[styles.sectionTitle, { fontSize: 18, marginBottom: 16 }]}>
-                Statut et rôle
-                </Text>
+                  <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <TextInput
+                        label="Matricule *"
+                        value={employeForm.matricule}
+                        onChangeText={(text) => setEmployeForm({ ...employeForm, matricule: text })}
+                        style={styles.input}
+                        mode="outlined"
+                        editable={employeMode === 'add'}
+                      />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 8 }}>
+                      <TextInput
+                        label="CNI"
+                        value={employeForm.CNI || ''}
+                        onChangeText={(text) => setEmployeForm({ ...employeForm, CNI: text })}
+                        style={styles.input}
+                        mode="outlined"
+                      />
+                    </View>
+                  </View>
 
-                <Text style={[styles.labelText, { fontSize: 16, marginBottom: 8 }]}>Type d'employé</Text>
-                <SegmentedButtons
-                  value={employeForm.type_employe}
-                  onValueChange={(value) => setEmployeForm({ ...employeForm, type_employe: value })}
-                  buttons={[
-                    { value: 'INSS', label: 'INSS' },
-                    { value: 'temps_partiel', label: 'Temps partiel' },
-                    { value: 'contractuel', label: 'Contractuel' }
-                  ]}
-                  style={{ marginBottom: 16 }}
-                />
+                  <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <TextInput
+                        label="Nom Complet *"
+                        value={employeForm.nom_complet}
+                        onChangeText={(text) => setEmployeForm({ ...employeForm, nom_complet: text })}
+                        style={styles.input}
+                        mode="outlined"
+                      />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 8 }}>
+                      <TextInput
+                        label="Téléphone"
+                        value={employeForm.telephone}
+                        onChangeText={(text) => setEmployeForm({ ...employeForm, telephone: text })}
+                        style={styles.input}
+                        mode="outlined"
+                        keyboardType="phone-pad"
+                      />
+                    </View>
+                  </View>
 
-                <Text style={[styles.labelText, { fontSize: 16, marginBottom: 8 }]}>Rôle</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-                  {['admin', 'manager', 'employe', 'comptable', 'veterinaire', 'chauffeur', 'agriculteur', 'technicien'].map(role => (
-                    <Chip
-                      key={role}
-                      selected={employeForm.role === role}
-                      onPress={() => setEmployeForm({ ...employeForm, role })}
-                      style={{ marginRight: 8 }}
-                    >
-                      {role}
-                    </Chip>
-                  ))}
-                </ScrollView>
+                  <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <TextInput
+                        label="Email *"
+                        value={employeForm.email}
+                        onChangeText={(text) => setEmployeForm({ ...employeForm, email: text })}
+                        style={styles.input}
+                        mode="outlined"
+                        keyboardType="email-address"
+                      />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 8 }}>
+                      {employeMode === 'add' && (
+                        <TextInput
+                          label="Mot de passe *"
+                          value={employeForm.mot_de_passe || ''}
+                          onChangeText={(text) => setEmployeForm({ ...employeForm, mot_de_passe: text })}
+                          style={styles.input}
+                          mode="outlined"
+                          secureTextEntry
+                        />
+                      )}
+                    </View>
+                  </View>
 
-                <Text style={[styles.labelText, { fontSize: 16, marginBottom: 8 }]}>Statut</Text>
-                <SegmentedButtons
-                  value={employeForm.statut}
-                  onValueChange={(value) => setEmployeForm({ ...employeForm, statut: value })}
-                  buttons={[
-                    { value: 'actif', label: 'Actif' },
-                    { value: 'inactif', label: 'Inactif' },
-                    { value: 'congé', label: 'Congé' },
-                    { value: 'suspendu', label: 'Suspendu' }
-                  ]}
-                  style={{ marginBottom: 16 }}
-                />
+                  <TouchableOpacity
+                    style={[styles.dateInput, { marginBottom: 16 }]}
+                    onPress={() => {
+                      setShowDatePickerField('date_naissance');
+                      setDatePickerValue(new Date(employeForm.date_naissance || new Date()));
+                    }}
+                  >
+                    <MaterialIcons name="calendar-today" size={20} color="#2E86C1" />
+                    <Text style={[styles.dateInputText, { marginLeft: 8 }]}>
+                      Date de naissance: {employeForm.date_naissance ? new Date(employeForm.date_naissance).toLocaleDateString('fr-FR') : 'Non définie'}
+                    </Text>
+                  </TouchableOpacity>
 
-                <Text style={[styles.labelText, { fontSize: 16, marginBottom: 8 }]}>Département</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-                  {departements.map(dept => (
-                    <Chip
-                      key={dept.id}
-                      selected={employeForm.id_departement === dept.id}
-                      onPress={() => setEmployeForm({ ...employeForm, id_departement: dept.id })}
-                      style={{ marginRight: 8 }}
-                    >
-                      {dept.nom}
-                    </Chip>
-                  ))}
-                </ScrollView>
-
-                {/* SECTION 3 */}
-                <Divider style={{ marginVertical: 24 }} />
-                <Text style={[styles.sectionTitle, { fontSize: 18, marginBottom: 16 }]}>
-                Informations professionnelles
-                </Text>
-
-                <TouchableOpacity
-                  style={[styles.dateInput, { marginBottom: 16 }]}
-                  onPress={() => {
-                    setShowDatePickerField('date_embauche');
-                    setDatePickerValue(new Date(employeForm.date_embauche || new Date()));
-                  }}
-                >
-                  <MaterialIcons name="calendar-today" size={20} color="#2E86C1" />
-                  <Text style={[styles.dateInputText, { marginLeft: 8 }]}>
-                    Date d'embauche: {employeForm.date_embauche ? new Date(employeForm.date_embauche).toLocaleDateString('fr-FR') : 'Non définie'}
+                  {/* SECTION 2 */}
+                  <Divider style={{ marginVertical: 24 }} />
+                  <Text style={[styles.sectionTitle, { fontSize: 18, marginBottom: 16 }]}>
+                    Statut et rôle
                   </Text>
-                </TouchableOpacity>
 
-                <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
-                  <View style={{ flex: 1, marginRight: 8 }}>
-                    <TextInput
-                      label="Salaire de base *"
-                      value={employeForm.salaire_base?.toString() || ''}
-                      onChangeText={(text) => setEmployeForm({ ...employeForm, salaire_base: parseFloat(text) || '' })}
-                      style={styles.input}
-                      mode="outlined"
-                      keyboardType="decimal-pad"
-                    />
-                  </View>
-                  <View style={{ flex: 1, marginLeft: 8 }}>
-                    <TextInput
-                      label="N° CNSS"
-                      value={employeForm.numero_cnss || ''}
-                      onChangeText={(text) => setEmployeForm({ ...employeForm, numero_cnss: text })}
-                      style={styles.input}
-                      mode="outlined"
-                    />
-                  </View>
-                </View>
-
-                <TextInput
-                  label="Jours de congés annuels"
-                  value={employeForm.jours_conges_annuels?.toString() || '20'}
-                  onChangeText={(text) => setEmployeForm({ ...employeForm, jours_conges_annuels: parseInt(text) || 20 })}
-                  style={[styles.input, { marginBottom: 16 }]}
-                  mode="outlined"
-                  keyboardType="numeric"
-                />
-
-                {/* SECTION 4 */}
-                <Divider style={{ marginVertical: 24 }} />
-                <Text style={[styles.sectionTitle, { fontSize: 18, marginBottom: 16 }]}>
-                 Adresse
-                </Text>
-
-                <TextInput
-                  label="Adresse"
-                  value={employeForm.adresse || ''}
-                  onChangeText={(text) => setEmployeForm({ ...employeForm, adresse: text })}
-                  style={[styles.input, { marginBottom: 16 }]}
-                  mode="outlined"
-                  multiline
-                />
-
-                <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
-                  <View style={{ flex: 1, marginRight: 8 }}>
-                    <TextInput
-                      label="Ville"
-                      value={employeForm.ville || ''}
-                      onChangeText={(text) => setEmployeForm({ ...employeForm, ville: text })}
-                      style={styles.input}
-                      mode="outlined"
-                    />
-                  </View>
-                  <View style={{ flex: 1, marginLeft: 8 }}>
-                    <TextInput
-                      label="Pays"
-                      value={employeForm.pays || 'Burundi'}
-                      onChangeText={(text) => setEmployeForm({ ...employeForm, pays: text })}
-                      style={styles.input}
-                      mode="outlined"
-                    />
-                  </View>
-                </View>
-
-                {/* SECTION 5 */}
-                <Divider style={{ marginVertical: 24 }} />
-                <Text style={[styles.sectionTitle, { fontSize: 18, marginBottom: 16 }]}>
-                  🏦 Informations bancaires
-                </Text>
-
-                <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
-                  <View style={{ flex: 1, marginRight: 8 }}>
-                    <TextInput
-                      label="Compte bancaire"
-                      value={employeForm.compte_bancaire || ''}
-                      onChangeText={(text) => setEmployeForm({ ...employeForm, compte_bancaire: text })}
-                      style={styles.input}
-                      mode="outlined"
-                    />
-                  </View>
-                  <View style={{ flex: 1, marginLeft: 8 }}>
-                    <TextInput
-                      label="Nom de la banque"
-                      value={employeForm.nom_banque || ''}
-                      onChangeText={(text) => setEmployeForm({ ...employeForm, nom_banque: text })}
-                      style={styles.input}
-                      mode="outlined"
-                    />
-                  </View>
-                </View>
-
-                {/* SECTION 6 */}
-                <Divider style={{ marginVertical: 24 }} />
-                <Text style={[styles.sectionTitle, { fontSize: 18, marginBottom: 16 }]}>
-                  📎 Documents
-                </Text>
-
-                <Text style={[styles.labelText, { fontSize: 16, marginBottom: 8 }]}>Photo d'identité</Text>
-                <Button
-                  mode="outlined"
-                  onPress={async () => {
-                    const result = await ImagePicker.launchImageLibraryAsync({
-                      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                      allowsEditing: true,
-                      aspect: [1, 1],
-                      quality: 0.8,
-                    });
-                    if (!result.canceled) {
-                      setEmployeForm({ ...employeForm, photo_identite: result.assets[0].uri });
-                    }
-                  }}
-                  icon="image"
-                  style={{ marginBottom: 16 }}
-                >
-                  {employeForm.photo_identite ? 'Changer la photo' : 'Ajouter une photo'}
-                </Button>
-
-                {employeForm.photo_identite && (
-                  <Image
-                    source={{ uri: employeForm.photo_identite }}
-                    style={{ width: 100, height: 100, borderRadius: 8, marginBottom: 16 }}
+                  <Text style={[styles.labelText, { fontSize: 16, marginBottom: 8 }]}>Type d'employé</Text>
+                  <SegmentedButtons
+                    value={employeForm.type_employe}
+                    onValueChange={(value) => setEmployeForm({ ...employeForm, type_employe: value })}
+                    buttons={[
+                      { value: 'INSS', label: 'INSS' },
+                      { value: 'temps_partiel', label: 'Temps partiel' },
+                      { value: 'contractuel', label: 'Contractuel' }
+                    ]}
+                    style={{ marginBottom: 16 }}
                   />
-                )}
 
-                <Text style={[styles.labelText, { fontSize: 16, marginBottom: 8, marginTop: 16 }]}>Document d'identité (PDF)</Text>
-                <Button
-                  mode="outlined"
-                  onPress={async () => {
-                    try {
-                      const result = await DocumentPicker.getDocumentAsync({
-                        type: 'application/pdf',
-                      });
-                      if (result.type === 'success') {
-                        setEmployeForm({ ...employeForm, document_identifiants_pdf: result.uri });
-                      }
-                    } catch (err) {
-                      Alert.alert('Info', 'Sélection PDF en développement.');
-                    }
-                  }}
-                  icon="file-pdf"
-                  style={{ marginBottom: 16 }}
-                >
-                  {employeForm.document_identifiants_pdf ? 'Changer le document' : 'Ajouter un PDF'}
-                </Button>
+                  <Text style={[styles.labelText, { fontSize: 16, marginBottom: 8 }]}>Rôle</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+                    {['admin', 'manager', 'employe', 'comptable', 'veterinaire', 'chauffeur', 'agriculteur', 'technicien'].map(role => (
+                      <Chip
+                        key={role}
+                        selected={employeForm.role === role}
+                        onPress={() => setEmployeForm({ ...employeForm, role })}
+                        style={{ marginRight: 8 }}
+                      >
+                        {role}
+                      </Chip>
+                    ))}
+                  </ScrollView>
 
-                {employeForm.document_identifiants_pdf && (
-                  <View style={{ 
-                    backgroundColor: '#F8F9FA', 
-                    padding: 16, 
-                    borderRadius: 8, 
-                    marginBottom: 16,
-                    flexDirection: 'row',
-                    alignItems: 'center'
-                  }}>
-                    <MaterialIcons name="picture-as-pdf" size={24} color="#E74C3C" style={{ marginRight: 8 }} />
-                    <Text style={{ flex: 1, color: '#2C3E50' }} numberOfLines={1}>
-                      Document sélectionné
+                  <Text style={[styles.labelText, { fontSize: 16, marginBottom: 8 }]}>Statut</Text>
+                  <SegmentedButtons
+                    value={employeForm.statut}
+                    onValueChange={(value) => setEmployeForm({ ...employeForm, statut: value })}
+                    buttons={[
+                      { value: 'actif', label: 'Actif' },
+                      { value: 'inactif', label: 'Inactif' },
+                      { value: 'congé', label: 'Congé' },
+                      { value: 'suspendu', label: 'Suspendu' }
+                    ]}
+                    style={{ marginBottom: 16 }}
+                  />
+
+                  <Text style={[styles.labelText, { fontSize: 16, marginBottom: 8 }]}>Département</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+                    {Array.isArray(departements) && departements.map(dept => (
+                      <Chip
+                        key={dept.id}
+                        selected={employeForm.id_departement === dept.id}
+                        onPress={() => setEmployeForm({ ...employeForm, id_departement: dept.id })}
+                        style={{ marginRight: 8 }}
+                      >
+                        {dept.nom}
+                      </Chip>
+                    ))}
+                  </ScrollView>
+
+                  {/* SECTION 3 */}
+                  <Divider style={{ marginVertical: 24 }} />
+                  <Text style={[styles.sectionTitle, { fontSize: 18, marginBottom: 16 }]}>
+                    Informations professionnelles
+                  </Text>
+
+                  <TouchableOpacity
+                    style={[styles.dateInput, { marginBottom: 16 }]}
+                    onPress={() => {
+                      setShowDatePickerField('date_embauche');
+                      setDatePickerValue(new Date(employeForm.date_embauche || new Date()));
+                    }}
+                  >
+                    <MaterialIcons name="calendar-today" size={20} color="#2E86C1" />
+                    <Text style={[styles.dateInputText, { marginLeft: 8 }]}>
+                      Date d'embauche: {employeForm.date_embauche ? new Date(employeForm.date_embauche).toLocaleDateString('fr-FR') : 'Non définie'}
                     </Text>
-                    <TouchableOpacity onPress={() => setEmployeForm({ ...employeForm, document_identifiants_pdf: null })}>
-                      <MaterialIcons name="close" size={20} color="#E74C3C" />
-                    </TouchableOpacity>
+                  </TouchableOpacity>
+
+                  <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <TextInput
+                        label="Salaire de base *"
+                        value={employeForm.salaire_base?.toString() || ''}
+                        onChangeText={(text) => setEmployeForm({ ...employeForm, salaire_base: parseFloat(text) || '' })}
+                        style={styles.input}
+                        mode="outlined"
+                        keyboardType="decimal-pad"
+                      />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 8 }}>
+                      <TextInput
+                        label="N° CNSS"
+                        value={employeForm.numero_cnss || ''}
+                        onChangeText={(text) => setEmployeForm({ ...employeForm, numero_cnss: text })}
+                        style={styles.input}
+                        mode="outlined"
+                      />
+                    </View>
                   </View>
-                )}
 
-                {/* SECTION 7 */}
-                {employeForm.statut === 'inactif' && (
-                  <>
-                    <Divider style={{ marginVertical: 24 }} />
-                    <Text style={[styles.sectionTitle, { fontSize: 18, marginBottom: 16 }]}>
-                     Informations de départ
-                    </Text>
+                  <TextInput
+                    label="Jours de congés annuels"
+                    value={employeForm.jours_conges_annuels?.toString() || '20'}
+                    onChangeText={(text) => setEmployeForm({ ...employeForm, jours_conges_annuels: parseInt(text) || 20 })}
+                    style={[styles.input, { marginBottom: 16 }]}
+                    mode="outlined"
+                    keyboardType="numeric"
+                  />
 
-                    <TouchableOpacity
-                      style={[styles.dateInput, { marginBottom: 16 }]}
-                      onPress={() => {
-                        setShowDatePickerField('date_depart');
-                        setDatePickerValue(employeForm.date_depart ? new Date(employeForm.date_depart) : new Date());
-                      }}
-                    >
-                      <MaterialIcons name="calendar-today" size={20} color="#2E86C1" />
-                      <Text style={[styles.dateInputText, { marginLeft: 8 }]}>
-                        Date de départ: {employeForm.date_depart ? new Date(employeForm.date_depart).toLocaleDateString('fr-FR') : 'Non définie'}
-                      </Text>
-                    </TouchableOpacity>
+                  {/* SECTION 4 */}
+                  <Divider style={{ marginVertical: 24 }} />
+                  <Text style={[styles.sectionTitle, { fontSize: 18, marginBottom: 16 }]}>
+                    Adresse
+                  </Text>
 
-                    <TextInput
-                      label="Raison du départ"
-                      value={employeForm.raison_depart || ''}
-                      onChangeText={(text) => setEmployeForm({ ...employeForm, raison_depart: text })}
-                      style={[styles.input, { marginBottom: 16 }]}
-                      mode="outlined"
-                      multiline
+                  <TextInput
+                    label="Adresse"
+                    value={employeForm.adresse || ''}
+                    onChangeText={(text) => setEmployeForm({ ...employeForm, adresse: text })}
+                    style={[styles.input, { marginBottom: 16 }]}
+                    mode="outlined"
+                    multiline
+                  />
+
+                  <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <TextInput
+                        label="Ville"
+                        value={employeForm.ville || ''}
+                        onChangeText={(text) => setEmployeForm({ ...employeForm, ville: text })}
+                        style={styles.input}
+                        mode="outlined"
+                      />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 8 }}>
+                      <TextInput
+                        label="Pays"
+                        value={employeForm.pays || 'Burundi'}
+                        onChangeText={(text) => setEmployeForm({ ...employeForm, pays: text })}
+                        style={styles.input}
+                        mode="outlined"
+                      />
+                    </View>
+                  </View>
+
+                  {/* SECTION 5 */}
+                  <Divider style={{ marginVertical: 24 }} />
+                  <Text style={[styles.sectionTitle, { fontSize: 18, marginBottom: 16 }]}>
+                    🏦 Informations bancaires
+                  </Text>
+
+                  <View style={[styles.twoColumnRow, { marginBottom: 16 }]}>
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <TextInput
+                        label="Compte bancaire"
+                        value={employeForm.compte_bancaire || ''}
+                        onChangeText={(text) => setEmployeForm({ ...employeForm, compte_bancaire: text })}
+                        style={styles.input}
+                        mode="outlined"
+                      />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 8 }}>
+                      <TextInput
+                        label="Nom de la banque"
+                        value={employeForm.nom_banque || ''}
+                        onChangeText={(text) => setEmployeForm({ ...employeForm, nom_banque: text })}
+                        style={styles.input}
+                        mode="outlined"
+                      />
+                    </View>
+                  </View>
+
+                  {/* SECTION 6 */}
+                  <Divider style={{ marginVertical: 24 }} />
+                  <Text style={[styles.sectionTitle, { fontSize: 18, marginBottom: 16 }]}>
+                    📎 Documents
+                  </Text>
+
+                  <Text style={[styles.labelText, { fontSize: 16, marginBottom: 8 }]}>Photo d'identité</Text>
+                  <Button
+                    mode="outlined"
+                    onPress={async () => {
+                      const result = await ImagePicker.launchImageLibraryAsync({
+                        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                        allowsEditing: true,
+                        aspect: [1, 1],
+                        quality: 0.8,
+                      });
+                      if (!result.canceled) {
+                        setEmployeForm({ ...employeForm, photo_identite: result.assets[0].uri });
+                      }
+                    }}
+                    icon="image"
+                    style={{ marginBottom: 16 }}
+                  >
+                    {employeForm.photo_identite ? 'Changer la photo' : 'Ajouter une photo'}
+                  </Button>
+
+                  {employeForm.photo_identite && (
+                    <Image
+                      source={{ uri: employeForm.photo_identite }}
+                      style={{ width: 100, height: 100, borderRadius: 8, marginBottom: 16 }}
                     />
-                  </>
-                )}
-              </View>
-            )}
-          </ScrollView>
+                  )}
 
-          {/* ACTIONS */}
-          <View style={[styles.modalActions, { marginTop: 32 }]}>
-            {employeMode === 'view' ? (
-              <>
-                <Button
-                  mode="contained"
-                  onPress={() => {
-                    setEmployeMode('edit');
-                    setEmployeForm(selectedEmploye);
-                  }}
-                  buttonColor="#F39C12"
-                  style={{ flex: 1, marginRight: 8 }}
-                >
-                  Éditer
-                </Button>
-                <Button
-                  mode="outlined"
-                  onPress={() => setEmployeModalVisible(false)}
-                  style={{ flex: 1, marginLeft: 8 }}
-                >
-                  Fermer
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  mode="contained"
-                  onPress={employeMode === 'add' ? handleCreateEmploye : handleUpdateEmploye}
-                  buttonColor="#27AE60"
-                  style={{ flex: 1, marginRight: 8 }}
-                  loading={actionInProgress?.includes('employe')}
-                  disabled={!!actionInProgress}
-                >
-                  {employeMode === 'add' ? 'Créer' : 'Enregistrer'}
-                </Button>
-                <Button
-                  mode="outlined"
-                  onPress={() => setEmployeModalVisible(false)}
-                  style={{ flex: 1, marginLeft: 8 }}
-                  disabled={!!actionInProgress}
-                >
-                  Annuler
-                </Button>
-              </>
+                  <Text style={[styles.labelText, { fontSize: 16, marginBottom: 8, marginTop: 16 }]}>Document d'identité (PDF)</Text>
+                  <Button
+                    mode="outlined"
+                    onPress={async () => {
+                      try {
+                        const result = await DocumentPicker.getDocumentAsync({
+                          type: 'application/pdf',
+                        });
+                        if (result.type === 'success') {
+                          setEmployeForm({ ...employeForm, document_identifiants_pdf: result.uri });
+                        }
+                      } catch (err) {
+                        Alert.alert('Info', 'Sélection PDF en développement.');
+                      }
+                    }}
+                    icon="file-pdf"
+                    style={{ marginBottom: 16 }}
+                  >
+                    {employeForm.document_identifiants_pdf ? 'Changer le document' : 'Ajouter un PDF'}
+                  </Button>
+
+                  {employeForm.document_identifiants_pdf && (
+                    <View style={{
+                      backgroundColor: '#F8F9FA',
+                      padding: 16,
+                      borderRadius: 8,
+                      marginBottom: 16,
+                      flexDirection: 'row',
+                      alignItems: 'center'
+                    }}>
+                      <MaterialIcons name="picture-as-pdf" size={24} color="#E74C3C" style={{ marginRight: 8 }} />
+                      <Text style={{ flex: 1, color: '#2C3E50' }} numberOfLines={1}>
+                        Document sélectionné
+                      </Text>
+                      <TouchableOpacity onPress={() => setEmployeForm({ ...employeForm, document_identifiants_pdf: null })}>
+                        <MaterialIcons name="close" size={20} color="#E74C3C" />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {/* SECTION 7 */}
+                  {employeForm.statut === 'inactif' && (
+                    <>
+                      <Divider style={{ marginVertical: 24 }} />
+                      <Text style={[styles.sectionTitle, { fontSize: 18, marginBottom: 16 }]}>
+                        Informations de départ
+                      </Text>
+
+                      <TouchableOpacity
+                        style={[styles.dateInput, { marginBottom: 16 }]}
+                        onPress={() => {
+                          setShowDatePickerField('date_depart');
+                          setDatePickerValue(employeForm.date_depart ? new Date(employeForm.date_depart) : new Date());
+                        }}
+                      >
+                        <MaterialIcons name="calendar-today" size={20} color="#2E86C1" />
+                        <Text style={[styles.dateInputText, { marginLeft: 8 }]}>
+                          Date de départ: {employeForm.date_depart ? new Date(employeForm.date_depart).toLocaleDateString('fr-FR') : 'Non définie'}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TextInput
+                        label="Raison du départ"
+                        value={employeForm.raison_depart || ''}
+                        onChangeText={(text) => setEmployeForm({ ...employeForm, raison_depart: text })}
+                        style={[styles.input, { marginBottom: 16 }]}
+                        mode="outlined"
+                        multiline
+                      />
+                    </>
+                  )}
+                </View>
+              )}
+            </ScrollView>
+
+            {/* ACTIONS */}
+            <View style={[styles.modalActions, { marginTop: 32 }]}>
+              {employeMode === 'view' ? (
+                <>
+                  <Button
+                    mode="contained"
+                    onPress={() => {
+                      setEmployeMode('edit');
+                      setEmployeForm(selectedEmploye);
+                    }}
+                    buttonColor="#F39C12"
+                    style={{ flex: 1, marginRight: 8 }}
+                  >
+                    Éditer
+                  </Button>
+                  <Button
+                    mode="outlined"
+                    onPress={() => setEmployeModalVisible(false)}
+                    style={{ flex: 1, marginLeft: 8 }}
+                  >
+                    Fermer
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    mode="contained"
+                    onPress={employeMode === 'add' ? handleCreateEmploye : handleUpdateEmploye}
+                    buttonColor="#27AE60"
+                    style={{ flex: 1, marginRight: 8 }}
+                    loading={actionInProgress?.includes('employe')}
+                    disabled={!!actionInProgress}
+                  >
+                    {employeMode === 'add' ? 'Créer' : 'Enregistrer'}
+                  </Button>
+                  <Button
+                    mode="outlined"
+                    onPress={() => setEmployeModalVisible(false)}
+                    style={{ flex: 1, marginLeft: 8 }}
+                    disabled={!!actionInProgress}
+                  >
+                    Annuler
+                  </Button>
+                </>
+              )}
+            </View>
+
+            {/* DATE PICKER */}
+            {showDatePickerField && Platform.OS === 'ios' && (
+              <DateTimePicker
+                value={datePickerValue}
+                mode="date"
+                display="spinner"
+                onChange={(event, selectedDate) => {
+                  if (event.type === 'set' && selectedDate) {
+                    const dateStr = selectedDate.toISOString().split('T')[0];
+                    setEmployeForm({ ...employeForm, [showDatePickerField]: dateStr });
+                    setShowDatePickerField(null);
+                  } else if (event.type === 'dismissed') {
+                    setShowDatePickerField(null);
+                  }
+                }}
+              />
+            )}
+
+            {showDatePickerField && Platform.OS === 'android' && (
+              <DateTimePicker
+                value={datePickerValue}
+                mode="date"
+                display="default"
+                onChange={(event, selectedDate) => {
+                  if (selectedDate) {
+                    const dateStr = selectedDate.toISOString().split('T')[0];
+                    setEmployeForm({ ...employeForm, [showDatePickerField]: dateStr });
+                  }
+                  setShowDatePickerField(null);
+                }}
+              />
             )}
           </View>
-
-          {/* DATE PICKER */}
-          {showDatePickerField && Platform.OS === 'ios' && (
-            <DateTimePicker
-              value={datePickerValue}
-              mode="date"
-              display="spinner"
-              onChange={(event, selectedDate) => {
-                if (event.type === 'set' && selectedDate) {
-                  const dateStr = selectedDate.toISOString().split('T')[0];
-                  setEmployeForm({ ...employeForm, [showDatePickerField]: dateStr });
-                  setShowDatePickerField(null);
-                } else if (event.type === 'dismissed') {
-                  setShowDatePickerField(null);
-                }
-              }}
-            />
-          )}
-
-          {showDatePickerField && Platform.OS === 'android' && (
-            <DateTimePicker
-              value={datePickerValue}
-              mode="date"
-              display="default"
-              onChange={(event, selectedDate) => {
-                if (selectedDate) {
-                  const dateStr = selectedDate.toISOString().split('T')[0];
-                  setEmployeForm({ ...employeForm, [showDatePickerField]: dateStr });
-                }
-                setShowDatePickerField(null);
-              }}
-            />
-          )}
         </View>
-      </View>
-    </Modal>
-  </Portal>
-);
-const DepartementModal = () => (
+      </Modal>
+    </Portal>
+  );
+  const DepartementModal = () => (
     <Portal>
       <Modal
         visible={departementModalVisible}
@@ -1879,11 +1879,11 @@ const DepartementModal = () => (
           <View style={[
             styles.modalContent,
             {
-                width: '60%',
-                maxWidth: '95%',
-                maxHeight: '95%',
-                paddingHorizontal: 16,
-                paddingVertical: 32,
+              width: '60%',
+              maxWidth: '95%',
+              maxHeight: '95%',
+              paddingHorizontal: 16,
+              paddingVertical: 32,
             }
           ]}>
             <View style={styles.modalHeader}>
@@ -2012,7 +2012,7 @@ const DepartementModal = () => (
           <View style={[
             styles.modalContent,
             {
-            width: '60%',
+              width: '60%',
               maxWidth: '95%',
               maxHeight: '95%',
               paddingHorizontal: 16,
@@ -2053,10 +2053,10 @@ const DepartementModal = () => (
                       {selectedEmploye?.nom_complet}
                     </Text>
                     <Text style={[styles.carteInfo, { fontSize: 16, marginTop: 4 }]}>
-                    {selectedEmploye?.telephone}
+                      {selectedEmploye?.telephone}
                     </Text>
                     <Text style={[styles.carteInfo, { fontSize: 16, marginTop: 4 }]}>
-                    {selectedEmploye?.numero_cni || selectedEmploye?.numero_cnss || 'N/A'}
+                      {selectedEmploye?.numero_cni || selectedEmploye?.numero_cnss || 'N/A'}
                     </Text>
                   </View>
                 </View>
@@ -2288,7 +2288,7 @@ const DepartementModal = () => (
         >
           {[
             { key: 'employes', label: 'Employés', icon: 'people', count: employes.length },
-            { key: 'departements', label: 'Départements', icon: 'business', count: departements.length },
+            { key: 'departements', label: 'Départements', icon: 'business', count: Array.isArray(departements) ? departements.length : 0 },
             { key: 'presences', label: 'Présences', icon: 'assignment-turned-in', count: presences.length },
             { key: 'salaires', label: 'Salaires', icon: 'attach-money', count: salaires.length },
             { key: 'conges', label: 'Congés', icon: 'event', count: congesPendingCount },
@@ -2371,7 +2371,7 @@ const DepartementModal = () => (
                 >
                   Temps Partiel
                 </Chip>
-                {departements.map(dept => (
+                {Array.isArray(departements) && departements.map(dept => (
                   <Chip
                     key={dept.id}
                     selected={selectedDepartement === dept.id}
@@ -2865,7 +2865,7 @@ const styles = StyleSheet.create({
     color: '#2C3E50',
     fontWeight: '600',
   },
-   input: {
+  input: {
     backgroundColor: '#FFFFFF',
     marginBottom: 16, // Ajuster si besoin
   },

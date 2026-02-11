@@ -843,6 +843,201 @@ class EmailService {
   }
 
   /**
+   * Envoyer une notification de réinitialisation de mot de passe à l'employé
+   */
+  async envoyerNotificationReinitialisationMotDePasse(destinataire, nomEmploye, nouveauMotDePasse) {
+    try {
+      const mailOptions = {
+        from: {
+          name: 'NUTRIFIX - Sécurité',
+          address: process.env.EMAIL_USER
+        },
+        to: destinataire,
+        subject: 'Réinitialisation de votre mot de passe',
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <style>
+              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              .header { background: linear-gradient(135deg, #1E3A8A 0%, #3B82F6 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+              .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
+              .credential-box { background: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; margin: 20px 0; border-radius: 4px; }
+              .password { font-family: 'Courier New', monospace; font-size: 20px; font-weight: bold; color: #DC2626; letter-spacing: 2px; }
+              .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB; color: #6B7280; font-size: 12px; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>Sécurité de votre compte</h1>
+              </div>
+              
+              <div class="content">
+                <p>Bonjour <strong>${nomEmploye}</strong>,</p>
+                
+                <p>Votre mot de passe pour le système NUTRIFIX a été réinitialisé par un administrateur.</p>
+                
+                <div class="credential-box">
+                  <p><strong>Votre nouveau mot de passe temporaire :</strong></p>
+                  <div class="password">${nouveauMotDePasse}</div>
+                  <p style="margin-top: 15px; color: #DC2626; font-weight: bold;">
+                    IMPORTANT : Vous devrez changer ce mot de passe lors de votre prochaine connexion.
+                  </p>
+                </div>
+                
+                <p>Si vous n'êtes pas à l'origine de cette demande, veuillez contacter immédiatement le service informatique.</p>
+              </div>
+              
+              <div class="footer">
+                <p><strong>NUTRIFIX</strong> - Système de Gestion des Ressources Humaines</p>
+                <p>&copy; ${new Date().getFullYear()} NUTRIFIX. Tous droits réservés.</p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log('Email réinitialisation mdp envoyé:', info.messageId);
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      console.error('❌ Erreur envoi email réinitialisation mdp:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Notifier l'employé d'une modification de son profil
+   */
+  async envoyerNotificationModificationCompte(destinataire, nomEmploye, modifications = []) {
+    try {
+      const mailOptions = {
+        from: {
+          name: 'NUTRIFIX - Système RH',
+          address: process.env.EMAIL_USER
+        },
+        to: destinataire,
+        subject: 'Mise à jour de votre compte',
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <style>
+              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              .header { background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+              .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
+              .info-box { background: white; border-left: 4px solid #10B981; padding: 15px; margin: 20px 0; border-radius: 4px; }
+              .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB; color: #6B7280; font-size: 12px; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>Compte Mis à Jour</h1>
+              </div>
+              
+              <div class="content">
+                <p>Bonjour <strong>${nomEmploye}</strong>,</p>
+                
+                <p>Nous vous informons que des modifications ont été apportées à votre profil sur le système NUTRIFIX.</p>
+                
+                <div class="info-box">
+                  <p><strong>Date de modification :</strong> ${this.formatDate(new Date())}</p>
+                </div>
+                
+                <p>Si vous avez des questions concernant ces changements, veuillez contacter le service RH.</p>
+              </div>
+              
+              <div class="footer">
+                <p><strong>NUTRIFIX</strong> - Système de Gestion des Ressources Humaines</p>
+                <p>&copy; ${new Date().getFullYear()} NUTRIFIX. Tous droits réservés.</p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log('Email modification compte envoyé:', info.messageId);
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      console.error('❌ Erreur envoi email modification compte:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Notifier l'employé de la désactivation de son compte
+   */
+  async envoyerNotificationDesactivationCompte(destinataire, nomEmploye, raison) {
+    try {
+      const mailOptions = {
+        from: {
+          name: 'NUTRIFIX - RH',
+          address: process.env.EMAIL_USER
+        },
+        to: destinataire,
+        subject: 'Désactivation de votre compte',
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <style>
+              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              .header { background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+              .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
+              .reject-box { background: #FEE2E2; border-left: 4px solid #EF4444; padding: 15px; margin: 20px 0; border-radius: 4px; }
+              .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB; color: #6B7280; font-size: 12px; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>Compte Désactivé</h1>
+              </div>
+              
+              <div class="content">
+                <p>Bonjour <strong>${nomEmploye}</strong>,</p>
+                
+                <p>Nous vous informons que votre compte sur le système NUTRIFIX a été désactivé.</p>
+                
+                <div class="reject-box">
+                  <p><strong>Statut :</strong> Inactif</p>
+                  <p><strong>Raison :</strong> ${raison || 'Supprimé par un administrateur'}</p>
+                </div>
+                
+                <p>Pour toute réclamation, veuillez contacter le service RH.</p>
+              </div>
+              
+              <div class="footer">
+                <p><strong>NUTRIFIX</strong> - Système de Gestion des Ressources Humaines</p>
+                <p>&copy; ${new Date().getFullYear()} NUTRIFIX. Tous droits réservés.</p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log('Email désactivation compte envoyé:', info.messageId);
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      console.error('❌ Erreur envoi email désactivation compte:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Envoyer une notification générale aux employés
    */
   async envoyerNotificationGenerale(destinataire, sujet, message) {

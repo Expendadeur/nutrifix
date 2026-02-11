@@ -538,12 +538,12 @@ const DashboardAdminScreen = ({ navigation }) => {
       console.log('🔔 Clic sur alerte:', alert.type);
 
       const navigationMap = {
-        maintenance: { screen: 'FlotteAgricultureElevageScreen', params: { tab: 'flotte' } },
-        stock: { screen: 'FlotteAgricultureElevageScreen', params: { tab: 'agriculture' } },
-        salaire: { screen: 'RHPersonnelScreen' },
-        paiement: { screen: 'FinanceComptabiliteScreen' },
-        conges: { screen: 'RHPersonnelScreen', params: { tab: 'conges' } },
-        assurance: { screen: 'FlotteAgricultureElevageScreen', params: { tab: 'flotte' } },
+        maintenance: { screen: 'Flotte', params: { tab: 'flotte' } },
+        stock: { screen: 'Flotte', params: { tab: 'agriculture' } },
+        salaire: { screen: 'RH' },
+        paiement: { screen: 'Finance' },
+        conges: { screen: 'RH', params: { tab: 'conges' } },
+        assurance: { screen: 'Flotte', params: { tab: 'flotte' } },
         notification: { action: handleOpenNotificationDialog } // Action spéciale pour notification
       };
 
@@ -1174,12 +1174,12 @@ const DashboardAdminScreen = ({ navigation }) => {
               gap: spacing.inner,
               justifyContent: 'space-between'
             }]}>
-              {renderQuickAction('Ajouter Employé', 'person-add', COLORS.primaryLight, 'RHPersonnel', { action: 'add' })}
-              {renderQuickAction('Nouveau Véhicule', 'add-circle', COLORS.warning, 'FlouteAgricultureElevage', { tab: 'flotte', action: 'add' })}
-              {renderQuickAction('Enregistrer Animal', 'pets', COLORS.purple, 'FlouteAgricultureElevage', { tab: 'elevage', action: 'add' })}
-              {renderQuickAction('Nouvelle Commande', 'shopping-bag', COLORS.success, 'CommercialClients', { action: 'addCommande' })}
-              {renderQuickAction('Paiement', 'payment', COLORS.danger, 'FinanceComptabilite', { action: 'addPaiement' })}
-              {renderQuickAction('Voir Journal', 'receipt', COLORS.primaryLight, 'FinanceComptabilite', { tab: 'journal' })}
+              {renderQuickAction('Ajouter Employé', 'person-add', COLORS.primaryLight, 'RH', { action: 'add' })}
+              {renderQuickAction('Nouveau Véhicule', 'add-circle', COLORS.warning, 'Flotte', { tab: 'flotte', action: 'add' })}
+              {renderQuickAction('Enregistrer Animal', 'pets', COLORS.purple, 'Flotte', { tab: 'elevage', action: 'add' })}
+              {renderQuickAction('Nouvelle Commande', 'shopping-bag', COLORS.success, 'Commercial', { action: 'addCommande' })}
+              {renderQuickAction('Paiement', 'payment', COLORS.danger, 'Finance', { action: 'addPaiement' })}
+              {renderQuickAction('Voir Journal', 'receipt', COLORS.primaryLight, 'Finance', { tab: 'journal' })}
               {renderQuickAction('Envoyer Annonce', 'campaign', COLORS.purple, 'OPEN_NOTIFICATION_DIALOG')}
             </View>
           </Card.Content>

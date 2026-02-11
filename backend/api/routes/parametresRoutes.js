@@ -5,6 +5,9 @@ const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const db = require('../../database/db');
 const bcrypt = require('bcryptjs');
+const QRCode = require('qrcode');
+const EmailService = require('../emailService');
+const emailService = new EmailService();
 
 // ============================================
 // MIDDLEWARE DE LOGGING
@@ -32,9 +35,9 @@ const logAction = async (userId, module, action, description, details = null) =>
  */
 router.get('/historique', authenticate, authorize(['admin']), async (req, res) => {
     try {
-        const { 
-            type, module, utilisateur, startDate, endDate, 
-            niveau, table, limit = 500, offset = 0 
+        const {
+            type, module, utilisateur, startDate, endDate,
+            niveau, table, limit = 500, offset = 0
         } = req.query;
 
         let sql = `
@@ -393,11 +396,11 @@ router.post('/utilisateurs', authenticate, authorize(['admin']), async (req, res
 
         // Vérifier si le matricule ou l'email existe déjà
         const [existingUser] = await db.query(
-            'SELECT id FROM utilisateurs WHERE matricule = ? OR email = ?',
+            'SELECT id FROM employes WHERE matricule = ? OR email = ?',
             [matricule, email]
         );
 
-        if (existingUser) {
+        if (existingUser[0]) {
             return res.status(400).json({
                 success: false,
                 message: 'Un utilisateur avec ce matricule ou cet email existe déjà.'
@@ -407,20 +410,70 @@ router.post('/utilisateurs', authenticate, authorize(['admin']), async (req, res
         // Hasher le mot de passe
         const hashedPassword = await bcrypt.hash(mot_de_passe, 10);
 
+        // Préparer les données pour le QR Code
+        const qrData = JSON.stringify({
+            matricule,
+            nom: nom_complet,
+            type: type_employe || 'INSS',
+            date: new Date().toISOString()
+        });
+
+        // Générer le QR Code
+        const qrCodeDataUrl = await QRCode.toDataURL(qrData, {
+            errorCorrectionLevel: 'M',
+            margin: 1,
+            color: {
+                dark: '#1E3A8A',
+                light: '#FFFFFF'
+            }
+        });
+
         const sql = `
-            INSERT INTO utilisateurs (
+            INSERT INTO employes (
                 matricule, email, mot_de_passe_hash, nom_complet, telephone,
                 type_employe, role, id_departement, date_embauche, salaire_base,
-                statut, photo_identite, doit_changer_mdp
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                statut, photo_identite, doit_changer_mdp, qr_code
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
         `;
 
-        const result = await db.query(sql, [
+        const [result] = await db.query(sql, [
             matricule, email, hashedPassword, nom_complet, telephone,
-            type_employe || 'INSS', role, id_departement, 
+            type_employe || 'INSS', role, id_departement,
             date_embauche || new Date(), salaire_base || 0,
-            statut || 'actif', photo_identite
+            statut || 'actif', photo_identite, qrCodeDataUrl
         ]);
+
+        const insertId = result.insertId;
+
+        // Envoyer l'email de bienvenue à l'employé
+        try {
+            await emailService.envoyerEmailBienvenue(
+                email,
+                nom_complet,
+                matricule,
+                mot_de_passe,
+                date_embauche || new Date(),
+                role
+            );
+            console.log(`✅ Email de bienvenue envoyé à ${email}`);
+        } catch (emailError) {
+            console.error('Erreur envoi email bienvenue:', emailError);
+            // On ne bloque pas la création si l'email échoue
+        }
+
+        // Notifier les administrateurs (exemple: envoyer à l'email configuré dans .env)
+        try {
+            await emailService.envoyerNotificationNouvelEmploye(
+                process.env.EMAIL_USER,
+                'Administrateur HR',
+                nom_complet,
+                matricule,
+                type_employe || 'INSS',
+                date_embauche || new Date()
+            );
+        } catch (adminEmailError) {
+            console.error('Erreur notification admin:', adminEmailError);
+        }
 
         // Logging
         await logAction(
@@ -428,13 +481,13 @@ router.post('/utilisateurs', authenticate, authorize(['admin']), async (req, res
             'parametres',
             'création',
             `Nouvel utilisateur créé: ${nom_complet} (${role})`,
-            { userId: result.insertId, matricule, email, role }
+            { userId: insertId, matricule, email, role }
         );
 
         res.status(201).json({
             success: true,
-            message: 'Utilisateur créé avec succès.',
-            data: { id: result.insertId }
+            message: 'Utilisateur créé avec succès. Email de bienvenue envoyé.',
+            data: { id: insertId, qr_code: qrCodeDataUrl }
         });
     } catch (error) {
         console.error('Create utilisateur error:', error);
@@ -460,17 +513,19 @@ router.put('/utilisateurs/:id', authenticate, authorize(['admin']), async (req, 
         } = req.body;
 
         // Récupérer l'utilisateur actuel pour logging
-        const [currentUser] = await db.query('SELECT * FROM utilisateurs WHERE id = ?', [id]);
-        
-        if (!currentUser) {
+        const [currentUser] = await db.query('SELECT * FROM employes WHERE id = ?', [id]);
+
+        if (!currentUser || currentUser.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'Utilisateur non trouvé.'
             });
         }
 
+        const user = currentUser[0];
+
         const sql = `
-            UPDATE utilisateurs SET
+            UPDATE employes SET
                 matricule = ?, email = ?, nom_complet = ?, telephone = ?,
                 type_employe = ?, role = ?, id_departement = ?, salaire_base = ?,
                 statut = ?, photo_identite = ?, modifie_par = ?
@@ -478,16 +533,16 @@ router.put('/utilisateurs/:id', authenticate, authorize(['admin']), async (req, 
         `;
 
         await db.query(sql, [
-            matricule || currentUser.matricule,
-            email || currentUser.email,
-            nom_complet || currentUser.nom_complet,
-            telephone || currentUser.telephone,
-            type_employe || currentUser.type_employe,
-            role || currentUser.role,
-            id_departement || currentUser.id_departement,
-            salaire_base !== undefined ? salaire_base : currentUser.salaire_base,
-            statut || currentUser.statut,
-            photo_identite || currentUser.photo_identite,
+            matricule || user.matricule,
+            email || user.email,
+            nom_complet || user.nom_complet,
+            telephone || user.telephone,
+            type_employe || user.type_employe,
+            role || user.role,
+            id_departement || user.id_departement,
+            salaire_base !== undefined ? salaire_base : user.salaire_base,
+            statut || user.statut,
+            photo_identite || user.photo_identite,
             req.userId,
             id
         ]);
@@ -497,13 +552,23 @@ router.put('/utilisateurs/:id', authenticate, authorize(['admin']), async (req, 
             req.userId,
             'parametres',
             'modification',
-            `Modification utilisateur: ${nom_complet || currentUser.nom_complet}`,
+            `Modification utilisateur: ${nom_complet || user.nom_complet}`,
             { userId: id, changes: req.body }
         );
 
+        // Notifier l'employé
+        try {
+            await emailService.envoyerNotificationModificationCompte(
+                email || user.email,
+                nom_complet || user.nom_complet
+            );
+        } catch (emailError) {
+            console.error('Erreur envoi email modification:', emailError);
+        }
+
         res.status(200).json({
             success: true,
-            message: 'Utilisateur modifié avec succès.'
+            message: 'Utilisateur modifié avec succès. Email de notification envoyé.'
         });
     } catch (error) {
         console.error('Update utilisateur error:', error);
@@ -530,18 +595,20 @@ router.delete('/utilisateurs/:id', authenticate, authorize(['admin']), async (re
             });
         }
 
-        const [user] = await db.query('SELECT nom_complet, matricule FROM utilisateurs WHERE id = ?', [id]);
+        const [userResult] = await db.query('SELECT nom_complet, matricule FROM employes WHERE id = ?', [id]);
 
-        if (!user) {
+        if (!userResult[0]) {
             return res.status(404).json({
                 success: false,
                 message: 'Utilisateur non trouvé.'
             });
         }
 
+        const user = userResult[0];
+
         // Plutôt que supprimer, désactiver (soft delete)
         await db.query(
-            'UPDATE utilisateurs SET statut = ?, date_depart = NOW(), raison_depart = ? WHERE id = ?',
+            'UPDATE employes SET statut = ?, date_depart = NOW(), raison_depart = ? WHERE id = ?',
             ['inactif', 'Supprimé par admin', id]
         );
 
@@ -554,9 +621,20 @@ router.delete('/utilisateurs/:id', authenticate, authorize(['admin']), async (re
             { userId: id }
         );
 
+        // Notifier l'employé
+        try {
+            await emailService.envoyerNotificationDesactivationCompte(
+                user.email,
+                user.nom_complet,
+                'Supprimé par un administrateur'
+            );
+        } catch (emailError) {
+            console.error('Erreur envoi email désactivation:', emailError);
+        }
+
         res.status(200).json({
             success: true,
-            message: 'Utilisateur supprimé avec succès.'
+            message: 'Utilisateur supprimé avec succès. Email de notification envoyé.'
         });
     } catch (error) {
         console.error('Delete utilisateur error:', error);
@@ -586,11 +664,23 @@ router.put('/utilisateurs/:id/reset-password', authenticate, authorize(['admin']
         const hashedPassword = await bcrypt.hash(newPassword, 10);
 
         await db.query(
-            'UPDATE utilisateurs SET mot_de_passe_hash = ?, doit_changer_mdp = 1, date_modification_mdp = NOW() WHERE id = ?',
+            'UPDATE employes SET mot_de_passe_hash = ?, doit_changer_mdp = 1, date_modification_mdp = NOW() WHERE id = ?',
             [hashedPassword, id]
         );
 
-        const [user] = await db.query('SELECT nom_complet, matricule FROM utilisateurs WHERE id = ?', [id]);
+        const [userResult] = await db.query('SELECT nom_complet, matricule, email FROM employes WHERE id = ?', [id]);
+        const user = userResult[0];
+
+        // Envoyer l'email
+        try {
+            await emailService.envoyerNotificationReinitialisationMotDePasse(
+                user.email,
+                user.nom_complet,
+                newPassword
+            );
+        } catch (emailError) {
+            console.error('Erreur envoi email reset password:', emailError);
+        }
 
         // Logging
         await logAction(
@@ -603,7 +693,7 @@ router.put('/utilisateurs/:id/reset-password', authenticate, authorize(['admin']
 
         res.status(200).json({
             success: true,
-            message: 'Mot de passe réinitialisé avec succès.'
+            message: 'Mot de passe réinitialisé avec succès. Email envoyé à l\'employé.'
         });
     } catch (error) {
         console.error('Reset password error:', error);
@@ -767,7 +857,7 @@ router.delete('/departements/:id', authenticate, authorize(['admin']), async (re
         }
 
         const [dept] = await db.query('SELECT nom FROM departements WHERE id = ?', [id]);
-        
+
         await db.query('DELETE FROM departements WHERE id = ?', [id]);
 
         // Logging
@@ -984,7 +1074,7 @@ router.post('/backup', authenticate, authorize(['admin']), async (req, res) => {
             res.status(200).json({
                 success: true,
                 message: 'Sauvegarde créée avec succès.',
-                data: { 
+                data: {
                     filename: backupFilename,
                     path: backupPath,
                     size: fs.statSync(backupPath).size,
@@ -1011,7 +1101,7 @@ router.get('/backups', authenticate, authorize(['admin']), async (req, res) => {
         const path = require('path');
 
         const backupDir = path.join(__dirname, '../../backups');
-        
+
         if (!fs.existsSync(backupDir)) {
             return res.status(200).json({
                 success: true,

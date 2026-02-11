@@ -30,15 +30,18 @@ import {
   List,
   Avatar,
   FAB,
-  ProgressBar
+  ProgressBar,
+  Badge,
+  Surface
 } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { requireAuth } from '../../utils/authGuard';
+import { LinearGradient } from 'expo-linear-gradient';
 
-const API_URL = 'http://localhost:5000/api/admin';
+const API_URL = 'http://localhost:5000/api/parametres';
 
 const TraceabiliteParametresScreen = ({ navigation, route }) => {
 
@@ -53,13 +56,32 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
   const isMobile = screenWidth <= 768;
   const isWeb = Platform.OS === 'web';
 
+  // Calcul du nombre de colonnes selon la largeur
+  const getNumColumns = () => {
+    if (screenWidth > 1400) return 4; // Très large
+    if (screenWidth > 1024) return 3; // Desktop
+    if (screenWidth > 768) return 2;  // Tablet
+    return 2; // Mobile (2 colonnes même en mobile pour meilleure utilisation de l'espace)
+  };
+
+  const numColumns = getNumColumns();
+
+  // Calcul du nombre de colonnes pour les stats
+  const getStatsColumns = () => {
+    if (screenWidth > 1024) return 3; // Desktop: 3 colonnes
+    if (screenWidth > 600) return 3;  // Tablet: 3 colonnes
+    return 3; // Mobile: 3 colonnes (plus compact)
+  };
+
+  const statsColumns = getStatsColumns();
+
   // Calcul des dimensions adaptatives
   const cardPadding = isMobile ? 12 : isTablet ? 16 : 20;
   const fontSize = {
     title: isMobile ? 20 : isTablet ? 22 : 26,
     subtitle: isMobile ? 16 : isTablet ? 18 : 20,
-    body: isMobile ? 14 : isTablet ? 15 : 16,
-    small: isMobile ? 12 : isTablet ? 13 : 14
+    body: isMobile ? 13 : isTablet ? 14 : 15,
+    small: isMobile ? 11 : isTablet ? 12 : 13
   };
 
   // ============================================
@@ -211,7 +233,7 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2E86C1" />
+        <ActivityIndicator size="large" color="#6366F1" />
         <Text style={styles.loadingText}>Vérification des autorisations...</Text>
       </View>
     );
@@ -451,10 +473,10 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
       let response;
       if (utilisateurMode === 'add') {
         response = await axios.post(`${API_URL}/utilisateurs`, data, getAxiosConfig());
-        Alert.alert('Succès', 'Utilisateur créé avec succès');
+        Alert.alert('Succès', response.data.message || 'Utilisateur créé avec succès');
       } else {
         response = await axios.put(`${API_URL}/utilisateurs/${selectedUtilisateur.id}`, data, getAxiosConfig());
-        Alert.alert('Succès', 'Utilisateur modifié avec succès');
+        Alert.alert('Succès', response.data.message || 'Utilisateur modifié avec succès');
       }
 
       setUtilisateurModal(false);
@@ -693,11 +715,11 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
   // ============================================
   const getActionColor = (action) => {
     const actionLower = action?.toLowerCase() || '';
-    if (actionLower.includes('création') || actionLower.includes('ajout')) return '#27AE60';
-    if (actionLower.includes('modification') || actionLower.includes('mise à jour')) return '#F39C12';
-    if (actionLower.includes('suppression')) return '#E74C3C';
-    if (actionLower.includes('consultation') || actionLower.includes('lecture')) return '#3498DB';
-    return '#95A5A6';
+    if (actionLower.includes('création') || actionLower.includes('ajout')) return '#10B981';
+    if (actionLower.includes('modification') || actionLower.includes('mise à jour')) return '#F59E0B';
+    if (actionLower.includes('suppression')) return '#EF4444';
+    if (actionLower.includes('consultation') || actionLower.includes('lecture')) return '#3B82F6';
+    return '#6B7280';
   };
 
   const getActionIcon = (action) => {
@@ -711,35 +733,35 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
 
   const getNiveauColor = (niveau) => {
     switch (niveau) {
-      case 'critical': return '#E74C3C';
-      case 'error': return '#E67E22';
-      case 'warning': return '#F39C12';
-      case 'info': return '#3498DB';
-      default: return '#95A5A6';
+      case 'critical': return '#DC2626';
+      case 'error': return '#EF4444';
+      case 'warning': return '#F59E0B';
+      case 'info': return '#3B82F6';
+      default: return '#6B7280';
     }
   };
 
   const getRoleColor = (role) => {
     switch (role) {
-      case 'admin': return '#E74C3C';
-      case 'comptable': return '#3498DB';
-      case 'manager': return '#F39C12';
-      case 'veterinaire': return '#9B59B6';
-      case 'chauffeur': return '#1ABC9C';
-      case 'agriculteur': return '#27AE60';
-      case 'technicien': return '#34495E';
-      case 'employe': return '#95A5A6';
-      default: return '#BDC3C7';
+      case 'admin': return '#DC2626';
+      case 'comptable': return '#3B82F6';
+      case 'manager': return '#F59E0B';
+      case 'veterinaire': return '#8B5CF6';
+      case 'chauffeur': return '#06B6D4';
+      case 'agriculteur': return '#10B981';
+      case 'technicien': return '#475569';
+      case 'employe': return '#6B7280';
+      default: return '#9CA3AF';
     }
   };
 
   const getStatutColor = (statut) => {
     switch (statut) {
-      case 'actif': return '#27AE60';
-      case 'inactif': return '#E74C3C';
-      case 'congé': return '#F39C12';
-      case 'suspendu': return '#E67E22';
-      default: return '#95A5A6';
+      case 'actif': return '#10B981';
+      case 'inactif': return '#EF4444';
+      case 'congé': return '#F59E0B';
+      case 'suspendu': return '#EF4444';
+      default: return '#6B7280';
     }
   };
 
@@ -760,8 +782,8 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
     actionLoading && (
       <View style={styles.loadingOverlay}>
         <View style={styles.loadingBox}>
-          <ActivityIndicator size="large" color="#2E86C1" />
-          <Text style={[styles.loadingText, { fontSize: fontSize.body }]}>
+          <ActivityIndicator size="large" color="#6366F1" />
+          <Text style={[styles.loadingText, { fontSize: fontSize.body, marginTop: 16 }]}>
             Chargement...
           </Text>
         </View>
@@ -772,64 +794,45 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
   // -------------------- HISTORIQUE --------------------
   const renderHistoriqueItem = ({ item }) => (
     <TouchableOpacity
-      style={[
-        styles.historiqueItem,
-        { padding: cardPadding, marginBottom: 12 }
-      ]}
+      style={[styles.historiqueCard, { marginBottom: 12 }]}
       onPress={() => {
         setSelectedHistorique(item);
         setHistoriqueDetailModal(true);
       }}
+      activeOpacity={0.7}
     >
-      <View style={styles.historiqueLeft}>
+      <View style={styles.historiqueCardContent}>
         <View style={[
-          styles.historiqueIcon,
-          {
-            backgroundColor: getActionColor(item.type_action) + '20',
-            width: isMobile ? 42 : 50,
-            height: isMobile ? 42 : 50,
-            borderRadius: isMobile ? 21 : 25
-          }
+          styles.historiqueIconContainer,
+          { backgroundColor: getActionColor(item.type_action) + '15' }
         ]}>
           <MaterialIcons
             name={getActionIcon(item.type_action)}
-            size={isMobile ? 20 : 24}
+            size={24}
             color={getActionColor(item.type_action)}
           />
         </View>
+
         <View style={styles.historiqueInfo}>
-          <Text style={[styles.historiqueAction, { fontSize: fontSize.body, fontWeight: '700' }]}>
+          <Text style={[styles.historiqueAction, { fontSize: fontSize.body }]}>
             {item.type_action}
           </Text>
-          <Text style={[styles.historiqueDescription, { fontSize: fontSize.small, marginTop: 4 }]} numberOfLines={2}>
+          <Text style={[styles.historiqueDescription, { fontSize: fontSize.small }]} numberOfLines={2}>
             {item.action_details}
           </Text>
+
           <View style={styles.historiqueMeta}>
-            <Chip
-              mode="flat"
-              style={[styles.historiqueModuleChip, { height: isMobile ? 24 : 28 }]}
-              textStyle={{ fontSize: fontSize.small, fontWeight: '600' }}
-            >
-              {item.module}
-            </Chip>
+            <View style={[styles.metaChip, { backgroundColor: '#F3F4F6' }]}>
+              <Text style={[styles.metaChipText, { fontSize: fontSize.small }]}>
+                {item.module}
+              </Text>
+            </View>
             {item.niveau && (
-              <Chip
-                mode="flat"
-                style={[
-                  styles.niveauChip,
-                  {
-                    backgroundColor: getNiveauColor(item.niveau) + '20',
-                    height: isMobile ? 24 : 28
-                  }
-                ]}
-                textStyle={{
-                  fontSize: fontSize.small,
-                  color: getNiveauColor(item.niveau),
-                  fontWeight: '600'
-                }}
-              >
-                {item.niveau}
-              </Chip>
+              <View style={[styles.metaChip, { backgroundColor: getNiveauColor(item.niveau) + '15' }]}>
+                <Text style={[styles.metaChipText, { fontSize: fontSize.small, color: getNiveauColor(item.niveau) }]}>
+                  {item.niveau}
+                </Text>
+              </View>
             )}
             <Text style={[styles.historiqueDate, { fontSize: fontSize.small }]}>
               {new Date(item.date_action).toLocaleString('fr-FR', {
@@ -840,905 +843,760 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
               })}
             </Text>
           </View>
-          <Text style={[styles.historiqueUtilisateur, { fontSize: fontSize.small, marginTop: 4 }]}>
-            Par: {item.utilisateur_nom} ({item.utilisateur_role})
+
+          <Text style={[styles.historiqueUtilisateur, { fontSize: fontSize.small }]}>
+            Par: {item.utilisateur_nom}
           </Text>
         </View>
+
+        <MaterialIcons name="chevron-right" size={24} color="#9CA3AF" />
       </View>
-      <IconButton icon="chevron-right" size={24} iconColor="#BDC3C7" />
     </TouchableOpacity>
   );
 
   const renderHistoriqueTab = () => (
     <View style={styles.tabContent}>
-      {/* Statistiques Rapides */}
-      <View style={[
-        styles.statsContainer,
-        isMobile && styles.statsContainerMobile,
-        { padding: cardPadding, gap: 12 }
-      ]}>
-        <Card style={[styles.statCard, { borderLeftColor: '#3498DB', borderLeftWidth: 4 }]}>
-          <Card.Content style={{ padding: isMobile ? 12 : 16 }}>
-            <Text style={[styles.statValue, { fontSize: fontSize.title, fontWeight: '800' }]}>
+      {/* Statistiques en Grille 3 colonnes */}
+      <View style={[styles.statsGridContainer, { padding: 20, paddingTop: 12 }]}>
+        <View style={[
+          styles.statsGrid,
+          {
+            gridTemplateColumns: `repeat(${statsColumns}, 1fr)`,
+            gap: 12
+          }
+        ]}>
+          <Surface style={[styles.modernStatCard, { borderLeftColor: '#6366F1' }]}>
+            <Text style={[styles.modernStatValue, { fontSize: fontSize.title, color: '#6366F1' }]}>
               {historiqueStats.total || 0}
             </Text>
-            <Text style={[styles.statLabel, { fontSize: fontSize.small, marginTop: 6 }]}>
+            <Text style={[styles.modernStatLabel, { fontSize: fontSize.small }]}>
               Total Actions
             </Text>
-          </Card.Content>
-        </Card>
-        <Card style={[styles.statCard, { borderLeftColor: '#E74C3C', borderLeftWidth: 4 }]}>
-          <Card.Content style={{ padding: isMobile ? 12 : 16 }}>
-            <Text style={[styles.statValue, styles.statValueDanger, { fontSize: fontSize.title, fontWeight: '800' }]}>
+          </Surface>
+
+          <Surface style={[styles.modernStatCard, { borderLeftColor: '#DC2626' }]}>
+            <Text style={[styles.modernStatValue, { fontSize: fontSize.title, color: '#DC2626' }]}>
               {historiqueStats.critiques || 0}
             </Text>
-            <Text style={[styles.statLabel, { fontSize: fontSize.small, marginTop: 6 }]}>
+            <Text style={[styles.modernStatLabel, { fontSize: fontSize.small }]}>
               Critiques
             </Text>
-          </Card.Content>
-        </Card>
-        <Card style={[styles.statCard, { borderLeftColor: '#F39C12', borderLeftWidth: 4 }]}>
-          <Card.Content style={{ padding: isMobile ? 12 : 16 }}>
-            <Text style={[styles.statValue, styles.statValueWarning, { fontSize: fontSize.title, fontWeight: '800' }]}>
+          </Surface>
+
+          <Surface style={[styles.modernStatCard, { borderLeftColor: '#F59E0B' }]}>
+            <Text style={[styles.modernStatValue, { fontSize: fontSize.title, color: '#F59E0B' }]}>
               {historiqueStats.warnings || 0}
             </Text>
-            <Text style={[styles.statLabel, { fontSize: fontSize.small, marginTop: 6 }]}>
+            <Text style={[styles.modernStatLabel, { fontSize: fontSize.small }]}>
               Warnings
             </Text>
-          </Card.Content>
-        </Card>
+          </Surface>
+        </View>
       </View>
-
-      {/* Filtres */}
-      <Card style={[styles.filterCard, { margin: cardPadding, marginTop: 16 }]}>
-        <Card.Content style={{ padding: cardPadding }}>
-          <Title style={[styles.filterTitle, { fontSize: fontSize.subtitle, fontWeight: '700' }]}>
-            Filtres
-          </Title>
-
-          {/* Type d'action */}
-          <View style={[styles.filterGroup, { marginTop: 12 }]}>
-            <Text style={[styles.filterLabel, { fontSize: fontSize.body, marginBottom: 8 }]}>
-              Type d'Action
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {['all', 'création', 'modification', 'suppression', 'consultation'].map(type => (
-                <Chip
-                  key={type}
-                  selected={historiqueFilters.type === type}
-                  onPress={() => setHistoriqueFilters({ ...historiqueFilters, type })}
-                  style={[styles.filterChip, { height: isMobile ? 32 : 36 }]}
-                  textStyle={{ fontSize: fontSize.small }}
-                >
-                  {type === 'all' ? 'Tous' : type}
-                </Chip>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* Module */}
-          <View style={[styles.filterGroup, { marginTop: 16 }]}>
-            <Text style={[styles.filterLabel, { fontSize: fontSize.body, marginBottom: 8 }]}>
-              Module
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {['all', 'rh', 'flotte', 'agriculture', 'elevage', 'commercial', 'finance', 'parametres'].map(mod => (
-                <Chip
-                  key={mod}
-                  selected={historiqueFilters.module === mod}
-                  onPress={() => setHistoriqueFilters({ ...historiqueFilters, module: mod })}
-                  style={[styles.filterChip, { height: isMobile ? 32 : 36 }]}
-                  textStyle={{ fontSize: fontSize.small }}
-                >
-                  {mod === 'all' ? 'Tous' : mod.toUpperCase()}
-                </Chip>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* Niveau */}
-          <View style={[styles.filterGroup, { marginTop: 16 }]}>
-            <Text style={[styles.filterLabel, { fontSize: fontSize.body, marginBottom: 8 }]}>
-              Niveau
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {['all', 'info', 'warning', 'error', 'critical'].map(niv => (
-                <Chip
-                  key={niv}
-                  selected={historiqueFilters.niveau === niv}
-                  onPress={() => setHistoriqueFilters({ ...historiqueFilters, niveau: niv })}
-                  style={[styles.filterChip, { height: isMobile ? 32 : 36 }]}
-                  textStyle={{ fontSize: fontSize.small }}
-                >
-                  {niv === 'all' ? 'Tous' : niv}
-                </Chip>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* Période */}
-          <View style={[styles.periodFilter, isMobile && styles.periodFilterMobile, { marginTop: 16 }]}>
-            <TouchableOpacity
-              style={[styles.dateButton, { padding: isMobile ? 10 : 12 }]}
-              onPress={() => {
-                setDatePickerField('start');
-                setShowDatePicker(true);
-              }}
-            >
-              <MaterialIcons name="calendar-today" size={18} color="#2E86C1" />
-              <Text style={[styles.dateButtonText, { fontSize: fontSize.small }]}>
-                {historiqueFilters.startDate.toLocaleDateString('fr-FR')}
-              </Text>
-            </TouchableOpacity>
-
-            <MaterialIcons name="arrow-forward" size={18} color="#7F8C8D" style={styles.dateArrow} />
-
-            <TouchableOpacity
-              style={[styles.dateButton, { padding: isMobile ? 10 : 12 }]}
-              onPress={() => {
-                setDatePickerField('end');
-                setShowDatePicker(true);
-              }}
-            >
-              <MaterialIcons name="calendar-today" size={18} color="#2E86C1" />
-              <Text style={[styles.dateButtonText, { fontSize: fontSize.small }]}>
-                {historiqueFilters.endDate.toLocaleDateString('fr-FR')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </Card.Content>
-      </Card>
 
       {/* Barre de recherche */}
-      <Searchbar
-        placeholder="Rechercher dans l'historique..."
-        onChangeText={setSearchQuery}
-        value={searchQuery}
-        style={[styles.searchBar, { marginHorizontal: cardPadding, marginTop: 16, marginBottom: 8 }]}
-        inputStyle={{ fontSize: fontSize.body }}
-      />
-
-      {/* Liste avec espacement de 16px avant le contenu */}
-      <View style={{ marginTop: 16 }}>
-        <FlatList
-          data={historique}
-          renderItem={renderHistoriqueItem}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={{ paddingHorizontal: cardPadding, paddingTop: 0 }}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <MaterialIcons name="history" size={isMobile ? 60 : 70} color="#BDC3C7" />
-              <Text style={[styles.emptyText, { fontSize: fontSize.body, marginTop: 12 }]}>
-                Aucune activité enregistrée
-              </Text>
-            </View>
-          }
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
+      <View style={{ paddingHorizontal: 20, paddingTop: 8 }}>
+        <Searchbar
+          placeholder="Rechercher dans l'historique..."
+          onChangeText={setSearchQuery}
+          value={searchQuery}
+          style={styles.modernSearchBar}
+          inputStyle={{ fontSize: fontSize.body }}
+          iconColor="#6366F1"
         />
       </View>
+
+      {/* Liste avec espacement de 12px */}
+      <FlatList
+        data={historique}
+        renderItem={renderHistoriqueItem}
+        keyExtractor={(item) => item.id.toString()}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 100 }}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <MaterialIcons name="history" size={64} color="#D1D5DB" />
+            <Text style={[styles.emptyText, { fontSize: fontSize.body }]}>
+              Aucune activité enregistrée
+            </Text>
+          </View>
+        }
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#6366F1']} />
+        }
+      />
     </View>
   );
 
-  // -------------------- UTILISATEURS --------------------
-  const renderUtilisateurItem = ({ item }) => (
-    <Card style={[styles.utilisateurCard, { marginBottom: 12 }]}>
-      <Card.Content style={{ padding: cardPadding }}>
-        <View style={styles.utilisateurHeader}>
-          <View style={styles.utilisateurLeft}>
-            <Avatar.Text
-              size={isMobile ? 48 : isTablet ? 56 : 64}
-              label={item.nom_complet.split(' ').map(n => n[0]).join('').substring(0, 2)}
-              style={{ backgroundColor: getRoleColor(item.role) }}
-              labelStyle={{ fontSize: fontSize.body, fontWeight: '700' }}
-            />
-            <View style={styles.utilisateurInfo}>
-              <Text style={[styles.utilisateurNom, { fontSize: fontSize.subtitle, fontWeight: '700' }]}>
-                {item.nom_complet}
+  // -------------------- UTILISATEURS - GRILLE RESPONSIVE --------------------
+  const renderUtilisateurCard = ({ item, index }) => {
+    const cardWidth = screenWidth > 1400 ? '23%' :
+      screenWidth > 1024 ? '31.5%' :
+        screenWidth > 768 ? '48%' : '48%';
+
+    return (
+      <Surface style={[
+        styles.gridCard,
+        {
+          width: cardWidth,
+          marginBottom: 12,
+          marginRight: (index % numColumns !== numColumns - 1) ? '2%' : 0
+        }
+      ]} elevation={1}>
+        <View style={styles.gridCardHeader}>
+          <View style={[styles.userAvatarSmall, { backgroundColor: getRoleColor(item.role) + '20' }]}>
+            <Text style={[styles.userAvatarTextSmall, { fontSize: fontSize.body, color: getRoleColor(item.role) }]}>
+              {item.nom_complet.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+            </Text>
+          </View>
+
+          <View style={styles.gridCardActions}>
+            <TouchableOpacity
+              style={[styles.iconActionSmall, { backgroundColor: '#EFF6FF' }]}
+              onPress={() => handleViewUtilisateur(item)}
+            >
+              <MaterialIcons name="visibility" size={16} color="#3B82F6" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.iconActionSmall, { backgroundColor: '#FEF3C7' }]}
+              onPress={() => handleEditUtilisateur(item)}
+            >
+              <MaterialIcons name="edit" size={16} color="#F59E0B" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.iconActionSmall, { backgroundColor: '#FEE2E2' }]}
+              onPress={() => handleDeleteUtilisateur(item)}
+            >
+              <MaterialIcons name="delete" size={16} color="#EF4444" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.gridCardBody}>
+          <Text style={[styles.gridCardName, { fontSize: fontSize.body }]} numberOfLines={1}>
+            {item.nom_complet}
+          </Text>
+          <Text style={[styles.gridCardEmail, { fontSize: fontSize.small }]} numberOfLines={1}>
+            {item.email}
+          </Text>
+
+          <View style={styles.gridCardBadges}>
+            <View style={[styles.smallBadge, { backgroundColor: getRoleColor(item.role) + '20' }]}>
+              <Text style={[styles.smallBadgeText, { fontSize: fontSize.small - 1, color: getRoleColor(item.role) }]}>
+                {item.role}
               </Text>
-              <Text style={[styles.utilisateurEmail, { fontSize: fontSize.small, marginTop: 4 }]}>
-                {item.email}
+            </View>
+            <View style={[styles.smallBadge, { backgroundColor: getStatutColor(item.statut) + '20' }]}>
+              <Text style={[styles.smallBadgeText, { fontSize: fontSize.small - 1, color: getStatutColor(item.statut) }]}>
+                {item.statut}
               </Text>
-              <View style={styles.utilisateurTags}>
-                <Chip
-                  mode="flat"
-                  style={[
-                    styles.roleChip,
-                    {
-                      backgroundColor: getRoleColor(item.role) + '20',
-                      height: isMobile ? 26 : 30
-                    }
-                  ]}
-                  textStyle={[styles.chipText, { color: getRoleColor(item.role), fontSize: fontSize.small, fontWeight: '600' }]}
-                >
-                  {item.role}
-                </Chip>
-                <Chip
-                  mode="flat"
-                  style={[
-                    styles.statutChip,
-                    {
-                      backgroundColor: getStatutColor(item.statut) + '20',
-                      height: isMobile ? 26 : 30,
-                      marginLeft: 6
-                    }
-                  ]}
-                  textStyle={[styles.chipText, { color: getStatutColor(item.statut), fontSize: fontSize.small, fontWeight: '600' }]}
-                >
-                  {item.statut}
-                </Chip>
-              </View>
+            </View>
+          </View>
+
+          <View style={styles.gridCardDivider} />
+
+          <View style={styles.gridCardDetails}>
+            <View style={styles.gridDetailRow}>
+              <MaterialIcons name="badge" size={14} color="#6B7280" />
+              <Text style={[styles.gridDetailText, { fontSize: fontSize.small - 1 }]} numberOfLines={1}>
+                {item.matricule}
+              </Text>
+            </View>
+            <View style={styles.gridDetailRow}>
+              <MaterialIcons name="phone" size={14} color="#6B7280" />
+              <Text style={[styles.gridDetailText, { fontSize: fontSize.small - 1 }]} numberOfLines={1}>
+                {item.telephone}
+              </Text>
+            </View>
+            <View style={styles.gridDetailRow}>
+              <MaterialIcons name="business" size={14} color="#6B7280" />
+              <Text style={[styles.gridDetailText, { fontSize: fontSize.small - 1 }]} numberOfLines={1}>
+                {item.departement_nom || 'N/A'}
+              </Text>
             </View>
           </View>
         </View>
-
-        <Divider style={[styles.divider, { marginVertical: 12 }]} />
-
-        <View style={styles.utilisateurDetails}>
-          <View style={[styles.detailRow, { marginBottom: 8 }]}>
-            <MaterialIcons name="badge" size={18} color="#7F8C8D" />
-            <Text style={[styles.detailText, { fontSize: fontSize.small }]}>
-              {item.matricule}
-            </Text>
-          </View>
-          <View style={[styles.detailRow, { marginBottom: 8 }]}>
-            <MaterialIcons name="phone" size={18} color="#7F8C8D" />
-            <Text style={[styles.detailText, { fontSize: fontSize.small }]}>
-              {item.telephone}
-            </Text>
-          </View>
-          <View style={[styles.detailRow, { marginBottom: 8 }]}>
-            <MaterialIcons name="business" size={18} color="#7F8C8D" />
-            <Text style={[styles.detailText, { fontSize: fontSize.small }]}>
-              {item.departement_nom || 'N/A'}
-            </Text>
-          </View>
-          {item.nb_actions && (
-            <View style={styles.detailRow}>
-              <MaterialIcons name="trending-up" size={18} color="#7F8C8D" />
-              <Text style={[styles.detailText, { fontSize: fontSize.small }]}>
-                {item.nb_actions} actions
-              </Text>
-            </View>
-          )}
-        </View>
-
-        <View style={[styles.utilisateurActions, isMobile && styles.actionsMobile]}>
-          <Button
-            mode="outlined"
-            onPress={() => handleViewUtilisateur(item)}
-            style={styles.actionButton}
-            textColor="#3498DB"
-            icon="eye"
-            compact={isMobile}
-            labelStyle={{ fontSize: fontSize.small }}
-          >
-            Voir
-          </Button>
-          <Button
-            mode="outlined"
-            onPress={() => handleResetPassword(item)}
-            style={styles.actionButton}
-            textColor="#F39C12"
-            icon="lock-reset"
-            compact={isMobile}
-            labelStyle={{ fontSize: fontSize.small }}
-          >
-            MDP
-          </Button>
-          <IconButton
-            icon="pencil"
-            size={22}
-            iconColor="#3498DB"
-            onPress={() => handleEditUtilisateur(item)}
-          />
-          <IconButton
-            icon="delete"
-            size={22}
-            iconColor="#E74C3C"
-            onPress={() => handleDeleteUtilisateur(item)}
-          />
-        </View>
-      </Card.Content>
-    </Card>
-  );
+      </Surface>
+    );
+  };
 
   const renderUtilisateursTab = () => (
     <View style={styles.tabContent}>
-      {/* Statistiques */}
-      <View style={[
-        styles.statsContainer,
-        isMobile && styles.statsContainerMobile,
-        { padding: cardPadding, gap: 12 }
-      ]}>
-        <Card style={[styles.statCard, { borderLeftColor: '#3498DB', borderLeftWidth: 4 }]}>
-          <Card.Content style={{ padding: isMobile ? 12 : 16 }}>
-            <Text style={[styles.statValue, { fontSize: fontSize.title, fontWeight: '800' }]}>
+      {/* Statistiques en Grille 3 colonnes */}
+      <View style={[styles.statsGridContainer, { padding: 20, paddingTop: 12 }]}>
+        <View style={[
+          styles.statsGrid,
+          {
+            gridTemplateColumns: `repeat(${statsColumns}, 1fr)`,
+            gap: 12
+          }
+        ]}>
+          <Surface style={[styles.modernStatCard, { borderLeftColor: '#6366F1' }]}>
+            <Text style={[styles.modernStatValue, { fontSize: fontSize.title, color: '#6366F1' }]}>
               {utilisateursStats.total || 0}
             </Text>
-            <Text style={[styles.statLabel, { fontSize: fontSize.small, marginTop: 6 }]}>Total</Text>
-          </Card.Content>
-        </Card>
-        <Card style={[styles.statCard, { borderLeftColor: '#27AE60', borderLeftWidth: 4 }]}>
-          <Card.Content style={{ padding: isMobile ? 12 : 16 }}>
-            <Text style={[styles.statValue, styles.statValueSuccess, { fontSize: fontSize.title, fontWeight: '800' }]}>
+            <Text style={[styles.modernStatLabel, { fontSize: fontSize.small }]}>Total</Text>
+          </Surface>
+
+          <Surface style={[styles.modernStatCard, { borderLeftColor: '#10B981' }]}>
+            <Text style={[styles.modernStatValue, { fontSize: fontSize.title, color: '#10B981' }]}>
               {utilisateursStats.actifs || 0}
             </Text>
-            <Text style={[styles.statLabel, { fontSize: fontSize.small, marginTop: 6 }]}>Actifs</Text>
-          </Card.Content>
-        </Card>
-        <Card style={[styles.statCard, { borderLeftColor: '#E74C3C', borderLeftWidth: 4 }]}>
-          <Card.Content style={{ padding: isMobile ? 12 : 16 }}>
-            <Text style={[styles.statValue, styles.statValueDanger, { fontSize: fontSize.title, fontWeight: '800' }]}>
+            <Text style={[styles.modernStatLabel, { fontSize: fontSize.small }]}>Actifs</Text>
+          </Surface>
+
+          <Surface style={[styles.modernStatCard, { borderLeftColor: '#DC2626' }]}>
+            <Text style={[styles.modernStatValue, { fontSize: fontSize.title, color: '#DC2626' }]}>
               {utilisateursStats.admins || 0}
             </Text>
-            <Text style={[styles.statLabel, { fontSize: fontSize.small, marginTop: 6 }]}>Admins</Text>
-          </Card.Content>
-        </Card>
-      </View>
-
-      {/* Filtres */}
-      <View style={[styles.filterRow, { paddingHorizontal: cardPadding, marginTop: 16 }]}>
-        <View style={styles.filterGroup}>
-          <Text style={[styles.filterLabel, { fontSize: fontSize.body, marginBottom: 8 }]}>Rôle</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {['all', 'admin', 'manager', 'comptable', 'employe'].map(role => (
-              <Chip
-                key={role}
-                selected={utilisateurFilters.role === role}
-                onPress={() => setUtilisateurFilters({ ...utilisateurFilters, role })}
-                style={[styles.filterChip, { height: isMobile ? 32 : 36 }]}
-                textStyle={{ fontSize: fontSize.small }}
-              >
-                {role === 'all' ? 'Tous' : role}
-              </Chip>
-            ))}
-          </ScrollView>
+            <Text style={[styles.modernStatLabel, { fontSize: fontSize.small }]}>Admins</Text>
+          </Surface>
         </View>
       </View>
 
-      <Searchbar
-        placeholder="Rechercher un utilisateur..."
-        onChangeText={setSearchQuery}
-        value={searchQuery}
-        style={[styles.searchBar, { marginHorizontal: cardPadding, marginTop: 16, marginBottom: 8 }]}
-        inputStyle={{ fontSize: fontSize.body }}
-      />
-
-      {/* Liste avec espacement de 16px avant le contenu */}
-      <View style={{ marginTop: 16 }}>
-        <FlatList
-          data={utilisateurs}
-          renderItem={renderUtilisateurItem}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={{ paddingHorizontal: cardPadding, paddingTop: 0 }}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <MaterialIcons name="people" size={isMobile ? 60 : 70} color="#BDC3C7" />
-              <Text style={[styles.emptyText, { fontSize: fontSize.body, marginTop: 12 }]}>
-                Aucun utilisateur
-              </Text>
-            </View>
-          }
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
+      {/* Barre de recherche */}
+      <View style={{ paddingHorizontal: 20, paddingTop: 8 }}>
+        <Searchbar
+          placeholder="Rechercher un utilisateur..."
+          onChangeText={setSearchQuery}
+          value={searchQuery}
+          style={styles.modernSearchBar}
+          inputStyle={{ fontSize: fontSize.body }}
+          iconColor="#6366F1"
         />
       </View>
+
+      {/* Grille d'utilisateurs */}
+      <FlatList
+        data={utilisateurs}
+        renderItem={renderUtilisateurCard}
+        keyExtractor={(item) => item.id.toString()}
+        numColumns={numColumns}
+        key={numColumns} // Force re-render quand numColumns change
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 100 }}
+        columnWrapperStyle={{ justifyContent: 'flex-start' }}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <MaterialIcons name="people" size={64} color="#D1D5DB" />
+            <Text style={[styles.emptyText, { fontSize: fontSize.body }]}>
+              Aucun utilisateur
+            </Text>
+          </View>
+        }
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#6366F1']} />
+        }
+      />
     </View>
   );
 
-  // -------------------- DÉPARTEMENTS --------------------
-  const renderDepartementItem = ({ item }) => (
-    <Card style={[styles.departementCard, { marginBottom: 12 }]}>
-      <Card.Content style={{ padding: cardPadding }}>
-        <View style={styles.departementHeader}>
-          <View style={styles.departementLeft}>
-            <View style={[
-              styles.departementIcon,
-              {
-                width: isMobile ? 52 : 60,
-                height: isMobile ? 52 : 60,
-                borderRadius: isMobile ? 26 : 30
-              }
-            ]}>
-              <MaterialIcons name="business" size={isMobile ? 28 : 32} color="#2E86C1" />
-            </View>
-            <View style={styles.departementInfo}>
-              <Title style={[styles.departementName, { fontSize: fontSize.subtitle, fontWeight: '700' }]}>
-                {item.nom}
-              </Title>
-              <Text style={[styles.departementType, { fontSize: fontSize.small, marginTop: 4 }]}>
-                {item.type}
-              </Text>
-            </View>
+  // -------------------- DÉPARTEMENTS - GRILLE RESPONSIVE --------------------
+  const renderDepartementCard = ({ item, index }) => {
+    const cardWidth = screenWidth > 1400 ? '23%' :
+      screenWidth > 1024 ? '31.5%' :
+        screenWidth > 768 ? '48%' : '48%';
+
+    return (
+      <Surface style={[
+        styles.gridCard,
+        {
+          width: cardWidth,
+          marginBottom: 12,
+          marginRight: (index % numColumns !== numColumns - 1) ? '2%' : 0
+        }
+      ]} elevation={1}>
+        <View style={styles.gridCardHeader}>
+          <View style={styles.deptIconContainerSmall}>
+            <MaterialIcons name="business" size={24} color="#6366F1" />
           </View>
-          <View style={styles.departementActions}>
-            <IconButton
-              icon="pencil"
-              size={22}
-              iconColor="#3498DB"
+
+          <View style={styles.gridCardActions}>
+            <TouchableOpacity
+              style={[styles.iconActionSmall, { backgroundColor: '#FEF3C7' }]}
               onPress={() => handleEditDepartement(item)}
-            />
-            <IconButton
-              icon="delete"
-              size={22}
-              iconColor="#E74C3C"
+            >
+              <MaterialIcons name="edit" size={16} color="#F59E0B" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.iconActionSmall, { backgroundColor: '#FEE2E2' }]}
               onPress={() => handleDeleteDepartement(item)}
-            />
+            >
+              <MaterialIcons name="delete" size={16} color="#EF4444" />
+            </TouchableOpacity>
           </View>
         </View>
 
-        <Divider style={[styles.divider, { marginVertical: 12 }]} />
+        <View style={styles.gridCardBody}>
+          <Text style={[styles.gridCardName, { fontSize: fontSize.body }]} numberOfLines={1}>
+            {item.nom}
+          </Text>
+          <Text style={[styles.gridCardType, { fontSize: fontSize.small }]}>
+            {item.type.toUpperCase()}
+          </Text>
 
-        <View style={[styles.departementStats, isMobile && styles.departementStatsMobile]}>
-          <View style={styles.statItem}>
-            <MaterialIcons name="people" size={22} color="#7F8C8D" />
-            <Text style={[styles.statItemValue, { fontSize: fontSize.body, fontWeight: '700', marginTop: 6 }]}>
-              {item.nombre_employes || 0}
-            </Text>
-            <Text style={[styles.statItemLabel, { fontSize: fontSize.small, marginTop: 2 }]}>
-              Employés
-            </Text>
-          </View>
-          <View style={styles.statItem}>
-            <MaterialIcons name="attach-money" size={22} color="#7F8C8D" />
-            <Text style={[styles.statItemValue, { fontSize: fontSize.body, fontWeight: '700', marginTop: 6 }]}>
-              {parseFloat(item.budget_annuel || 0).toLocaleString()}
-            </Text>
-            <Text style={[styles.statItemLabel, { fontSize: fontSize.small, marginTop: 2 }]}>
-              Budget
-            </Text>
-          </View>
-          <View style={styles.statItem}>
-            <MaterialIcons name="person" size={22} color="#7F8C8D" />
-            <Text style={[styles.statItemValue, { fontSize: fontSize.small, marginTop: 6 }]} numberOfLines={1}>
-              {item.responsable_nom || 'N/A'}
-            </Text>
-            <Text style={[styles.statItemLabel, { fontSize: fontSize.small, marginTop: 2 }]}>
-              Responsable
-            </Text>
-          </View>
-        </View>
+          <View style={styles.gridCardDivider} />
 
-        {item.budget_utilise && (
-          <View style={[styles.budgetProgress, { marginTop: 12 }]}>
-            <View style={styles.budgetHeader}>
-              <Text style={[styles.budgetLabel, { fontSize: fontSize.small }]}>
-                Budget Utilisé
+          <View style={styles.deptGridStats}>
+            <View style={styles.deptGridStatItem}>
+              <MaterialIcons name="people" size={16} color="#6B7280" />
+              <Text style={[styles.deptGridStatValue, { fontSize: fontSize.small }]}>
+                {item.nombre_employes || 0}
               </Text>
-              <Text style={[styles.budgetPercentage, { fontSize: fontSize.small, fontWeight: '700' }]}>
-                {((item.budget_utilise / item.budget_annuel) * 100).toFixed(1)}%
+              <Text style={[styles.deptGridStatLabel, { fontSize: fontSize.small - 2 }]}>
+                Employés
               </Text>
             </View>
-            <ProgressBar
-              progress={item.budget_utilise / item.budget_annuel}
-              color="#3498DB"
-              style={[styles.progressBar, { marginTop: 6 }]}
-            />
+
+            <View style={styles.deptGridStatDivider} />
+
+            <View style={styles.deptGridStatItem}>
+              <MaterialIcons name="attach-money" size={16} color="#6B7280" />
+              <Text style={[styles.deptGridStatValue, { fontSize: fontSize.small }]} numberOfLines={1}>
+                {(parseFloat(item.budget_annuel || 0) / 1000000).toFixed(1)}M
+              </Text>
+              <Text style={[styles.deptGridStatLabel, { fontSize: fontSize.small - 2 }]}>
+                Budget
+              </Text>
+            </View>
           </View>
-        )}
-      </Card.Content>
-    </Card>
-  );
+
+          {item.budget_utilise && (
+            <>
+              <View style={styles.gridCardDivider} />
+              <View style={styles.deptBudgetContainerSmall}>
+                <View style={styles.deptBudgetHeaderSmall}>
+                  <Text style={[styles.deptBudgetLabelSmall, { fontSize: fontSize.small - 1 }]}>
+                    Utilisé
+                  </Text>
+                  <Text style={[styles.deptBudgetPercentageSmall, { fontSize: fontSize.small - 1 }]}>
+                    {((item.budget_utilise / item.budget_annuel) * 100).toFixed(0)}%
+                  </Text>
+                </View>
+                <View style={styles.deptProgressBarSmall}>
+                  <View
+                    style={[
+                      styles.deptProgressFillSmall,
+                      { width: `${Math.min((item.budget_utilise / item.budget_annuel) * 100, 100)}%` }
+                    ]}
+                  />
+                </View>
+              </View>
+            </>
+          )}
+
+          <Text style={[styles.gridResponsable, { fontSize: fontSize.small - 1 }]} numberOfLines={1}>
+            👤 {item.responsable_nom || 'Sans responsable'}
+          </Text>
+        </View>
+      </Surface>
+    );
+  };
 
   const renderDepartementsTab = () => (
     <View style={styles.tabContent}>
-      {/* Espacement de 16px avant le contenu */}
-      <View style={{ marginTop: 16 }}>
-        <FlatList
-          data={departements}
-          renderItem={renderDepartementItem}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={{ paddingHorizontal: cardPadding, paddingTop: 0 }}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <MaterialIcons name="business" size={isMobile ? 60 : 70} color="#BDC3C7" />
-              <Text style={[styles.emptyText, { fontSize: fontSize.body, marginTop: 12 }]}>
-                Aucun département
-              </Text>
-            </View>
-          }
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-        />
-      </View>
+      {/* Grille de départements */}
+      <FlatList
+        data={departements}
+        renderItem={renderDepartementCard}
+        keyExtractor={(item) => item.id.toString()}
+        numColumns={numColumns}
+        key={numColumns} // Force re-render quand numColumns change
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 100 }}
+        columnWrapperStyle={{ justifyContent: 'flex-start' }}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <MaterialIcons name="business" size={64} color="#D1D5DB" />
+            <Text style={[styles.emptyText, { fontSize: fontSize.body }]}>
+              Aucun département
+            </Text>
+          </View>
+        }
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#6366F1']} />
+        }
+      />
     </View>
   );
 
   // -------------------- NOTIFICATIONS --------------------
   const renderNotificationsTab = () => (
-    <ScrollView style={styles.tabContent}>
-      {/* Espacement de 16px avant le contenu */}
-      <View style={{ marginTop: 16 }}>
-        <Card style={[styles.settingsCard, { marginHorizontal: cardPadding, marginBottom: cardPadding }]}>
-          <Card.Content style={{ padding: cardPadding }}>
-            <Title style={[styles.settingsTitle, { fontSize: fontSize.subtitle, fontWeight: '700', marginBottom: 16 }]}>
-              Paramètres de Notification
-            </Title>
+    <ScrollView style={styles.tabContent} contentContainerStyle={{ paddingTop: 12 }}>
+      <Surface style={[styles.settingsCard, { margin: 20, marginTop: 0 }]} elevation={1}>
+        <View style={styles.settingsCardHeader}>
+          <MaterialIcons name="notifications" size={24} color="#6366F1" />
+          <Text style={[styles.settingsCardTitle, { fontSize: fontSize.subtitle }]}>
+            Paramètres de Notification
+          </Text>
+        </View>
 
-            <List.Section>
-              <List.Subheader style={{ fontSize: fontSize.body, fontWeight: '600' }}>
-                Canaux de Communication
-              </List.Subheader>
+        <View style={styles.settingsDivider} />
 
-              <List.Item
-                title="Notifications Email"
-                titleStyle={{ fontSize: fontSize.body }}
-                description="Recevoir des alertes par email"
-                descriptionStyle={{ fontSize: fontSize.small }}
-                left={props => <List.Icon {...props} icon="email" color="#3498DB" />}
-                right={() => (
-                  <Switch
-                    value={notificationSettings.email_enabled}
-                    onValueChange={(value) =>
-                      setNotificationSettings({ ...notificationSettings, email_enabled: value })
-                    }
-                    trackColor={{ false: '#BDC3C7', true: '#27AE60' }}
-                    thumbColor={notificationSettings.email_enabled ? '#FFFFFF' : '#ECEFF1'}
-                  />
-                )}
-              />
+        {/* Canaux */}
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { fontSize: fontSize.body }]}>
+            Canaux de Communication
+          </Text>
 
-              <List.Item
-                title="Notifications SMS"
-                titleStyle={{ fontSize: fontSize.body }}
-                description="Recevoir des alertes par SMS"
-                descriptionStyle={{ fontSize: fontSize.small }}
-                left={props => <List.Icon {...props} icon="message" color="#3498DB" />}
-                right={() => (
-                  <Switch
-                    value={notificationSettings.sms_enabled}
-                    onValueChange={(value) =>
-                      setNotificationSettings({ ...notificationSettings, sms_enabled: value })
-                    }
-                    trackColor={{ false: '#BDC3C7', true: '#27AE60' }}
-                    thumbColor={notificationSettings.sms_enabled ? '#FFFFFF' : '#ECEFF1'}
-                  />
-                )}
-              />
-
-              <List.Item
-                title="Notifications Push"
-                titleStyle={{ fontSize: fontSize.body }}
-                description="Recevoir des notifications sur l'application"
-                descriptionStyle={{ fontSize: fontSize.small }}
-                left={props => <List.Icon {...props} icon="notifications" color="#3498DB" />}
-                right={() => (
-                  <Switch
-                    value={notificationSettings.push_enabled}
-                    onValueChange={(value) =>
-                      setNotificationSettings({ ...notificationSettings, push_enabled: value })
-                    }
-                    trackColor={{ false: '#BDC3C7', true: '#27AE60' }}
-                    thumbColor={notificationSettings.push_enabled ? '#FFFFFF' : '#ECEFF1'}
-                  />
-                )}
-              />
-            </List.Section>
-
-            <Divider style={[styles.divider, { marginVertical: 16 }]} />
-
-            <List.Section>
-              <List.Subheader style={{ fontSize: fontSize.body, fontWeight: '600' }}>
-                Types d'Alertes
-              </List.Subheader>
-
-              {[
-                { key: 'alertes_stock', title: 'Alertes Stock', desc: 'Notifications pour stock faible', icon: 'inventory' },
-                { key: 'alertes_maintenance', title: 'Alertes Maintenance', desc: 'Rappels maintenance véhicules', icon: 'build' },
-                { key: 'alertes_echeances', title: 'Alertes Échéances', desc: 'Rappels paiements et factures', icon: 'event' },
-                { key: 'alertes_salaires', title: 'Alertes Salaires', desc: 'Rappels calcul salaires', icon: 'attach-money' },
-                { key: 'alertes_conges', title: 'Alertes Congés', desc: 'Demandes de congés en attente', icon: 'beach-access' },
-              ].map(alerte => (
-                <List.Item
-                  key={alerte.key}
-                  title={alerte.title}
-                  titleStyle={{ fontSize: fontSize.body }}
-                  description={alerte.desc}
-                  descriptionStyle={{ fontSize: fontSize.small }}
-                  left={props => <List.Icon {...props} icon={alerte.icon} />}
-                  right={() => (
-                    <Switch
-                      value={notificationSettings[alerte.key]}
-                      onValueChange={(value) =>
-                        setNotificationSettings({ ...notificationSettings, [alerte.key]: value })
-                      }
-                      trackColor={{ false: '#BDC3C7', true: '#27AE60' }}
-                      thumbColor={notificationSettings[alerte.key] ? '#FFFFFF' : '#ECEFF1'}
-                    />
-                  )}
-                />
-              ))}
-            </List.Section>
-
-            <Divider style={[styles.divider, { marginVertical: 16 }]} />
-
-            <View style={styles.settingsGroup}>
-              <Text style={[styles.settingsLabel, { fontSize: fontSize.body, marginBottom: 10 }]}>
-                Fréquence des Rapports
-              </Text>
-              <SegmentedButtons
-                value={notificationSettings.frequence_rapports}
+          {[
+            { key: 'email_enabled', label: 'Notifications Email', icon: 'email' },
+            { key: 'sms_enabled', label: 'Notifications SMS', icon: 'message' },
+            { key: 'push_enabled', label: 'Notifications Push', icon: 'notifications-active' },
+          ].map((item) => (
+            <View key={item.key} style={styles.settingItem}>
+              <View style={styles.settingItemLeft}>
+                <MaterialIcons name={item.icon} size={22} color="#6B7280" />
+                <Text style={[styles.settingItemLabel, { fontSize: fontSize.body }]}>
+                  {item.label}
+                </Text>
+              </View>
+              <Switch
+                value={notificationSettings[item.key]}
                 onValueChange={(value) =>
-                  setNotificationSettings({ ...notificationSettings, frequence_rapports: value })
+                  setNotificationSettings({ ...notificationSettings, [item.key]: value })
                 }
-                buttons={[
-                  { value: 'quotidien', label: 'Quotidien', style: { minWidth: isMobile ? 80 : 100 } },
-                  { value: 'hebdomadaire', label: 'Hebdo', style: { minWidth: isMobile ? 80 : 100 } },
-                  { value: 'mensuel', label: 'Mensuel', style: { minWidth: isMobile ? 80 : 100 } },
-                ]}
-                style={styles.segmentedButtons}
+                trackColor={{ false: '#E5E7EB', true: '#A5B4FC' }}
+                thumbColor={notificationSettings[item.key] ? '#6366F1' : '#F3F4F6'}
               />
             </View>
+          ))}
+        </View>
 
-            <Button
-              mode="contained"
-              onPress={handleSaveNotificationSettings}
-              buttonColor="#27AE60"
-              style={[styles.saveButton, { marginTop: 20 }]}
-              loading={actionLoading}
-              disabled={actionLoading}
-              labelStyle={{ fontSize: fontSize.body }}
-            >
-              Sauvegarder les Paramètres
-            </Button>
-          </Card.Content>
-        </Card>
-      </View>
+        <View style={styles.settingsDivider} />
+
+        {/* Alertes */}
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { fontSize: fontSize.body }]}>
+            Types d'Alertes
+          </Text>
+
+          {[
+            { key: 'alertes_stock', label: 'Alertes Stock', icon: 'inventory' },
+            { key: 'alertes_maintenance', label: 'Alertes Maintenance', icon: 'build' },
+            { key: 'alertes_echeances', label: 'Alertes Échéances', icon: 'event' },
+            { key: 'alertes_salaires', label: 'Alertes Salaires', icon: 'attach-money' },
+            { key: 'alertes_conges', label: 'Alertes Congés', icon: 'beach-access' },
+          ].map((item) => (
+            <View key={item.key} style={styles.settingItem}>
+              <View style={styles.settingItemLeft}>
+                <MaterialIcons name={item.icon} size={22} color="#6B7280" />
+                <Text style={[styles.settingItemLabel, { fontSize: fontSize.body }]}>
+                  {item.label}
+                </Text>
+              </View>
+              <Switch
+                value={notificationSettings[item.key]}
+                onValueChange={(value) =>
+                  setNotificationSettings({ ...notificationSettings, [item.key]: value })
+                }
+                trackColor={{ false: '#E5E7EB', true: '#A5B4FC' }}
+                thumbColor={notificationSettings[item.key] ? '#6366F1' : '#F3F4F6'}
+              />
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.settingsDivider} />
+
+        <View style={styles.settingsSection}>
+          <Text style={[styles.settingsSectionTitle, { fontSize: fontSize.body }]}>
+            Fréquence des Rapports
+          </Text>
+          <SegmentedButtons
+            value={notificationSettings.frequence_rapports}
+            onValueChange={(value) =>
+              setNotificationSettings({ ...notificationSettings, frequence_rapports: value })
+            }
+            buttons={[
+              { value: 'quotidien', label: 'Quotidien' },
+              { value: 'hebdomadaire', label: 'Hebdo' },
+              { value: 'mensuel', label: 'Mensuel' },
+            ]}
+            style={{ marginTop: 12 }}
+          />
+        </View>
+
+        <Button
+          mode="contained"
+          onPress={handleSaveNotificationSettings}
+          buttonColor="#6366F1"
+          style={styles.saveButton}
+          loading={actionLoading}
+          disabled={actionLoading}
+          labelStyle={{ fontSize: fontSize.body }}
+        >
+          Sauvegarder les Paramètres
+        </Button>
+      </Surface>
     </ScrollView>
   );
 
   // -------------------- PARAMÈTRES GÉNÉRAUX --------------------
   const renderGeneralTab = () => (
-    <ScrollView style={styles.tabContent}>
-      {/* Espacement de 16px avant le contenu */}
-      <View style={{ marginTop: 16 }}>
-        <Card style={[styles.settingsCard, { marginHorizontal: cardPadding, marginBottom: cardPadding }]}>
-          <Card.Content style={{ padding: cardPadding }}>
-            <Title style={[styles.settingsTitle, { fontSize: fontSize.subtitle, fontWeight: '700', marginBottom: 16 }]}>
-              Paramètres Généraux
-            </Title>
+    <ScrollView style={styles.tabContent} contentContainerStyle={{ paddingTop: 12 }}>
+      <Surface style={[styles.settingsCard, { margin: 20, marginTop: 0 }]} elevation={1}>
+        <View style={styles.settingsCardHeader}>
+          <MaterialIcons name="settings" size={24} color="#6366F1" />
+          <Text style={[styles.settingsCardTitle, { fontSize: fontSize.subtitle }]}>
+            Paramètres Généraux
+          </Text>
+        </View>
 
-            <TextInput
-              label="Nom de l'Entreprise"
-              value={generalSettings.nom_entreprise}
-              onChangeText={(text) => setGeneralSettings({ ...generalSettings, nom_entreprise: text })}
-              style={styles.input}
-              mode="outlined"
+        <View style={styles.settingsDivider} />
+
+        <View style={styles.settingsSection}>
+          <TextInput
+            label="Nom de l'Entreprise"
+            value={generalSettings.nom_entreprise}
+            onChangeText={(text) => setGeneralSettings({ ...generalSettings, nom_entreprise: text })}
+            style={styles.modernInput}
+            mode="outlined"
+            outlineColor="#E5E7EB"
+            activeOutlineColor="#6366F1"
+          />
+
+          <View style={{ marginTop: 16 }}>
+            <Text style={[styles.inputLabel, { fontSize: fontSize.small }]}>Devise</Text>
+            <SegmentedButtons
+              value={generalSettings.devise}
+              onValueChange={(value) => setGeneralSettings({ ...generalSettings, devise: value })}
+              buttons={[
+                { value: 'USD', label: 'USD ($)' },
+                { value: 'BIF', label: 'BIF (FBu)' },
+                { value: 'EUR', label: 'EUR (€)' },
+              ]}
+              style={{ marginTop: 8 }}
             />
+          </View>
 
-            <View style={[styles.settingsGroup, { marginTop: 12 }]}>
-              <Text style={[styles.settingsLabel, { fontSize: fontSize.body, marginBottom: 10 }]}>Devise</Text>
+          <TextInput
+            label="TVA par Défaut (%)"
+            value={generalSettings.tva_defaut}
+            onChangeText={(text) => setGeneralSettings({ ...generalSettings, tva_defaut: text })}
+            style={[styles.modernInput, { marginTop: 16 }]}
+            mode="outlined"
+            outlineColor="#E5E7EB"
+            activeOutlineColor="#6366F1"
+            keyboardType="decimal-pad"
+          />
+
+          <TextInput
+            label="Rétention des Logs (jours)"
+            value={generalSettings.retention_logs}
+            onChangeText={(text) => setGeneralSettings({ ...generalSettings, retention_logs: text })}
+            style={[styles.modernInput, { marginTop: 16 }]}
+            mode="outlined"
+            outlineColor="#E5E7EB"
+            activeOutlineColor="#6366F1"
+            keyboardType="numeric"
+          />
+        </View>
+
+        <View style={styles.settingsDivider} />
+
+        <View style={styles.settingsSection}>
+          <View style={styles.settingItem}>
+            <View style={styles.settingItemLeft}>
+              <MaterialIcons name="backup" size={22} color="#6B7280" />
+              <Text style={[styles.settingItemLabel, { fontSize: fontSize.body }]}>
+                Sauvegarde Automatique
+              </Text>
+            </View>
+            <Switch
+              value={generalSettings.backup_auto}
+              onValueChange={(value) => setGeneralSettings({ ...generalSettings, backup_auto: value })}
+              trackColor={{ false: '#E5E7EB', true: '#A5B4FC' }}
+              thumbColor={generalSettings.backup_auto ? '#6366F1' : '#F3F4F6'}
+            />
+          </View>
+
+          {generalSettings.backup_auto && (
+            <View style={{ marginTop: 16 }}>
+              <Text style={[styles.inputLabel, { fontSize: fontSize.small }]}>
+                Fréquence de Sauvegarde
+              </Text>
               <SegmentedButtons
-                value={generalSettings.devise}
-                onValueChange={(value) => setGeneralSettings({ ...generalSettings, devise: value })}
+                value={generalSettings.frequence_backup}
+                onValueChange={(value) => setGeneralSettings({ ...generalSettings, frequence_backup: value })}
                 buttons={[
-                  { value: 'USD', label: 'USD ($)' },
-                  { value: 'BIF', label: 'BIF (FBu)' },
-                  { value: 'EUR', label: 'EUR (€)' },
+                  { value: 'quotidien', label: 'Quotidien' },
+                  { value: 'hebdomadaire', label: 'Hebdo' },
+                  { value: 'mensuel', label: 'Mensuel' },
                 ]}
-                style={styles.segmentedButtons}
+                style={{ marginTop: 8 }}
               />
             </View>
+          )}
+        </View>
 
-            <TextInput
-              label="TVA par Défaut (%)"
-              value={generalSettings.tva_defaut}
-              onChangeText={(text) => setGeneralSettings({ ...generalSettings, tva_defaut: text })}
-              style={[styles.input, { marginTop: 12 }]}
-              mode="outlined"
-              keyboardType="decimal-pad"
-            />
-
-            <TextInput
-              label="Fuseau Horaire"
-              value={generalSettings.fuseau_horaire}
-              onChangeText={(text) => setGeneralSettings({ ...generalSettings, fuseau_horaire: text })}
-              style={styles.input}
-              mode="outlined"
-            />
-
-            <Divider style={[styles.divider, { marginVertical: 16 }]} />
-
-            <List.Item
-              title="Sauvegarde Automatique"
-              titleStyle={{ fontSize: fontSize.body }}
-              description="Créer des sauvegardes automatiques de la base"
-              descriptionStyle={{ fontSize: fontSize.small }}
-              left={props => <List.Icon {...props} icon="backup" color="#3498DB" />}
-              right={() => (
-                <Switch
-                  value={generalSettings.backup_auto}
-                  onValueChange={(value) => setGeneralSettings({ ...generalSettings, backup_auto: value })}
-                  trackColor={{ false: '#BDC3C7', true: '#27AE60' }}
-                  thumbColor={generalSettings.backup_auto ? '#FFFFFF' : '#ECEFF1'}
-                />
-              )}
-            />
-
-            {generalSettings.backup_auto && (
-              <View style={[styles.settingsGroup, { marginTop: 12 }]}>
-                <Text style={[styles.settingsLabel, { fontSize: fontSize.body, marginBottom: 10 }]}>
-                  Fréquence de Sauvegarde
-                </Text>
-                <SegmentedButtons
-                  value={generalSettings.frequence_backup}
-                  onValueChange={(value) => setGeneralSettings({ ...generalSettings, frequence_backup: value })}
-                  buttons={[
-                    { value: 'quotidien', label: 'Quotidien' },
-                    { value: 'hebdomadaire', label: 'Hebdo' },
-                    { value: 'mensuel', label: 'Mensuel' },
-                  ]}
-                  style={styles.segmentedButtons}
-                />
-              </View>
-            )}
-
-            <TextInput
-              label="Rétention des Logs (jours)"
-              value={generalSettings.retention_logs}
-              onChangeText={(text) => setGeneralSettings({ ...generalSettings, retention_logs: text })}
-              style={[styles.input, { marginTop: 12 }]}
-              mode="outlined"
-              keyboardType="numeric"
-              helperText="Nombre de jours de conservation des logs d'activité"
-            />
-
-            <Button
-              mode="contained"
-              onPress={handleSaveGeneralSettings}
-              buttonColor="#27AE60"
-              style={[styles.saveButton, { marginTop: 20 }]}
-              loading={actionLoading}
-              disabled={actionLoading}
-              labelStyle={{ fontSize: fontSize.body }}
-            >
-              Sauvegarder les Paramètres
-            </Button>
-          </Card.Content>
-        </Card>
-      </View>
+        <Button
+          mode="contained"
+          onPress={handleSaveGeneralSettings}
+          buttonColor="#6366F1"
+          style={styles.saveButton}
+          loading={actionLoading}
+          disabled={actionLoading}
+          labelStyle={{ fontSize: fontSize.body }}
+        >
+          Sauvegarder les Paramètres
+        </Button>
+      </Surface>
     </ScrollView>
   );
 
   // -------------------- BACKUP --------------------
   const renderBackupTab = () => (
-    <ScrollView style={styles.tabContent}>
-      {/* Espacement de 16px avant le contenu */}
-      <View style={{ marginTop: 16 }}>
-        <Card style={[styles.settingsCard, { marginHorizontal: cardPadding, marginBottom: cardPadding }]}>
-          <Card.Content style={{ padding: cardPadding }}>
-            <Title style={[styles.settingsTitle, { fontSize: fontSize.subtitle, fontWeight: '700', marginBottom: 16 }]}>
-              Gestion des Sauvegardes
-            </Title>
+    <ScrollView style={styles.tabContent} contentContainerStyle={{ paddingTop: 12 }}>
+      <Surface style={[styles.settingsCard, { margin: 20, marginTop: 0 }]} elevation={1}>
+        <View style={styles.settingsCardHeader}>
+          <MaterialIcons name="backup" size={24} color="#6366F1" />
+          <Text style={[styles.settingsCardTitle, { fontSize: fontSize.subtitle }]}>
+            Gestion des Sauvegardes
+          </Text>
+        </View>
 
-            <View style={styles.backupHeader}>
-              <Button
-                mode="contained"
-                onPress={handleCreateBackup}
-                icon="backup"
-                buttonColor="#3498DB"
-                style={styles.createBackupButton}
-                loading={actionLoading}
-                disabled={actionLoading}
-                labelStyle={{ fontSize: fontSize.body }}
-              >
-                Créer une Sauvegarde
-              </Button>
-            </View>
+        <View style={styles.settingsDivider} />
 
-            <Divider style={[styles.divider, { marginVertical: 16 }]} />
+        <Button
+          mode="contained"
+          onPress={handleCreateBackup}
+          icon="backup"
+          buttonColor="#10B981"
+          style={{ marginBottom: 20 }}
+          loading={actionLoading}
+          disabled={actionLoading}
+          labelStyle={{ fontSize: fontSize.body }}
+        >
+          Créer une Sauvegarde
+        </Button>
 
-            <List.Section>
-              <List.Subheader style={{ fontSize: fontSize.body, fontWeight: '600' }}>
-                Sauvegardes Disponibles ({backups.length})
-              </List.Subheader>
+        <Text style={[styles.settingsSectionTitle, { fontSize: fontSize.body, marginBottom: 12 }]}>
+          Sauvegardes Disponibles ({backups.length})
+        </Text>
 
-              {backups.length === 0 ? (
-                <View style={styles.emptyContainer}>
-                  <MaterialIcons name="backup" size={isMobile ? 60 : 70} color="#BDC3C7" />
-                  <Text style={[styles.emptyText, { fontSize: fontSize.body, marginTop: 12 }]}>
-                    Aucune sauvegarde disponible
+        {backups.length === 0 ? (
+          <View style={[styles.emptyContainer, { paddingVertical: 40 }]}>
+            <MaterialIcons name="backup" size={64} color="#D1D5DB" />
+            <Text style={[styles.emptyText, { fontSize: fontSize.body }]}>
+              Aucune sauvegarde disponible
+            </Text>
+          </View>
+        ) : (
+          backups.map((backup, index) => (
+            <View key={index} style={styles.backupItem}>
+              <View style={styles.backupItemLeft}>
+                <MaterialIcons name="insert-drive-file" size={24} color="#6366F1" />
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                  <Text style={[styles.backupItemName, { fontSize: fontSize.body }]}>
+                    {backup.filename}
+                  </Text>
+                  <Text style={[styles.backupItemDetails, { fontSize: fontSize.small }]}>
+                    {formatBytes(backup.size)} • {new Date(backup.date).toLocaleString('fr-FR')}
                   </Text>
                 </View>
-              ) : (
-                backups.map((backup, index) => (
-                  <List.Item
-                    key={index}
-                    title={backup.filename}
-                    titleStyle={{ fontSize: fontSize.body }}
-                    description={`${formatBytes(backup.size)} • ${new Date(backup.date).toLocaleString('fr-FR')}`}
-                    descriptionStyle={{ fontSize: fontSize.small }}
-                    left={props => <List.Icon {...props} icon="file-document" color="#3498DB" />}
-                    right={props => (
-                      <IconButton
-                        icon="delete"
-                        iconColor="#E74C3C"
-                        size={22}
-                        onPress={() => handleDeleteBackup(backup)}
-                      />
-                    )}
-                  />
-                ))
-              )}
-            </List.Section>
-          </Card.Content>
-        </Card>
-      </View>
+              </View>
+              <TouchableOpacity
+                style={[styles.iconActionSmall, { backgroundColor: '#FEE2E2' }]}
+                onPress={() => handleDeleteBackup(backup)}
+              >
+                <MaterialIcons name="delete" size={20} color="#EF4444" />
+              </TouchableOpacity>
+            </View>
+          ))
+        )}
+      </Surface>
     </ScrollView>
   );
 
   // -------------------- STATISTIQUES --------------------
   const renderStatsTab = () => (
-    <ScrollView style={styles.tabContent}>
-      {/* Espacement de 16px avant le contenu */}
-      <View style={{ marginTop: 16 }}>
-        {systemStats && (
-          <>
-            <Card style={[styles.settingsCard, { marginHorizontal: cardPadding, marginBottom: 16 }]}>
-              <Card.Content style={{ padding: cardPadding }}>
-                <Title style={[styles.settingsTitle, { fontSize: fontSize.subtitle, fontWeight: '700', marginBottom: 16 }]}>
-                  Statistiques Utilisateurs
-                </Title>
+    <ScrollView style={styles.tabContent} contentContainerStyle={{ paddingTop: 12 }}>
+      {systemStats && (
+        <>
+          <Surface style={[styles.settingsCard, { margin: 20, marginTop: 0, marginBottom: 16 }]} elevation={1}>
+            <View style={styles.settingsCardHeader}>
+              <MaterialIcons name="people" size={24} color="#6366F1" />
+              <Text style={[styles.settingsCardTitle, { fontSize: fontSize.subtitle }]}>
+                Statistiques Utilisateurs
+              </Text>
+            </View>
 
-                <View style={[styles.statsGrid, isMobile && styles.statsGridMobile]}>
-                  <View style={styles.statBox}>
-                    <Text style={[styles.statBoxValue, { fontSize: fontSize.title, fontWeight: '800' }]}>
-                      {systemStats.users?.total || 0}
-                    </Text>
-                    <Text style={[styles.statBoxLabel, { fontSize: fontSize.small, marginTop: 6 }]}>
-                      Total Utilisateurs
-                    </Text>
-                  </View>
-                  <View style={styles.statBox}>
-                    <Text style={[styles.statBoxValue, styles.statValueSuccess, { fontSize: fontSize.title, fontWeight: '800' }]}>
-                      {systemStats.users?.actifs || 0}
-                    </Text>
-                    <Text style={[styles.statBoxLabel, { fontSize: fontSize.small, marginTop: 6 }]}>
-                      Actifs
-                    </Text>
-                  </View>
-                  <View style={styles.statBox}>
-                    <Text style={[styles.statBoxValue, { fontSize: fontSize.title, fontWeight: '800' }]}>
-                      {systemStats.users?.actifs_7j || 0}
-                    </Text>
-                    <Text style={[styles.statBoxLabel, { fontSize: fontSize.small, marginTop: 6 }]}>
-                      Actifs 7 jours
-                    </Text>
-                  </View>
+            <View style={styles.settingsDivider} />
+
+            <View style={[styles.statsGridContainer]}>
+              <View style={[
+                styles.statsGrid,
+                {
+                  gridTemplateColumns: `repeat(${statsColumns}, 1fr)`,
+                  gap: 12
+                }
+              ]}>
+                <View style={styles.statBox}>
+                  <Text style={[styles.statBoxValue, { fontSize: fontSize.title, color: '#6366F1' }]}>
+                    {systemStats.users?.total || 0}
+                  </Text>
+                  <Text style={[styles.statBoxLabel, { fontSize: fontSize.small }]}>
+                    Total
+                  </Text>
                 </View>
-              </Card.Content>
-            </Card>
+                <View style={styles.statBox}>
+                  <Text style={[styles.statBoxValue, { fontSize: fontSize.title, color: '#10B981' }]}>
+                    {systemStats.users?.actifs || 0}
+                  </Text>
+                  <Text style={[styles.statBoxLabel, { fontSize: fontSize.small }]}>
+                    Actifs
+                  </Text>
+                </View>
+                <View style={styles.statBox}>
+                  <Text style={[styles.statBoxValue, { fontSize: fontSize.title, color: '#F59E0B' }]}>
+                    {systemStats.users?.actifs_7j || 0}
+                  </Text>
+                  <Text style={[styles.statBoxLabel, { fontSize: fontSize.small }]}>
+                    Actifs 7j
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </Surface>
 
-            <Card style={[styles.settingsCard, { marginHorizontal: cardPadding, marginBottom: cardPadding }]}>
-              <Card.Content style={{ padding: cardPadding }}>
-                <Title style={[styles.settingsTitle, { fontSize: fontSize.subtitle, fontWeight: '700', marginBottom: 16 }]}>
-                  Statistiques Base de Données
-                </Title>
+          <Surface style={[styles.settingsCard, { margin: 20, marginTop: 0 }]} elevation={1}>
+            <View style={styles.settingsCardHeader}>
+              <MaterialIcons name="storage" size={24} color="#6366F1" />
+              <Text style={[styles.settingsCardTitle, { fontSize: fontSize.subtitle }]}>
+                Base de Données
+              </Text>
+            </View>
 
-                <DataTable>
-                  <DataTable.Header>
-                    <DataTable.Title textStyle={{ fontSize: fontSize.body, fontWeight: '700' }}>Table</DataTable.Title>
-                    <DataTable.Title numeric textStyle={{ fontSize: fontSize.body, fontWeight: '700' }}>Lignes</DataTable.Title>
-                    <DataTable.Title numeric textStyle={{ fontSize: fontSize.body, fontWeight: '700' }}>Taille</DataTable.Title>
-                  </DataTable.Header>
+            <View style={styles.settingsDivider} />
 
-                  {systemStats.database?.slice(0, 10).map((table, index) => (
-                    <DataTable.Row key={index}>
-                      <DataTable.Cell textStyle={{ fontSize: fontSize.small }}>{table.table_name}</DataTable.Cell>
-                      <DataTable.Cell numeric textStyle={{ fontSize: fontSize.small }}>{table.table_rows}</DataTable.Cell>
-                      <DataTable.Cell numeric textStyle={{ fontSize: fontSize.small }}>{table.size_mb} MB</DataTable.Cell>
-                    </DataTable.Row>
-                  ))}
-                </DataTable>
-              </Card.Content>
-            </Card>
-          </>
-        )}
-      </View>
+            <DataTable>
+              <DataTable.Header>
+                <DataTable.Title textStyle={{ fontSize: fontSize.small, fontWeight: '600' }}>
+                  Table
+                </DataTable.Title>
+                <DataTable.Title numeric textStyle={{ fontSize: fontSize.small, fontWeight: '600' }}>
+                  Lignes
+                </DataTable.Title>
+                <DataTable.Title numeric textStyle={{ fontSize: fontSize.small, fontWeight: '600' }}>
+                  Taille
+                </DataTable.Title>
+              </DataTable.Header>
+
+              {systemStats.database?.slice(0, 10).map((table, index) => (
+                <DataTable.Row key={index}>
+                  <DataTable.Cell textStyle={{ fontSize: fontSize.small }}>
+                    {table.table_name}
+                  </DataTable.Cell>
+                  <DataTable.Cell numeric textStyle={{ fontSize: fontSize.small }}>
+                    {table.table_rows}
+                  </DataTable.Cell>
+                  <DataTable.Cell numeric textStyle={{ fontSize: fontSize.small }}>
+                    {table.size_mb} MB
+                  </DataTable.Cell>
+                </DataTable.Row>
+              ))}
+            </DataTable>
+          </Surface>
+        </>
+      )}
     </ScrollView>
   );
 
@@ -1753,123 +1611,85 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
         visible={utilisateurModal}
         onDismiss={() => setUtilisateurModal(false)}
         contentContainerStyle={[
-          styles.modalContainer,
-          isMobile && styles.modalContainerMobile,
-          isWeb && isDesktop && styles.modalContainerWeb
+          styles.modernModal,
+          isMobile && styles.modernModalMobile
         ]}
       >
-        <ScrollView style={styles.modalScrollView}>
-          <View style={[styles.modalHeader, { padding: cardPadding }]}>
-            <Title style={[styles.modalTitle, { fontSize: fontSize.subtitle, fontWeight: '700' }]}>
-              {utilisateurMode === 'add' ? 'Nouvel Utilisateur' :
-                utilisateurMode === 'edit' ? 'Modifier Utilisateur' : 'Détails Utilisateur'}
-            </Title>
-            <IconButton
-              icon="close"
-              size={24}
-              onPress={() => setUtilisateurModal(false)}
-            />
-          </View>
+        <View style={styles.modernModalHeader}>
+          <Text style={[styles.modernModalTitle, { fontSize: fontSize.subtitle }]}>
+            {utilisateurMode === 'add' ? 'Nouvel Utilisateur' :
+              utilisateurMode === 'edit' ? 'Modifier Utilisateur' : 'Détails Utilisateur'}
+          </Text>
+          <IconButton
+            icon="close"
+            size={24}
+            onPress={() => setUtilisateurModal(false)}
+            iconColor="#6B7280"
+          />
+        </View>
 
+        <ScrollView style={styles.modernModalContent}>
           {utilisateurMode === 'view' && selectedUtilisateur ? (
             // Mode Visualisation
-            <View style={[styles.modalContent, { padding: cardPadding }]}>
-              <View style={styles.viewHeader}>
-                <Avatar.Text
-                  size={isMobile ? 70 : 90}
-                  label={selectedUtilisateur.nom_complet.split(' ').map(n => n[0]).join('').substring(0, 2)}
-                  style={{ backgroundColor: getRoleColor(selectedUtilisateur.role) }}
-                  labelStyle={{ fontSize: fontSize.body, fontWeight: '700' }}
-                />
-                <View style={styles.viewInfo}>
-                  <Title style={{ fontSize: fontSize.subtitle, fontWeight: '700' }}>
-                    {selectedUtilisateur.nom_complet}
-                  </Title>
-                  <Text style={[styles.viewEmail, { fontSize: fontSize.small, marginTop: 4 }]}>
-                    {selectedUtilisateur.email}
+            <View>
+              <View style={styles.modalViewHeader}>
+                <View style={[styles.modalAvatar, { backgroundColor: getRoleColor(selectedUtilisateur.role) + '20' }]}>
+                  <Text style={[styles.modalAvatarText, { fontSize: fontSize.title, color: getRoleColor(selectedUtilisateur.role) }]}>
+                    {selectedUtilisateur.nom_complet.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
                   </Text>
-                  <View style={[styles.viewTags, { marginTop: 8 }]}>
-                    <Chip
-                      mode="flat"
-                      style={[
-                        styles.roleChip,
-                        {
-                          backgroundColor: getRoleColor(selectedUtilisateur.role) + '20',
-                          height: isMobile ? 26 : 30
-                        }
-                      ]}
-                      textStyle={[styles.chipText, { color: getRoleColor(selectedUtilisateur.role), fontSize: fontSize.small, fontWeight: '600' }]}
-                    >
+                </View>
+                <Text style={[styles.modalViewName, { fontSize: fontSize.title }]}>
+                  {selectedUtilisateur.nom_complet}
+                </Text>
+                <Text style={[styles.modalViewEmail, { fontSize: fontSize.body }]}>
+                  {selectedUtilisateur.email}
+                </Text>
+                <View style={styles.modalViewBadges}>
+                  <View style={[styles.modernBadge, { backgroundColor: getRoleColor(selectedUtilisateur.role) + '20' }]}>
+                    <Text style={[styles.modernBadgeText, { fontSize: fontSize.small, color: getRoleColor(selectedUtilisateur.role) }]}>
                       {selectedUtilisateur.role}
-                    </Chip>
-                    <Chip
-                      mode="flat"
-                      style={[
-                        styles.statutChip,
-                        {
-                          backgroundColor: getStatutColor(selectedUtilisateur.statut) + '20',
-                          height: isMobile ? 26 : 30,
-                          marginLeft: 6
-                        }
-                      ]}
-                      textStyle={[styles.chipText, { color: getStatutColor(selectedUtilisateur.statut), fontSize: fontSize.small, fontWeight: '600' }]}
-                    >
+                    </Text>
+                  </View>
+                  <View style={[styles.modernBadge, { backgroundColor: getStatutColor(selectedUtilisateur.statut) + '20', marginLeft: 8 }]}>
+                    <Text style={[styles.modernBadgeText, { fontSize: fontSize.small, color: getStatutColor(selectedUtilisateur.statut) }]}>
                       {selectedUtilisateur.statut}
-                    </Chip>
+                    </Text>
                   </View>
                 </View>
               </View>
 
-              <Divider style={[styles.divider, { marginVertical: 16 }]} />
+              <View style={styles.modalViewDivider} />
 
-              <View style={styles.viewDetails}>
-                {[
-                  { icon: 'badge', title: 'Matricule', value: selectedUtilisateur.matricule },
-                  { icon: 'phone', title: 'Téléphone', value: selectedUtilisateur.telephone },
-                  { icon: 'business', title: 'Département', value: selectedUtilisateur.departement_nom || 'N/A' },
-                  { icon: 'work', title: 'Type d\'Employé', value: selectedUtilisateur.type_employe },
-                  { icon: 'calendar-today', title: 'Date d\'Embauche', value: new Date(selectedUtilisateur.date_embauche).toLocaleDateString('fr-FR') },
-                  { icon: 'attach-money', title: 'Salaire de Base', value: `${parseFloat(selectedUtilisateur.salaire_base || 0).toLocaleString()} ${generalSettings.devise}` },
-                ].map((item, index) => (
-                  <List.Item
-                    key={index}
-                    title={item.title}
-                    titleStyle={{ fontSize: fontSize.body }}
-                    description={item.value}
-                    descriptionStyle={{ fontSize: fontSize.small }}
-                    left={props => <List.Icon {...props} icon={item.icon} />}
-                  />
-                ))}
-              </View>
-
-              {selectedUtilisateur.dernieresActions && selectedUtilisateur.dernieresActions.length > 0 && (
-                <>
-                  <Divider style={[styles.divider, { marginVertical: 16 }]} />
-                  <List.Subheader style={{ fontSize: fontSize.body, fontWeight: '600' }}>
-                    Dernières Actions
-                  </List.Subheader>
-                  {selectedUtilisateur.dernieresActions.slice(0, 5).map((action, index) => (
-                    <List.Item
-                      key={index}
-                      title={action.type_action}
-                      titleStyle={{ fontSize: fontSize.small }}
-                      description={`${action.module} • ${new Date(action.date_action).toLocaleString('fr-FR')}`}
-                      descriptionStyle={{ fontSize: fontSize.small }}
-                      left={props => <List.Icon {...props} icon="history" />}
-                    />
-                  ))}
-                </>
-              )}
+              {[
+                { icon: 'badge', label: 'Matricule', value: selectedUtilisateur.matricule },
+                { icon: 'phone', label: 'Téléphone', value: selectedUtilisateur.telephone },
+                { icon: 'business', label: 'Département', value: selectedUtilisateur.departement_nom || 'N/A' },
+                { icon: 'work', label: 'Type d\'Employé', value: selectedUtilisateur.type_employe },
+              ].map((item, index) => (
+                <View key={index} style={styles.modalViewItem}>
+                  <MaterialIcons name={item.icon} size={22} color="#6B7280" />
+                  <View style={{ marginLeft: 12, flex: 1 }}>
+                    <Text style={[styles.modalViewItemLabel, { fontSize: fontSize.small }]}>
+                      {item.label}
+                    </Text>
+                    <Text style={[styles.modalViewItemValue, { fontSize: fontSize.body }]}>
+                      {item.value}
+                    </Text>
+                  </View>
+                </View>
+              ))}
             </View>
           ) : (
             // Mode Ajout/Édition
-            <View style={[styles.modalContent, { padding: cardPadding }]}>
+            <View>
               <TextInput
                 label="Matricule *"
                 value={utilisateurForm.matricule}
                 onChangeText={(text) => setUtilisateurForm({ ...utilisateurForm, matricule: text })}
-                style={styles.input}
+                style={styles.modernInput}
                 mode="outlined"
+                outlineColor="#E5E7EB"
+                activeOutlineColor="#6366F1"
                 disabled={utilisateurMode === 'edit'}
               />
 
@@ -1877,16 +1697,20 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
                 label="Nom Complet *"
                 value={utilisateurForm.nom_complet}
                 onChangeText={(text) => setUtilisateurForm({ ...utilisateurForm, nom_complet: text })}
-                style={styles.input}
+                style={[styles.modernInput, { marginTop: 16 }]}
                 mode="outlined"
+                outlineColor="#E5E7EB"
+                activeOutlineColor="#6366F1"
               />
 
               <TextInput
                 label="Email *"
                 value={utilisateurForm.email}
                 onChangeText={(text) => setUtilisateurForm({ ...utilisateurForm, email: text })}
-                style={styles.input}
+                style={[styles.modernInput, { marginTop: 16 }]}
                 mode="outlined"
+                outlineColor="#E5E7EB"
+                activeOutlineColor="#6366F1"
                 keyboardType="email-address"
                 autoCapitalize="none"
               />
@@ -1895,8 +1719,10 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
                 label="Téléphone"
                 value={utilisateurForm.telephone}
                 onChangeText={(text) => setUtilisateurForm({ ...utilisateurForm, telephone: text })}
-                style={styles.input}
+                style={[styles.modernInput, { marginTop: 16 }]}
                 mode="outlined"
+                outlineColor="#E5E7EB"
+                activeOutlineColor="#6366F1"
                 keyboardType="phone-pad"
               />
 
@@ -1905,40 +1731,25 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
                   label="Mot de Passe *"
                   value={utilisateurForm.mot_de_passe}
                   onChangeText={(text) => setUtilisateurForm({ ...utilisateurForm, mot_de_passe: text })}
-                  style={styles.input}
+                  style={[styles.modernInput, { marginTop: 16 }]}
                   mode="outlined"
+                  outlineColor="#E5E7EB"
+                  activeOutlineColor="#6366F1"
                   secureTextEntry
                 />
               )}
 
-              <View style={[styles.settingsGroup, { marginTop: 12 }]}>
-                <Text style={[styles.settingsLabel, { fontSize: fontSize.body, marginBottom: 10 }]}>Rôle</Text>
+              <View style={{ marginTop: 20 }}>
+                <Text style={[styles.inputLabel, { fontSize: fontSize.small }]}>Rôle</Text>
                 <SegmentedButtons
                   value={utilisateurForm.role}
                   onValueChange={(value) => setUtilisateurForm({ ...utilisateurForm, role: value })}
                   buttons={[
                     { value: 'admin', label: 'Admin' },
                     { value: 'manager', label: 'Manager' },
-                    { value: 'comptable', label: 'Compta' },
                     { value: 'employe', label: 'Employé' },
                   ]}
-                  style={styles.segmentedButtons}
-                />
-              </View>
-
-              <View style={[styles.settingsGroup, { marginTop: 12 }]}>
-                <Text style={[styles.settingsLabel, { fontSize: fontSize.body, marginBottom: 10 }]}>
-                  Type d'Employé
-                </Text>
-                <SegmentedButtons
-                  value={utilisateurForm.type_employe}
-                  onValueChange={(value) => setUtilisateurForm({ ...utilisateurForm, type_employe: value })}
-                  buttons={[
-                    { value: 'INSS', label: 'INSS' },
-                    { value: 'temps_partiel', label: 'Temps Partiel' },
-                    { value: 'contractuel', label: 'Contractuel' },
-                  ]}
-                  style={styles.segmentedButtons}
+                  style={{ marginTop: 8 }}
                 />
               </View>
 
@@ -1946,16 +1757,19 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
                 label="Salaire de Base"
                 value={utilisateurForm.salaire_base}
                 onChangeText={(text) => setUtilisateurForm({ ...utilisateurForm, salaire_base: text })}
-                style={[styles.input, { marginTop: 12 }]}
+                style={[styles.modernInput, { marginTop: 16 }]}
                 mode="outlined"
+                outlineColor="#E5E7EB"
+                activeOutlineColor="#6366F1"
                 keyboardType="decimal-pad"
               />
 
-              <View style={[styles.modalActions, { marginTop: 20 }]}>
+              <View style={styles.modernModalActions}>
                 <Button
                   mode="outlined"
                   onPress={() => setUtilisateurModal(false)}
-                  style={styles.cancelButton}
+                  style={{ flex: 1 }}
+                  textColor="#6B7280"
                   labelStyle={{ fontSize: fontSize.body }}
                 >
                   Annuler
@@ -1963,7 +1777,8 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
                 <Button
                   mode="contained"
                   onPress={handleSaveUtilisateur}
-                  buttonColor="#27AE60"
+                  buttonColor="#6366F1"
+                  style={{ flex: 1, marginLeft: 12 }}
                   loading={actionLoading}
                   disabled={actionLoading}
                   labelStyle={{ fontSize: fontSize.body }}
@@ -1985,33 +1800,35 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
         visible={departementModal}
         onDismiss={() => setDepartementModal(false)}
         contentContainerStyle={[
-          styles.modalContainer,
-          isMobile && styles.modalContainerMobile,
-          isWeb && isDesktop && styles.modalContainerWeb
+          styles.modernModal,
+          isMobile && styles.modernModalMobile
         ]}
       >
-        <View style={[styles.modalHeader, { padding: cardPadding }]}>
-          <Title style={[styles.modalTitle, { fontSize: fontSize.subtitle, fontWeight: '700' }]}>
+        <View style={styles.modernModalHeader}>
+          <Text style={[styles.modernModalTitle, { fontSize: fontSize.subtitle }]}>
             {departementMode === 'add' ? 'Nouveau Département' : 'Modifier Département'}
-          </Title>
+          </Text>
           <IconButton
             icon="close"
             size={24}
             onPress={() => setDepartementModal(false)}
+            iconColor="#6B7280"
           />
         </View>
 
-        <ScrollView style={[styles.modalContent, { padding: cardPadding }]}>
+        <ScrollView style={styles.modernModalContent}>
           <TextInput
             label="Nom du Département *"
             value={departementForm.nom}
             onChangeText={(text) => setDepartementForm({ ...departementForm, nom: text })}
-            style={styles.input}
+            style={styles.modernInput}
             mode="outlined"
+            outlineColor="#E5E7EB"
+            activeOutlineColor="#6366F1"
           />
 
-          <View style={[styles.settingsGroup, { marginTop: 12 }]}>
-            <Text style={[styles.settingsLabel, { fontSize: fontSize.body, marginBottom: 10 }]}>Type</Text>
+          <View style={{ marginTop: 20 }}>
+            <Text style={[styles.inputLabel, { fontSize: fontSize.small }]}>Type</Text>
             <SegmentedButtons
               value={departementForm.type}
               onValueChange={(value) => setDepartementForm({ ...departementForm, type: value })}
@@ -2019,9 +1836,8 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
                 { value: 'rh', label: 'RH' },
                 { value: 'flotte', label: 'Flotte' },
                 { value: 'agriculture', label: 'Agri' },
-                { value: 'elevage', label: 'Élevage' },
               ]}
-              style={styles.segmentedButtons}
+              style={{ marginTop: 8 }}
             />
           </View>
 
@@ -2029,16 +1845,19 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
             label="Budget Annuel"
             value={departementForm.budget_annuel}
             onChangeText={(text) => setDepartementForm({ ...departementForm, budget_annuel: text })}
-            style={[styles.input, { marginTop: 12 }]}
+            style={[styles.modernInput, { marginTop: 16 }]}
             mode="outlined"
+            outlineColor="#E5E7EB"
+            activeOutlineColor="#6366F1"
             keyboardType="decimal-pad"
           />
 
-          <View style={[styles.modalActions, { marginTop: 20 }]}>
+          <View style={styles.modernModalActions}>
             <Button
               mode="outlined"
               onPress={() => setDepartementModal(false)}
-              style={styles.cancelButton}
+              style={{ flex: 1 }}
+              textColor="#6B7280"
               labelStyle={{ fontSize: fontSize.body }}
             >
               Annuler
@@ -2046,7 +1865,8 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
             <Button
               mode="contained"
               onPress={handleSaveDepartement}
-              buttonColor="#27AE60"
+              buttonColor="#6366F1"
+              style={{ flex: 1, marginLeft: 12 }}
               loading={actionLoading}
               disabled={actionLoading}
               labelStyle={{ fontSize: fontSize.body }}
@@ -2066,213 +1886,153 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
         visible={historiqueDetailModal}
         onDismiss={() => setHistoriqueDetailModal(false)}
         contentContainerStyle={[
-          styles.modalContainer,
-          isMobile && styles.modalContainerMobile,
-          isWeb && isDesktop && styles.modalContainerWeb
+          styles.modernModal,
+          isMobile && styles.modernModalMobile
         ]}
       >
         {selectedHistorique && (
           <>
-            <View style={[styles.modalHeader, { padding: cardPadding }]}>
-              <Title style={[styles.modalTitle, { fontSize: fontSize.subtitle, fontWeight: '700' }]}>
+            <View style={styles.modernModalHeader}>
+              <Text style={[styles.modernModalTitle, { fontSize: fontSize.subtitle }]}>
                 Détails de l'Action
-              </Title>
+              </Text>
               <IconButton
                 icon="close"
                 size={24}
                 onPress={() => setHistoriqueDetailModal(false)}
+                iconColor="#6B7280"
               />
             </View>
 
-            <ScrollView style={[styles.modalContent, { padding: cardPadding }]}>
+            <ScrollView style={styles.modernModalContent}>
               <View style={styles.historiqueDetailHeader}>
                 <View style={[
                   styles.historiqueDetailIcon,
-                  {
-                    backgroundColor: getActionColor(selectedHistorique.type_action) + '20',
-                    width: isMobile ? 64 : 72,
-                    height: isMobile ? 64 : 72,
-                    borderRadius: isMobile ? 32 : 36
-                  }
+                  { backgroundColor: getActionColor(selectedHistorique.type_action) + '15' }
                 ]}>
                   <MaterialIcons
                     name={getActionIcon(selectedHistorique.type_action)}
-                    size={isMobile ? 32 : 36}
+                    size={32}
                     color={getActionColor(selectedHistorique.type_action)}
                   />
                 </View>
-                <View style={styles.historiqueDetailInfo}>
-                  <Text style={[styles.historiqueDetailAction, { fontSize: fontSize.subtitle, fontWeight: '700' }]}>
-                    {selectedHistorique.type_action}
-                  </Text>
-                  <Text style={[styles.historiqueDetailModule, { fontSize: fontSize.body, marginTop: 4 }]}>
-                    {selectedHistorique.module}
-                  </Text>
-                </View>
+                <Text style={[styles.historiqueDetailAction, { fontSize: fontSize.subtitle }]}>
+                  {selectedHistorique.type_action}
+                </Text>
+                <Text style={[styles.historiqueDetailModule, { fontSize: fontSize.body }]}>
+                  {selectedHistorique.module}
+                </Text>
               </View>
 
-              <Divider style={[styles.divider, { marginVertical: 16 }]} />
+              <View style={styles.modalViewDivider} />
 
-              <List.Item
-                title="Description"
-                titleStyle={{ fontSize: fontSize.body }}
-                description={selectedHistorique.action_details}
-                descriptionStyle={{ fontSize: fontSize.small }}
-                left={props => <List.Icon {...props} icon="description" />}
-              />
-
-              <List.Item
-                title="Utilisateur"
-                titleStyle={{ fontSize: fontSize.body }}
-                description={`${selectedHistorique.utilisateur_nom} (${selectedHistorique.utilisateur_role})`}
-                descriptionStyle={{ fontSize: fontSize.small }}
-                left={props => <List.Icon {...props} icon="person" />}
-              />
-
-              <List.Item
-                title="Date et Heure"
-                titleStyle={{ fontSize: fontSize.body }}
-                description={new Date(selectedHistorique.date_action).toLocaleString('fr-FR')}
-                descriptionStyle={{ fontSize: fontSize.small }}
-                left={props => <List.Icon {...props} icon="schedule" />}
-              />
-
-              {selectedHistorique.niveau && (
-                <List.Item
-                  title="Niveau"
-                  titleStyle={{ fontSize: fontSize.body }}
-                  description={selectedHistorique.niveau}
-                  descriptionStyle={{ fontSize: fontSize.small }}
-                  left={props => <List.Icon {...props} icon="flag" />}
-                  right={() => (
-                    <Chip
-                      mode="flat"
-                      style={{
-                        backgroundColor: getNiveauColor(selectedHistorique.niveau) + '20',
-                        height: isMobile ? 26 : 30
-                      }}
-                      textStyle={{
-                        color: getNiveauColor(selectedHistorique.niveau),
-                        fontSize: fontSize.small,
-                        fontWeight: '600'
-                      }}
-                    >
-                      {selectedHistorique.niveau}
-                    </Chip>
-                  )}
-                />
-              )}
-
-              {selectedHistorique.table_affectee && (
-                <List.Item
-                  title="Table Affectée"
-                  titleStyle={{ fontSize: fontSize.body }}
-                  description={selectedHistorique.table_affectee}
-                  descriptionStyle={{ fontSize: fontSize.small }}
-                  left={props => <List.Icon {...props} icon="table-large" />}
-                />
-              )}
-
-              {selectedHistorique.donnees_apres && (
-                <>
-                  <Divider style={[styles.divider, { marginVertical: 16 }]} />
-                  <List.Subheader style={{ fontSize: fontSize.body, fontWeight: '600' }}>
-                    Données Modifiées
-                  </List.Subheader>
-                  <View style={styles.jsonContainer}>
-                    <Text style={[styles.jsonText, { fontSize: fontSize.small }]}>
-                      {JSON.stringify(JSON.parse(selectedHistorique.donnees_apres), null, 2)}
+              {[
+                { icon: 'description', label: 'Description', value: selectedHistorique.action_details },
+                { icon: 'person', label: 'Utilisateur', value: `${selectedHistorique.utilisateur_nom} (${selectedHistorique.utilisateur_role})` },
+                { icon: 'schedule', label: 'Date et Heure', value: new Date(selectedHistorique.date_action).toLocaleString('fr-FR') },
+              ].map((item, index) => (
+                <View key={index} style={styles.modalViewItem}>
+                  <MaterialIcons name={item.icon} size={22} color="#6B7280" />
+                  <View style={{ marginLeft: 12, flex: 1 }}>
+                    <Text style={[styles.modalViewItemLabel, { fontSize: fontSize.small }]}>
+                      {item.label}
+                    </Text>
+                    <Text style={[styles.modalViewItemValue, { fontSize: fontSize.body }]}>
+                      {item.value}
                     </Text>
                   </View>
-                </>
-              )}
+                </View>
+              ))}
             </ScrollView>
           </>
         )}
       </Modal>
     </Portal>
   );
+
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={[styles.header, { padding: cardPadding }]}>
+      {/* Header moderne avec menu en haut à droite */}
+      <View style={styles.modernHeader}>
         <View style={styles.headerLeft}>
           <IconButton
             icon="arrow-left"
-            size={26}
+            size={24}
             onPress={() => navigation.goBack()}
-            iconColor="#2C3E50"
+            iconColor="#1F2937"
           />
           <View>
-            <Title style={[styles.headerTitle, { fontSize: fontSize.title, fontWeight: '800' }]}>
+            <Text style={[styles.modernHeaderTitle, { fontSize: fontSize.title }]}>
               Administration
-            </Title>
-            <Text style={[styles.headerSubtitle, { fontSize: fontSize.small, marginTop: 2 }]}>
+            </Text>
+            <Text style={[styles.modernHeaderSubtitle, { fontSize: fontSize.small }]}>
               Gestion du système
             </Text>
           </View>
         </View>
-        <IconButton
-          icon="refresh"
-          size={26}
-          iconColor="#2E86C1"
-          onPress={onRefresh}
-          disabled={loading || refreshing}
-        />
-      </View>
 
-      {/* Tabs */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.tabsContainer}
-        contentContainerStyle={{ paddingHorizontal: cardPadding / 2 }}
-      >
-        {[
-          { id: 'historique', label: 'Historique', icon: 'history' },
-          { id: 'utilisateurs', label: 'Utilisateurs', icon: 'people' },
-          { id: 'departements', label: 'Départements', icon: 'business' },
-          { id: 'notifications', label: 'Notifications', icon: 'notifications' },
-          { id: 'general', label: 'Général', icon: 'settings' },
-          { id: 'backup', label: 'Backup', icon: 'backup' },
-          { id: 'stats', label: 'Stats', icon: 'bar-chart' },
-        ].map(tab => (
-          <TouchableOpacity
-            key={tab.id}
-            style={[
-              styles.tab,
-              activeTab === tab.id && styles.activeTab,
-              { paddingHorizontal: isMobile ? 14 : 18, paddingVertical: isMobile ? 12 : 14 }
-            ]}
-            onPress={() => setActiveTab(tab.id)}
+        {/* Menu en haut à droite */}
+        <View style={styles.headerRight}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.topMenuContainer}
           >
-            <MaterialIcons
-              name={tab.icon}
-              size={isMobile ? 20 : 22}
-              color={activeTab === tab.id ? '#2E86C1' : '#7F8C8D'}
-            />
-            <Text style={[
-              styles.tabText,
-              activeTab === tab.id && styles.activeTabText,
-              { fontSize: fontSize.small, marginLeft: 6 }
-            ]}>
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+            {[
+              { id: 'historique', label: 'Historique', icon: 'history' },
+              { id: 'utilisateurs', label: 'Utilisateurs', icon: 'people' },
+              { id: 'departements', label: 'Départements', icon: 'business' },
+              { id: 'notifications', label: 'Notifications', icon: 'notifications' },
+              { id: 'general', label: 'Général', icon: 'settings' },
+              { id: 'backup', label: 'Backup', icon: 'backup' },
+              { id: 'stats', label: 'Stats', icon: 'bar-chart' },
+            ].map(tab => (
+              <TouchableOpacity
+                key={tab.id}
+                style={[
+                  styles.topMenuTab,
+                  activeTab === tab.id && styles.topMenuTabActive
+                ]}
+                onPress={() => setActiveTab(tab.id)}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons
+                  name={tab.icon}
+                  size={18}
+                  color={activeTab === tab.id ? '#6366F1' : '#6B7280'}
+                />
+                <Text style={[
+                  styles.topMenuTabText,
+                  { fontSize: fontSize.small },
+                  activeTab === tab.id && styles.topMenuTabTextActive
+                ]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          <IconButton
+            icon="refresh"
+            size={24}
+            iconColor="#6366F1"
+            onPress={onRefresh}
+            disabled={loading || refreshing}
+          />
+        </View>
+      </View>
 
       {/* Loader Principal */}
       {loading && !refreshing && (
         <View style={styles.loaderContainer}>
-          <ActivityIndicator size="large" color="#2E86C1" />
-          <Text style={[styles.loadingText, { fontSize: fontSize.body, marginTop: 12 }]}>
+          <ActivityIndicator size="large" color="#6366F1" />
+          <Text style={[styles.loadingText, { fontSize: fontSize.body }]}>
             Chargement des données...
           </Text>
         </View>
       )}
 
-      {/* Contenu avec espacement de 16px */}
+      {/* Contenu avec espacement de 12px */}
       {!loading && (
         <>
           {activeTab === 'historique' && renderHistoriqueTab()}
@@ -2285,17 +2045,11 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
         </>
       )}
 
-      {/* FAB - Position en bas à droite */}
+      {/* FAB moderne */}
       {(activeTab === 'utilisateurs' || activeTab === 'departements') && !loading && (
         <FAB
           icon="plus"
-          style={[
-            styles.fab,
-            {
-              right: isMobile ? 16 : 20,
-              bottom: isMobile ? 16 : 20
-            }
-          ]}
+          style={styles.modernFab}
           onPress={activeTab === 'utilisateurs' ? handleAddUtilisateur : handleAddDepartement}
           color="#FFFFFF"
         />
@@ -2331,109 +2085,115 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
   );
 };
 
-// ============================================
-// STYLES AMÉLIORÉS ET RESPONSIVE
-// ============================================
 const styles = StyleSheet.create({
   // ============================================
   // CONTAINER PRINCIPAL
   // ============================================
   container: {
     flex: 1,
-    backgroundColor: '#F5F6FA',
+    backgroundColor: '#F9FAFB',
   },
 
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F6FA',
+    backgroundColor: '#F9FAFB',
   },
 
-  // ============================================
-  // LOADING OVERLAY
-  // ============================================
   loadingOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1000,
   },
+
   loadingBox: {
     backgroundColor: '#FFFFFF',
-    padding: 32,
-    borderRadius: 16,
+    paddingHorizontal: 48,
+    paddingVertical: 32,
+    borderRadius: 20,
     alignItems: 'center',
-    elevation: 8,
+    elevation: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowRadius: 20,
   },
+
   loadingText: {
-    color: '#2C3E50',
-    fontWeight: '700',
+    color: '#374151',
+    fontWeight: '600',
   },
 
   // ============================================
-  // HEADER
+  // HEADER MODERNE
   // ============================================
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  modernHeader: {
     backgroundColor: '#FFFFFF',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E8ECEF',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  headerTitle: {
-    color: '#2C3E50',
-  },
-  headerSubtitle: {
-    color: '#7F8C8D',
-  },
-
-  // ============================================
-  // TABS
-  // ============================================
-  tabsContainer: {
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E8ECEF',
+    borderBottomColor: '#E5E7EB',
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowRadius: 3,
   },
-  tab: {
+
+  headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderBottomWidth: 3,
-    borderBottomColor: 'transparent',
-    marginHorizontal: 4,
+    gap: 8,
+    marginBottom: 12,
   },
-  activeTab: {
-    borderBottomColor: '#2E86C1',
+
+  modernHeaderTitle: {
+    color: '#111827',
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
-  tabText: {
-    color: '#7F8C8D',
+
+  modernHeaderSubtitle: {
+    color: '#6B7280',
+    marginTop: 2,
+  },
+
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  topMenuContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingRight: 8,
+  },
+
+  topMenuTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+  },
+
+  topMenuTabActive: {
+    backgroundColor: '#EEF2FF',
+  },
+
+  topMenuTabText: {
+    color: '#6B7280',
     fontWeight: '600',
   },
-  activeTabText: {
-    color: '#2E86C1',
-    fontWeight: '800',
+
+  topMenuTabTextActive: {
+    color: '#6366F1',
   },
 
   // ============================================
@@ -2442,6 +2202,7 @@ const styles = StyleSheet.create({
   tabContent: {
     flex: 1,
   },
+
   loaderContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -2450,111 +2211,52 @@ const styles = StyleSheet.create({
   },
 
   // ============================================
-  // STATISTIQUES
+  // STATISTIQUES EN GRILLE
   // ============================================
-  statsContainer: {
+  statsGridContainer: {
+    width: '100%',
+  },
+
+  statsGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 12,
   },
-  statsContainerMobile: {
-    flexDirection: 'column',
-  },
-  statCard: {
+
+  modernStatCard: {
     flex: 1,
+    minWidth: '30%',
     backgroundColor: '#FFFFFF',
-    elevation: 3,
+    borderRadius: 16,
+    padding: 20,
+    borderLeftWidth: 4,
+    elevation: 1,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    borderRadius: 12,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    marginBottom: 12,
   },
-  statValue: {
-    color: '#2E86C1',
-    textAlign: 'center',
+
+  modernStatValue: {
+    fontWeight: '800',
+    marginBottom: 4,
   },
-  statValueSuccess: {
-    color: '#27AE60',
-  },
-  statValueWarning: {
-    color: '#F39C12',
-  },
-  statValueDanger: {
-    color: '#E74C3C',
-  },
-  statLabel: {
-    color: '#7F8C8D',
-    textAlign: 'center',
+
+  modernStatLabel: {
+    color: '#6B7280',
     fontWeight: '600',
   },
 
   // ============================================
-  // FILTRES
+  // RECHERCHE MODERNE
   // ============================================
-  filterCard: {
+  modernSearchBar: {
     backgroundColor: '#FFFFFF',
-    elevation: 2,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-  },
-  filterTitle: {
-    color: '#2C3E50',
-  },
-  filterGroup: {},
-  filterLabel: {
-    color: '#2C3E50',
-    fontWeight: '700',
-  },
-  filterRow: {
-    paddingVertical: 8,
-  },
-  filterChip: {
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  periodFilter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  periodFilterMobile: {
-    flexDirection: 'column',
-    gap: 12,
-  },
-  dateButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: '#E0E0E0',
-  },
-  dateButtonText: {
-    color: '#2C3E50',
-    marginLeft: 8,
-    fontWeight: '600',
-  },
-  dateArrow: {
-    marginHorizontal: 10,
-  },
-
-  // ============================================
-  // RECHERCHE
-  // ============================================
-  searchBar: {
-    backgroundColor: '#FFFFFF',
-    elevation: 2,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
+    elevation: 0,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
 
   // ============================================
@@ -2564,199 +2266,271 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 80,
   },
+
   emptyText: {
-    color: '#BDC3C7',
+    color: '#9CA3AF',
     fontWeight: '600',
+    marginTop: 16,
   },
 
   // ============================================
-  // HISTORIQUE
+  // CARTES HISTORIQUE MODERNES
   // ============================================
-  historiqueItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  historiqueCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    elevation: 2,
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.05,
     shadowRadius: 3,
-  },
-  historiqueLeft: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    flex: 1,
-  },
-  historiqueIcon: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  historiqueInfo: {
-    flex: 1,
-  },
-  historiqueAction: {
-    color: '#2C3E50',
-    textTransform: 'capitalize',
-  },
-  historiqueDescription: {
-    color: '#7F8C8D',
-    lineHeight: 18,
-  },
-  historiqueMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  historiqueModuleChip: {
-    backgroundColor: '#ECF0F1',
-  },
-  niveauChip: {},
-  chipText: {},
-  historiqueDate: {
-    color: '#95A5A6',
-  },
-  historiqueUtilisateur: {
-    color: '#95A5A6',
   },
 
-  // ============================================
-  // UTILISATEURS
-  // ============================================
-  utilisateurCard: {
-    backgroundColor: '#FFFFFF',
-    elevation: 2,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-  },
-  utilisateurHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  utilisateurLeft: {
+  historiqueCardContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+    padding: 16,
   },
-  utilisateurInfo: {
-    marginLeft: 14,
-    flex: 1,
-  },
-  utilisateurNom: {
-    color: '#2C3E50',
-  },
-  utilisateurEmail: {
-    color: '#7F8C8D',
-  },
-  utilisateurTags: {
-    flexDirection: 'row',
-    marginTop: 8,
-    flexWrap: 'wrap',
-  },
-  roleChip: {},
-  statutChip: {},
-  utilisateurDetails: {},
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  detailText: {
-    color: '#2C3E50',
-    fontWeight: '500',
-  },
-  utilisateurActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    marginTop: 12,
-    gap: 8,
-  },
-  actionsMobile: {
-    flexWrap: 'wrap',
-  },
-  actionButton: {},
 
-  // ============================================
-  // DÉPARTEMENTS
-  // ============================================
-  departementCard: {
-    backgroundColor: '#FFFFFF',
-    elevation: 2,
+  historiqueIconContainer: {
+    width: 48,
+    height: 48,
     borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-  },
-  departementHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  departementLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  departementIcon: {
-    backgroundColor: '#2E86C120',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,
   },
-  departementInfo: {
+
+  historiqueInfo: {
     flex: 1,
   },
-  departementName: {
-    color: '#2C3E50',
+
+  historiqueAction: {
+    color: '#111827',
+    fontWeight: '700',
+    marginBottom: 4,
+    textTransform: 'capitalize',
   },
-  departementType: {
-    color: '#7F8C8D',
-    textTransform: 'uppercase',
+
+  historiqueDescription: {
+    color: '#6B7280',
+    lineHeight: 18,
+    marginBottom: 8,
   },
-  departementActions: {
+
+  historiqueMeta: {
     flexDirection: 'row',
-  },
-  departementStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  departementStatsMobile: {
-    flexDirection: 'column',
-    gap: 16,
-  },
-  statItem: {
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 6,
   },
-  statItemValue: {
-    color: '#2C3E50',
+
+  metaChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
-  statItemLabel: {
-    color: '#7F8C8D',
-    textAlign: 'center',
+
+  metaChipText: {
+    fontWeight: '600',
   },
-  budgetProgress: {},
-  budgetHeader: {
+
+  historiqueDate: {
+    color: '#9CA3AF',
+  },
+
+  historiqueUtilisateur: {
+    color: '#9CA3AF',
+  },
+
+  // ============================================
+  // CARTES GRILLE (UTILISATEURS & DÉPARTEMENTS)
+  // ============================================
+  gridCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    overflow: 'hidden',
+    padding: 12,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+  },
+
+  gridCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
   },
-  budgetLabel: {
-    color: '#7F8C8D',
+
+  userAvatarSmall: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  budgetPercentage: {
-    color: '#2E86C1',
+
+  userAvatarTextSmall: {
+    fontWeight: '800',
   },
-  progressBar: {
-    height: 8,
-    borderRadius: 4,
+
+  gridCardActions: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+
+  iconActionSmall: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  gridCardBody: {
+    flex: 1,
+  },
+
+  gridCardName: {
+    color: '#111827',
+    fontWeight: '700',
+    marginBottom: 3,
+  },
+
+  gridCardEmail: {
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+
+  gridCardType: {
+    color: '#6B7280',
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+
+  gridCardBadges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 10,
+  },
+
+  smallBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+
+  smallBadgeText: {
+    fontWeight: '700',
+    textTransform: 'capitalize',
+  },
+
+  gridCardDivider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 10,
+  },
+
+  gridCardDetails: {
+    gap: 8,
+  },
+
+  gridDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  gridDetailText: {
+    color: '#374151',
+    fontWeight: '500',
+    flex: 1,
+  },
+
+  gridResponsable: {
+    color: '#6B7280',
+    marginTop: 8,
+    fontWeight: '500',
+  },
+
+  // ============================================
+  // DÉPARTEMENTS GRILLE - ICÔNE & STATS
+  // ============================================
+  deptIconContainerSmall: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  deptGridStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 10,
+  },
+
+  deptGridStatItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+
+  deptGridStatValue: {
+    color: '#111827',
+    fontWeight: '700',
+    marginTop: 4,
+    marginBottom: 2,
+  },
+
+  deptGridStatLabel: {
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+
+  deptGridStatDivider: {
+    width: 1,
+    backgroundColor: '#E5E7EB',
+    marginHorizontal: 8,
+  },
+
+  deptBudgetContainerSmall: {
+    paddingTop: 10,
+  },
+
+  deptBudgetHeaderSmall: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+
+  deptBudgetLabelSmall: {
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+
+  deptBudgetPercentageSmall: {
+    color: '#6366F1',
+    fontWeight: '700',
+  },
+
+  deptProgressBarSmall: {
+    height: 6,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+
+  deptProgressFillSmall: {
+    height: '100%',
+    backgroundColor: '#6366F1',
+    borderRadius: 3,
   },
 
   // ============================================
@@ -2764,167 +2538,297 @@ const styles = StyleSheet.create({
   // ============================================
   settingsCard: {
     backgroundColor: '#FFFFFF',
-    elevation: 2,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
+    borderRadius: 16,
+    padding: 20,
   },
-  settingsTitle: {
-    color: '#2C3E50',
+
+  settingsCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
   },
-  settingsGroup: {},
-  settingsLabel: {
-    color: '#2C3E50',
+
+  settingsCardTitle: {
+    color: '#111827',
+    fontWeight: '700',
   },
-  input: {
+
+  settingsDivider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 20,
+  },
+
+  settingsSection: {
+    marginBottom: 20,
+  },
+
+  settingsSectionTitle: {
+    color: '#111827',
+    fontWeight: '700',
+    marginBottom: 16,
+  },
+
+  settingItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+
+  settingItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+
+  settingItemLabel: {
+    color: '#374151',
+    fontWeight: '600',
+    flex: 1,
+  },
+
+  modernInput: {
     backgroundColor: '#FFFFFF',
   },
-  segmentedButtons: {},
-  divider: {
-    backgroundColor: '#E8ECEF',
+
+  inputLabel: {
+    color: '#374151',
+    fontWeight: '600',
+    marginBottom: 8,
   },
-  saveButton: {},
+
+  saveButton: {
+    marginTop: 24,
+    borderRadius: 12,
+    elevation: 0,
+  },
 
   // ============================================
   // BACKUP
   // ============================================
-  backupHeader: {},
-  createBackupButton: {},
-
-  // ============================================
-  // STATISTIQUES SYSTÈME
-  // ============================================
-  statsGrid: {
+  backupItem: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    gap: 16,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
   },
-  statsGridMobile: {
-    flexDirection: 'column',
-  },
-  statBox: {
+
+  backupItemLeft: {
+    flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
-  statBoxValue: {
-    color: '#2E86C1',
+
+  backupItemName: {
+    color: '#111827',
+    fontWeight: '600',
+    marginBottom: 4,
   },
+
+  backupItemDetails: {
+    color: '#6B7280',
+  },
+
+  // ============================================
+  // STATISTIQUES
+  // ============================================
+  statBox: {
+    flex: 1,
+    minWidth: '30%',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    marginBottom: 12,
+  },
+
+  statBoxValue: {
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+
   statBoxLabel: {
-    color: '#7F8C8D',
+    color: '#6B7280',
+    fontWeight: '600',
     textAlign: 'center',
   },
 
   // ============================================
-  // MODALS
+  // MODALS MODERNES
   // ============================================
-  modalContainer: {
+  modernModal: {
     backgroundColor: '#FFFFFF',
     margin: 20,
-    borderRadius: 16,
+    borderRadius: 20,
     maxHeight: '90%',
-    elevation: 8,
+    elevation: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowRadius: 20,
   },
-  modalContainerMobile: {
-    margin: 12,
+
+  modernModalMobile: {
+    margin: 16,
     maxHeight: '95%',
   },
-  modalContainerWeb: {
-    maxWidth: 700,
-    alignSelf: 'center',
-    width: '100%',
-  },
-  modalScrollView: {
-    maxHeight: '100%',
-  },
-  modalHeader: {
+
+  modernModalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E8ECEF',
-  },
-  modalTitle: {
-    color: '#2C3E50',
-  },
-  modalContent: {},
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 20,
     paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
-  cancelButton: {},
+
+  modernModalTitle: {
+    color: '#111827',
+    fontWeight: '800',
+  },
+
+  modernModalContent: {
+    padding: 20,
+    maxHeight: '100%',
+  },
+
+  modernModalActions: {
+    flexDirection: 'row',
+    marginTop: 24,
+    gap: 12,
+  },
 
   // ============================================
-  // Modal Utilisateur - Mode View
+  // MODAL VIEW MODE
   // ============================================
-  viewHeader: {
-    flexDirection: 'row',
+  modalViewHeader: {
     alignItems: 'center',
+    paddingBottom: 20,
   },
-  viewInfo: {
-    marginLeft: 16,
-    flex: 1,
-  },
-  viewEmail: {
-    color: '#7F8C8D',
-  },
-  viewTags: {
-    flexDirection: 'row',
-  },
-  viewDetails: {},
 
-  // ============================================
-  // Modal Historique Detail
-  // ============================================
-  historiqueDetailHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  historiqueDetailIcon: {
+  modalAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginBottom: 16,
   },
-  historiqueDetailInfo: {
-    flex: 1,
+
+  modalAvatarText: {
+    fontWeight: '800',
   },
-  historiqueDetailAction: {
-    color: '#2C3E50',
+
+  modalViewName: {
+    color: '#111827',
+    fontWeight: '800',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+
+  modalViewEmail: {
+    color: '#6B7280',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+
+  modalViewBadges: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+
+  modernBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+
+  modernBadgeText: {
+    fontWeight: '700',
     textTransform: 'capitalize',
   },
-  historiqueDetailModule: {
-    color: '#7F8C8D',
-    textTransform: 'uppercase',
+
+  modalViewDivider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 20,
   },
-  jsonContainer: {
-    backgroundColor: '#F8F9FA',
-    padding: 14,
-    borderRadius: 8,
-    marginTop: 10,
+
+  modalViewItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
   },
-  jsonText: {
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    color: '#2C3E50',
+
+  modalViewItemLabel: {
+    color: '#6B7280',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+
+  modalViewItemValue: {
+    color: '#111827',
+    fontWeight: '600',
   },
 
   // ============================================
-  // FAB - Position en bas à droite
+  // HISTORIQUE DETAIL MODAL
   // ============================================
-  fab: {
+  historiqueDetailHeader: {
+    alignItems: 'center',
+    paddingBottom: 20,
+  },
+
+  historiqueDetailIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+
+  historiqueDetailAction: {
+    color: '#111827',
+    fontWeight: '800',
+    marginBottom: 6,
+    textAlign: 'center',
+    textTransform: 'capitalize',
+  },
+
+  historiqueDetailModule: {
+    color: '#6B7280',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    fontWeight: '600',
+  },
+
+  // ============================================
+  // FAB MODERNE
+  // ============================================
+  modernFab: {
     position: 'absolute',
-    backgroundColor: '#2E86C1',
+    right: 20,
+    bottom: 20,
+    backgroundColor: '#6366F1',
+    borderRadius: 16,
     elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
   },
 });
 
