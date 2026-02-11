@@ -36,14 +36,14 @@ try {
 const getApiUrl = () => {
     if (__DEV__) {
         if (Platform.OS === 'web') {
-            return 'http://localhost:5000/api';
+            return 'https://nutrifix-1-twdf.onrender.com/api';
         }
         if (Platform.OS === 'android') {
-            return 'http://10.0.2.2:5000/api';
+            return 'https://nutrifix-1-twdf.onrender.com/api';
         }
-        return 'http://192.168.1.10:5000/api';
+        return 'https://nutrifix-1-twdf.onrender.com/api';
     }
-    return process.env.REACT_APP_API_URL || 'https://api.nutrifix.com/api';
+    return process.env.REACT_APP_API_URL || 'https://nutrifix-1-twdf.onrender.com';
 };
 
 const API_URL = getApiUrl();
@@ -76,7 +76,7 @@ const SECURE_MESSAGES = {
 const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
     const navigationHook = useNavigation();
     const navigation = navigationProp || navigationHook;
-    
+
     const windowDimensions = useWindowDimensions();
     const isWeb = Platform.OS === 'web';
     const isMobile = windowDimensions.width < 768;
@@ -160,7 +160,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
         console.log('🔐 Biométrie:', LocalAuthentication ? 'Module installé ✅' : 'Module manquant ❌');
         console.log('🖥️ Web Mode:', isWeb ? 'OUI ✅' : 'NON ❌');
         console.log('='.repeat(60));
-        
+
         initializeScreen();
         startAnimations();
         initializeNetworkMonitoring();
@@ -219,14 +219,14 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
     // ============================================
     const initializeNetworkMonitoring = () => {
         console.log('🌐 Initialisation monitoring réseau...');
-        
+
         NetInfo.fetch().then(state => {
             console.log('📡 État réseau initial:', {
                 isConnected: state.isConnected,
                 type: state.type,
                 isInternetReachable: state.isInternetReachable
             });
-            
+
             setIsConnected(state.isConnected && state.isInternetReachable !== false);
             setNetworkType(state.type);
             setIsCheckingNetwork(false);
@@ -238,9 +238,9 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
                 type: state.type,
                 isInternetReachable: state.isInternetReachable
             });
-            
+
             const connected = state.isConnected && state.isInternetReachable !== false;
-            
+
             setIsConnected(connected);
             setNetworkType(state.type);
             setIsCheckingNetwork(false);
@@ -257,17 +257,17 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
         try {
             const state = await NetInfo.fetch();
             const connected = state.isConnected && state.isInternetReachable !== false;
-            
+
             console.log('🔍 Vérification connexion:', {
                 isConnected: state.isConnected,
                 isInternetReachable: state.isInternetReachable,
                 type: state.type,
                 finalStatus: connected
             });
-            
+
             setIsConnected(connected);
             setNetworkType(state.type);
-            
+
             return connected;
         } catch (error) {
             console.error('❌ Erreur vérification réseau:', error);
@@ -281,7 +281,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
     const checkLockoutStatus = async () => {
         try {
             const lockoutData = await AsyncStorage.getItem('loginLockout');
-            
+
             if (lockoutData) {
                 const { endTime, attempts } = JSON.parse(lockoutData);
                 const now = Date.now();
@@ -291,7 +291,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
                     setLockoutEndTime(endTime);
                     setTimeRemaining(endTime - now);
                     setLoginAttempts(attempts);
-                    
+
                     console.log('🔒 Compte verrouillé jusqu\'à:', new Date(endTime));
                 } else {
                     await unlockAccount();
@@ -301,7 +301,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
                 if (attemptsData) {
                     const { count, timestamp } = JSON.parse(attemptsData);
                     const now = Date.now();
-                    
+
                     if (now - timestamp > SECURITY_CONFIG.ATTEMPT_RESET_TIME) {
                         await resetAttempts();
                     } else {
@@ -334,7 +334,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
 
     const lockAccount = async () => {
         const endTime = Date.now() + SECURITY_CONFIG.LOCKOUT_DURATION;
-        
+
         const lockoutData = {
             endTime,
             attempts: loginAttempts,
@@ -363,7 +363,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
     const unlockAccount = async () => {
         await AsyncStorage.removeItem('loginLockout');
         await resetAttempts();
-        
+
         setIsLocked(false);
         setLockoutEndTime(null);
         setTimeRemaining(0);
@@ -390,7 +390,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
     const checkBiometricAvailability = async () => {
         try {
             console.log('\n🔐 === VÉRIFICATION BIOMÉTRIQUE ===');
-            
+
             if (!LocalAuthentication) {
                 console.log('❌ Module expo-local-authentication non installé');
                 setBiometricAvailable(false);
@@ -405,7 +405,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
 
             const compatible = await LocalAuthentication.hasHardwareAsync();
             console.log('📱 Hardware biométrique:', compatible ? 'OUI ✅' : 'NON ❌');
-            
+
             if (!compatible) {
                 setBiometricAvailable(false);
                 return;
@@ -413,7 +413,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
 
             const enrolled = await LocalAuthentication.isEnrolledAsync();
             console.log('✋ Biométrie configurée:', enrolled ? 'OUI ✅' : 'NON ❌');
-            
+
             if (!enrolled) {
                 setBiometricAvailable(false);
                 return;
@@ -421,9 +421,9 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
 
             const supportedTypes = await LocalAuthentication.supportedAuthenticationTypesAsync();
             console.log('🔍 Types supportés:', supportedTypes);
-            
+
             setBiometricAvailable(true);
-            
+
             if (supportedTypes.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
                 setBiometricType('face');
             } else if (supportedTypes.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
@@ -431,7 +431,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
             } else {
                 setBiometricType('biometric');
             }
-            
+
             console.log('='.repeat(50) + '\n');
         } catch (error) {
             console.error('❌ Erreur vérification biométrique:', error);
@@ -444,12 +444,12 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
             const savedEmail = await AsyncStorage.getItem('savedEmail');
             const savedMatricule = await AsyncStorage.getItem('userMatricule');
             const rememberMeValue = await AsyncStorage.getItem('rememberMe');
-            
+
             if (savedEmail && rememberMeValue === 'true') {
                 setEmail(savedEmail);
                 setRememberMe(true);
             }
-            
+
             if (savedMatricule) {
                 setMatricule(savedMatricule);
             }
@@ -549,7 +549,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
     // ============================================
     const handleEmailLogin = async () => {
         console.log('\n🔐 === TENTATIVE DE CONNEXION EMAIL ===');
-        
+
         dismissError();
 
         // Vérifier si compte verrouillé
@@ -583,7 +583,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
 
         try {
             console.log('📡 Envoi requête à:', `${API_URL}/auth/login`);
-            
+
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), SECURITY_CONFIG.CONNECTION_TIMEOUT);
 
@@ -593,9 +593,9 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 },
-                body: JSON.stringify({ 
-                    email: email.trim().toLowerCase(), 
-                    password 
+                body: JSON.stringify({
+                    email: email.trim().toLowerCase(),
+                    password
                 }),
                 signal: controller.signal
             });
@@ -613,7 +613,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
                 console.log('✅ AUTHENTIFICATION RÉUSSIE');
                 console.log('👤 Utilisateur:', data.user.nom_complet);
                 console.log('🎭 Rôle:', data.user.role);
-                
+
                 // Reset tentatives
                 await resetAttempts();
 
@@ -622,7 +622,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
                 await AsyncStorage.setItem('userData', JSON.stringify(data.user));
                 await AsyncStorage.setItem('userMatricule', data.user.matricule);
                 await AsyncStorage.setItem('userRole', data.user.role);
-                
+
                 if (rememberMe) {
                     await AsyncStorage.setItem('savedEmail', email);
                     await AsyncStorage.setItem('rememberMe', 'true');
@@ -643,25 +643,25 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
 
                 const isCredentialError = data.message === SECURE_MESSAGES.INVALID_CREDENTIALS;
                 const isAccountDisabled = data.message === SECURE_MESSAGES.ACCOUNT_DISABLED;
-                const isRoleError = data.message.includes('Rôle') || 
-                                   data.message.includes('role') || 
-                                   data.message.includes('autorisé') ||
-                                   data.message.includes('Permission') ||
-                                   data.message === SECURE_MESSAGES.ROLE_UNAUTHORIZED;
+                const isRoleError = data.message.includes('Rôle') ||
+                    data.message.includes('role') ||
+                    data.message.includes('autorisé') ||
+                    data.message.includes('Permission') ||
+                    data.message === SECURE_MESSAGES.ROLE_UNAUTHORIZED;
 
                 if (isCredentialError) {
                     // Email ou mot de passe incorrect
                     await incrementAttempts();
-                    
+
                     const remainingAttempts = SECURITY_CONFIG.MAX_LOGIN_ATTEMPTS - (loginAttempts + 1);
-                    
+
                     if (remainingAttempts > 0) {
                         // 📱 MOBILE: Afficher tentatives restantes dans le toast
                         // 🖥️ WEB: Afficher directement dans le dialog
-                        const errorMsg = isMobile 
+                        const errorMsg = isMobile
                             ? `${SECURE_MESSAGES.INVALID_CREDENTIALS}\nTentatives restantes: ${remainingAttempts}`
                             : `${SECURE_MESSAGES.INVALID_CREDENTIALS}\n\nTentatives restantes: ${remainingAttempts}/${SECURITY_CONFIG.MAX_LOGIN_ATTEMPTS}`;
-                        
+
                         showError(errorMsg, 6000);
                     } else {
                         showError(SECURE_MESSAGES.INVALID_CREDENTIALS, 6000);
@@ -683,14 +683,14 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
             console.error('❌ ERREUR CONNEXION:', error);
 
             let errorMsg = SECURE_MESSAGES.SERVER_ERROR;
-            
+
             if (error.name === 'AbortError') {
                 errorMsg = SECURE_MESSAGES.CONNECTION_TIMEOUT;
-            } else if (error.message.includes('Network request failed') || 
-                       error.message.includes('Failed to fetch')) {
+            } else if (error.message.includes('Network request failed') ||
+                error.message.includes('Failed to fetch')) {
                 errorMsg = SECURE_MESSAGES.NETWORK_ERROR;
             }
-            
+
             setPassword('');
             showError(errorMsg, 8000);
         } finally {
@@ -715,9 +715,9 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
 
         try {
             console.log('🔐 Lancement authentification biométrique...');
-            
+
             const savedMatricule = await AsyncStorage.getItem('userMatricule');
-            
+
             if (!savedMatricule) {
                 showError('Connectez-vous d\'abord avec email/mot de passe pour activer la biométrie.', 7000);
                 return;
@@ -740,7 +740,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
 
             if (result.success) {
                 setLoading(true);
-                
+
                 const fingerprintData = {
                     template: generateFingerprintTemplate(),
                     hash: generateFingerprintHash(),
@@ -754,9 +754,9 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json'
                     },
-                    body: JSON.stringify({ 
-                        matricule: savedMatricule, 
-                        fingerprintData 
+                    body: JSON.stringify({
+                        matricule: savedMatricule,
+                        fingerprintData
                     })
                 });
 
@@ -766,9 +766,9 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
                     await resetAttempts();
                     await AsyncStorage.setItem('userToken', data.token);
                     await AsyncStorage.setItem('userData', JSON.stringify(data.user));
-                    
+
                     console.log('✅ Connexion biométrique réussie');
-                    
+
                     if (onLogin) {
                         await onLogin(data.user);
                     }
@@ -812,7 +812,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
             navigation.navigate('QRScanner', {
                 onScan: async (qrData) => {
                     console.log('📷 QR scanné');
-                    
+
                     const hasNetwork = await checkNetworkConnection();
                     if (!hasNetwork) {
                         showError(SECURE_MESSAGES.NETWORK_ERROR, 8000);
@@ -820,7 +820,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
                     }
 
                     setLoading(true);
-                    
+
                     try {
                         const response = await fetch(`${API_URL}/auth/login/qr`, {
                             method: 'POST',
@@ -838,9 +838,9 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
                             await AsyncStorage.setItem('userToken', data.token);
                             await AsyncStorage.setItem('userData', JSON.stringify(data.user));
                             await AsyncStorage.setItem('userMatricule', data.user.matricule);
-                            
+
                             console.log('✅ Connexion QR réussie');
-                            
+
                             if (onLogin) {
                                 await onLogin(data.user);
                             }
@@ -866,7 +866,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
     // ============================================
     const handlePasswordReset = async () => {
         const trimmedEmail = resetEmail.trim().toLowerCase();
-        
+
         if (!validateEmail(trimmedEmail)) {
             showError('Email invalide');
             return;
@@ -965,7 +965,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
     // ============================================
     // RENDER METHODS - VARIATION WEB vs MOBILE
     // ============================================
-    
+
     // 🖥️ RENDER WEB LAYOUT
     const renderWebLayout = () => (
         <View style={webDynamicStyles.webContainer}>
@@ -989,7 +989,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
 
             {/* Right Side - Login Form */}
             <View style={webDynamicStyles.rightSection}>
-                <Animated.View 
+                <Animated.View
                     style={[
                         webDynamicStyles.formWrapper,
                         { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
@@ -1087,7 +1087,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
                             </Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             onPress={() => setResetModalVisible(true)}
                             disabled={loading || isLocked}
                         >
@@ -1143,7 +1143,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
             style={dynamicStyles.container}
         >
             <StatusBar barStyle="light-content" backgroundColor="#2E86C1" />
-            
+
             <LinearGradient
                 colors={['#2E86C1', '#3498DB', '#5DADE2']}
                 style={styles.gradient}
@@ -1158,10 +1158,10 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
 
                     <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
                         <View style={dynamicStyles.logoContainer}>
-                            <FontAwesome5 
-                                name="leaf" 
-                                size={isDesktop ? 60 : isTablet ? 50 : 45} 
-                                color="#FFF" 
+                            <FontAwesome5
+                                name="leaf"
+                                size={isDesktop ? 60 : isTablet ? 50 : 45}
+                                color="#FFF"
                             />
                         </View>
                         <Text style={dynamicStyles.title}>NUTRIFIX</Text>
@@ -1225,7 +1225,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
                                             color={loading || !isConnected ? '#BDC3C7' : '#2E86C1'}
                                         />
                                         <Text style={[
-                                            styles.biometricText, 
+                                            styles.biometricText,
                                             (loading || !isConnected) && { color: '#BDC3C7' }
                                         ]}>
                                             Connexion par {getBiometricText()}
@@ -1238,14 +1238,14 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
                             {__DEV__ && !biometricAvailable && !isLocked && isMobile && (
                                 <View style={styles.infoContainer}>
                                     <MaterialIcons name="info-outline" size={20} color="#3498DB" />
-                                    <View style={{flex: 1, marginLeft: 10}}>
+                                    <View style={{ flex: 1, marginLeft: 10 }}>
                                         <Text style={styles.infoTitle}>
                                             {isExpoGo ? 'Expo Go détecté' : LocalAuthentication ? 'Biométrie non configurée' : 'Module manquant'}
                                         </Text>
                                         <Text style={styles.infoText}>
-                                            {isExpoGo 
-                                                ? 'Créez un Development Build pour la biométrie' 
-                                                : LocalAuthentication 
+                                            {isExpoGo
+                                                ? 'Créez un Development Build pour la biométrie'
+                                                : LocalAuthentication
                                                     ? 'Configurez votre empreinte dans Paramètres'
                                                     : 'Installez expo-local-authentication'
                                             }
@@ -1347,15 +1347,15 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
 
     const renderNetworkStatus = () => (
         <View style={styles.networkStatusContainer}>
-            <MaterialIcons 
-                name={getNetworkIcon()} 
-                size={16} 
-                color={getNetworkColor()} 
+            <MaterialIcons
+                name={getNetworkIcon()}
+                size={16}
+                color={getNetworkColor()}
             />
             <Text style={[styles.networkStatusText, { color: getNetworkColor() }]}>
-                {isCheckingNetwork 
-                    ? 'Vérification...' 
-                    : isConnected 
+                {isCheckingNetwork
+                    ? 'Vérification...'
+                    : isConnected
                         ? (networkType === 'wifi' ? 'WiFi' : 'Données mobiles')
                         : 'Hors ligne'
                 }
@@ -1462,7 +1462,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
                     </Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity 
+                <TouchableOpacity
                     onPress={() => setResetModalVisible(true)}
                     disabled={loading || isLocked}
                 >
@@ -1664,8 +1664,8 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
             opacity: 0.1,
             backgroundColor: 'transparent',
         },
-        
-    
+
+
         rightSection: {
             flex: 1,
             justifyContent: 'center',
@@ -1856,7 +1856,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
 // ============================================
 const styles = StyleSheet.create({
     gradient: { flex: 1 },
-    
+
     // Network Status
     networkStatusContainer: {
         position: 'absolute',
@@ -2058,14 +2058,14 @@ const styles = StyleSheet.create({
     },
 
     webLogoContainer: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,  // Circle
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    borderWidth: 2,
-    marginBottom: 24,
-},
+        width: 70,
+        height: 70,
+        borderRadius: 35,  // Circle
+        backgroundColor: 'rgba(255, 255, 255, 0.15)',
+        borderColor: 'rgba(255, 255, 255, 0.3)',
+        borderWidth: 2,
+        marginBottom: 24,
+    },
 
     // Footer
     footer: { alignItems: 'center', marginTop: 30, marginBottom: 20 },

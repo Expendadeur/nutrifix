@@ -21,25 +21,25 @@ import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { setupNotificationListener } from '../../services/notificationsSocket';
-const [userId, setUserId] = useState(null);
 
 // Configuration API
 const API_BASE_URL = Platform.select({
     web: process.env.REACT_APP_API_URL || 'http://localhost:5000',
-    default: 'http://localhost:5000' 
+    default: 'http://localhost:5000'
 });
 
 const DashboardScreen = ({ navigation }) => {
     const windowDimensions = useWindowDimensions();
     const screenWidth = Dimensions.get('window').width;
-    
+
     // ============================================
     // ÉTATS PRINCIPAUX
     // ============================================
+    const [userId, setUserId] = useState(null);
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState(null);
-    
+
     // États données existantes
     const [dashboardData, setDashboardData] = useState(null);
     const [vehicle, setVehicle] = useState(null);
@@ -48,12 +48,12 @@ const DashboardScreen = ({ navigation }) => {
     const [statistics, setStatistics] = useState(null);
     const [maintenanceAlerts, setMaintenanceAlerts] = useState([]);
     const [insuranceAlerts, setInsuranceAlerts] = useState([]);
-    
+
     // États nouvelles données
     const [expenseCharts, setExpenseCharts] = useState(null);
     const [currentSalary, setCurrentSalary] = useState(null);
     const [salaryHistory, setSalaryHistory] = useState(null);
-    
+
     // États UI
     const [selectedChartPeriod, setSelectedChartPeriod] = useState('month');
     const [selectedSalaryYear, setSelectedSalaryYear] = useState(new Date().getFullYear());
@@ -62,13 +62,13 @@ const DashboardScreen = ({ navigation }) => {
         salary: false,
         salaryHistory: false
     });
-    
+
     // États localisation
     const [location, setLocation] = useState(null);
     const [locationPermission, setLocationPermission] = useState(false);
     const [address, setAddress] = useState('Localisation en cours...');
     const [locationError, setLocationError] = useState(null);
-    
+
     // État token
     const [authToken, setAuthToken] = useState(null);
 
@@ -157,63 +157,63 @@ const DashboardScreen = ({ navigation }) => {
     };
 
     const apiCall = async (endpoint, method = 'GET', data = null) => {
-    try {
-        const token = await AsyncStorage.getItem('userToken');
+        try {
+            const token = await AsyncStorage.getItem('userToken');
 
-        console.log('TOKEN RÉCUPÉRÉ :', token);
+            console.log('TOKEN RÉCUPÉRÉ :', token);
 
-        if (!token) {
-            console.warn('Aucun token trouvé dans AsyncStorage');
-            throw new Error("Token d'authentification manquant");
+            if (!token) {
+                console.warn('Aucun token trouvé dans AsyncStorage');
+                throw new Error("Token d'authentification manquant");
+            }
+
+            const response = await axios({
+                method,
+                url: `${API_BASE_URL}${endpoint}`,
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+                data: data && ['POST', 'PUT'].includes(method) ? data : undefined,
+            });
+
+            console.log(`API OK [${method}] ${endpoint}`, response.data);
+
+            return response.data;
+        } catch (error) {
+            console.error(
+                `API Error [${method}] ${endpoint}`,
+                error.response?.data || error.message
+            );
+
+            if (error.response?.status === 401) {
+                console.warn('401 → Déconnexion automatique');
+                await AsyncStorage.removeItem('userToken');
+                navigation?.replace('Login');
+            }
+
+            throw error;
         }
-
-        const response = await axios({
-            method,
-            url: `${API_BASE_URL}${endpoint}`,
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
-            data: data && ['POST', 'PUT'].includes(method) ? data : undefined,
-        });
-
-        console.log(`API OK [${method}] ${endpoint}`, response.data);
-
-        return response.data;
-    } catch (error) {
-        console.error(
-            `API Error [${method}] ${endpoint}`,
-            error.response?.data || error.message
-        );
-
-        if (error.response?.status === 401) {
-            console.warn('401 → Déconnexion automatique');
-            await AsyncStorage.removeItem('userToken');
-            navigation?.replace('Login');
-        }
-
-        throw error;
-    }
-};
+    };
 
 
     // ============================================
     // CHARGEMENT DONNÉES
     // ============================================
-const loadDashboardData = async () => {
-  try {
-    const result = await apiCall('/api/chauffeur/dashboard');
+    const loadDashboardData = async () => {
+        try {
+            const result = await apiCall('/api/chauffeur/dashboard');
 
-    if (result.success) {
-      setDashboardData(result.data);
-      if (result.data?.chauffeur?.id) {
-        setUserId(result.data.chauffeur.id);
-      }
-    }
-  } catch (error) {
-    console.error(error);
-  }
-};
+            if (result.success) {
+                setDashboardData(result.data);
+                if (result.data?.chauffeur?.id) {
+                    setUserId(result.data.chauffeur.id);
+                }
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    };
 
     const loadVehicleInfo = async () => {
         try {
@@ -318,7 +318,7 @@ const loadDashboardData = async () => {
     const initializeScreen = async () => {
         setLoading(true);
         setError(null);
-        
+
         try {
             await Promise.allSettled([
                 loadDashboardData(),
@@ -347,7 +347,7 @@ const loadDashboardData = async () => {
         try {
             setLocationError(null);
             const { status } = await Location.requestForegroundPermissionsAsync();
-            
+
             if (status === 'granted') {
                 setLocationPermission(true);
                 await getCurrentLocation();
@@ -374,20 +374,20 @@ const loadDashboardData = async () => {
     const getCurrentLocation = async () => {
         try {
             setAddress('Localisation en cours...');
-            
+
             const location = await Location.getCurrentPositionAsync({
                 accuracy: Location.Accuracy.High,
                 timeout: 10000
             });
-            
+
             setLocation(location.coords);
-            
+
             try {
                 const addresses = await Location.reverseGeocodeAsync({
                     latitude: location.coords.latitude,
                     longitude: location.coords.longitude
                 });
-                
+
                 if (addresses && addresses.length > 0) {
                     const addr = addresses[0];
                     const parts = [
@@ -396,7 +396,7 @@ const loadDashboardData = async () => {
                         addr.region,
                         addr.country
                     ].filter(Boolean);
-                    
+
                     setAddress(parts.join(', ') || 'Adresse inconnue');
                 }
             } catch (geoError) {
@@ -449,7 +449,7 @@ const loadDashboardData = async () => {
 
     const handleEndMission = () => {
         if (currentMission) {
-            navigation.navigate('Operations', { 
+            navigation.navigate('Operations', {
                 screen: 'EndMission',
                 params: { mission: currentMission }
             });
@@ -459,9 +459,9 @@ const loadDashboardData = async () => {
     const handleMarkNotificationRead = async (notificationId) => {
         try {
             await apiCall(`/api/chauffeur/notifications/${notificationId}/read`, 'PUT');
-            setNotifications(prev => 
-                prev.map(notif => 
-                    notif.id === notificationId 
+            setNotifications(prev =>
+                prev.map(notif =>
+                    notif.id === notificationId
                         ? { ...notif, statut: 'lu' }
                         : notif
                 )
@@ -523,18 +523,18 @@ const loadDashboardData = async () => {
         };
     }, [currentMission, locationPermission]);
 
-useEffect(() => {
-  if (!userId) return; 
+    useEffect(() => {
+        if (!userId) return;
 
-  const cleanup = setupNotificationListener(userId, (newNotif) => {
-    setNotifications(prev => [newNotif, ...prev]);
-    Alert.alert(newNotif.titre, newNotif.message);
-  });
+        const cleanup = setupNotificationListener(userId, (newNotif) => {
+            setNotifications(prev => [newNotif, ...prev]);
+            Alert.alert(newNotif.titre, newNotif.message);
+        });
 
-  return () => {
-    if (cleanup) cleanup();
-  };
-}, [userId]);
+        return () => {
+            if (cleanup) cleanup();
+        };
+    }, [userId]);
 
     // ============================================
     // HELPERS ET FORMATAGE
@@ -669,7 +669,7 @@ useEffect(() => {
                     <Badge
                         style={[
                             styles.statusBadge,
-                            { 
+                            {
                                 backgroundColor: vehicle.statut === 'actif' ? '#2ECC71' : '#E74C3C',
                                 fontSize: fontSize.small
                             }
@@ -697,7 +697,7 @@ useEffect(() => {
 
                 <View style={[
                     styles.statsGrid,
-                    { 
+                    {
                         flexDirection: isMobile ? 'column' : 'row',
                         flexWrap: !isMobile ? 'wrap' : 'nowrap',
                         marginTop: 20
@@ -748,17 +748,17 @@ useEffect(() => {
                         <Divider style={[styles.divider, { marginTop: 15 }]} />
                         <View style={styles.alertsContainer}>
                             {vehicle.alerts.map((alert, index) => (
-                                <View 
-                                    key={index} 
+                                <View
+                                    key={index}
                                     style={[
                                         styles.alertBox,
                                         { backgroundColor: alert.urgence === 'haute' ? '#FADBD8' : '#FFF3CD' }
                                     ]}
                                 >
-                                    <MaterialIcons 
-                                        name="warning" 
-                                        size={iconSize.small} 
-                                        color={alert.urgence === 'haute' ? '#E74C3C' : '#F39C12'} 
+                                    <MaterialIcons
+                                        name="warning"
+                                        size={iconSize.small}
+                                        color={alert.urgence === 'haute' ? '#E74C3C' : '#F39C12'}
                                     />
                                     <Text style={[styles.alertText, { fontSize: fontSize.small, marginLeft: 8 }]}>
                                         {alert.message}
@@ -907,9 +907,9 @@ useEffect(() => {
                             Frais & Recettes
                         </Text>
                     </View>
-                    <MaterialIcons 
-                        name={expandedSections.expenses ? "expand-less" : "expand-more"} 
-                        size={iconSize.medium} 
+                    <MaterialIcons
+                        name={expandedSections.expenses ? "expand-less" : "expand-more"}
+                        size={iconSize.medium}
                         color="#7F8C8D"
                     />
                 </TouchableOpacity>
@@ -917,7 +917,7 @@ useEffect(() => {
                 {expandedSections.expenses && (
                     <>
                         <Divider style={styles.divider} />
-                        
+
                         {/* Sélecteur de période */}
                         <View style={styles.periodSelector}>
                             <SegmentedButtons
@@ -952,9 +952,9 @@ useEffect(() => {
                             <View style={styles.summaryItem}>
                                 <Text style={[styles.summaryLabel, { fontSize: fontSize.small }]}>Solde Net</Text>
                                 <Text style={[
-                                    styles.summaryValue, 
-                                    { 
-                                        fontSize: fontSize.subtitle, 
+                                    styles.summaryValue,
+                                    {
+                                        fontSize: fontSize.subtitle,
                                         color: (expenseCharts.summary?.solde_net || 0) >= 0 ? '#27AE60' : '#E74C3C'
                                     }
                                 ]}>
@@ -1022,14 +1022,16 @@ useEffect(() => {
                                 {expenseCharts.expense_breakdown.map((item, index) => (
                                     <View key={index} style={[styles.expenseTypeItem, { borderBottomWidth: index < expenseCharts.expense_breakdown.length - 1 ? 1 : 0, borderBottomColor: '#E8EAED', paddingBottom: 10, marginBottom: 10 }]}>
                                         <View style={styles.expenseTypeLeft}>
-                                            <View style={[styles.expenseTypeDot, { backgroundColor: [
-                                                '#E74C3C',
-                                                '#F39C12',
-                                                '#3498DB',
-                                                '#2ECC71',
-                                                '#9B59B6',
-                                                '#1ABC9C'
-                                            ][index % 6] }]} />
+                                            <View style={[styles.expenseTypeDot, {
+                                                backgroundColor: [
+                                                    '#E74C3C',
+                                                    '#F39C12',
+                                                    '#3498DB',
+                                                    '#2ECC71',
+                                                    '#9B59B6',
+                                                    '#1ABC9C'
+                                                ][index % 6]
+                                            }]} />
                                             <View style={styles.expenseTypeInfo}>
                                                 <Text style={[styles.expenseTypeName, { fontSize: fontSize.body }]}>
                                                     {item.type_libelle}
@@ -1085,9 +1087,9 @@ useEffect(() => {
                         <Badge style={{ backgroundColor: infos_paiement.statut === 'payé' ? '#2ECC71' : '#F39C12' }}>
                             {infos_paiement.statut?.toUpperCase()}
                         </Badge>
-                        <MaterialIcons 
-                            name={expandedSections.salary ? "expand-less" : "expand-more"} 
-                            size={iconSize.medium} 
+                        <MaterialIcons
+                            name={expandedSections.salary ? "expand-less" : "expand-more"}
+                            size={iconSize.medium}
                             color="#7F8C8D"
                             style={{ marginLeft: 10 }}
                         />
@@ -1305,9 +1307,9 @@ useEffect(() => {
                             Historique des Salaires
                         </Text>
                     </View>
-                    <MaterialIcons 
-                        name={expandedSections.salaryHistory ? "expand-less" : "expand-more"} 
-                        size={iconSize.medium} 
+                    <MaterialIcons
+                        name={expandedSections.salaryHistory ? "expand-less" : "expand-more"}
+                        size={iconSize.medium}
                         color="#7F8C8D"
                     />
                 </TouchableOpacity>
@@ -1419,7 +1421,7 @@ useEffect(() => {
                                                 {salary.nom_mois}
                                             </Text>
                                             <Text style={[styles.salaryListItemDate, { fontSize: fontSize.small }]}>
-                                                {salary.statut_paiement === 'payé' 
+                                                {salary.statut_paiement === 'payé'
                                                     ? `Payé le ${new Date(salary.date_paiement).toLocaleDateString('fr-FR')}`
                                                     : 'Non payé'
                                                 }
@@ -1428,7 +1430,7 @@ useEffect(() => {
                                         <View style={styles.salaryListItemRight}>
                                             <Text style={[
                                                 styles.salaryListItemAmount,
-                                                { 
+                                                {
                                                     fontSize: fontSize.body,
                                                     color: salary.statut_paiement === 'payé' ? '#27AE60' : '#F39C12'
                                                 }
@@ -1550,7 +1552,7 @@ useEffect(() => {
         return (
             <View style={[styles.section, { marginHorizontal: cardMargin }]}>
                 <Text style={[styles.sectionTitle, { fontSize: fontSize.subtitle }]}>
-                Statistiques du Jour
+                    Statistiques du Jour
                 </Text>
                 <View style={[styles.statsGrid, { flexDirection: isMobile ? 'column' : 'row', flexWrap: !isMobile ? 'wrap' : 'nowrap' }]}>
                     {statsData.map((stat, index) => (
@@ -1585,7 +1587,7 @@ useEffect(() => {
             <View style={[styles.section, { marginHorizontal: cardMargin }]}>
                 <View style={styles.sectionHeader}>
                     <Text style={[styles.sectionTitle, { fontSize: fontSize.subtitle }]}>
-                    Notifications
+                        Notifications
                     </Text>
                     {notifications.length > displayCount && (
                         <TouchableOpacity onPress={() => navigation.navigate('Notifications')}>
@@ -1616,8 +1618,8 @@ useEffect(() => {
                             <Text style={[styles.notificationTitle, { fontSize: fontSize.body }]}>
                                 {notif.titre}
                             </Text>
-                            <Text 
-                                style={[styles.notificationMessage, { fontSize: fontSize.small }]} 
+                            <Text
+                                style={[styles.notificationMessage, { fontSize: fontSize.small }]}
                                 numberOfLines={2}
                             >
                                 {notif.message}
@@ -1767,7 +1769,7 @@ useEffect(() => {
                         Dashboard Chauffeur
                     </Text>
                 </View>
-                <TouchableOpacity 
+                <TouchableOpacity
                     style={styles.headerRight}
                     onPress={() => navigation.navigate('Profil')}
                 >
@@ -1788,8 +1790,8 @@ useEffect(() => {
                     }
                 ]}
                 refreshControl={
-                    <RefreshControl 
-                        refreshing={refreshing} 
+                    <RefreshControl
+                        refreshing={refreshing}
                         onRefresh={onRefresh}
                         colors={['#2E86C1']}
                         tintColor="#2E86C1"
@@ -1859,7 +1861,7 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#F5F6FA',
     },
-    
+
     // En-tête
     header: {
         flexDirection: 'row',
@@ -1888,7 +1890,7 @@ const styles = StyleSheet.create({
     headerRight: {
         padding: 4,
     },
-    
+
     // Scroll
     scrollView: {
         flex: 1,
@@ -1896,7 +1898,7 @@ const styles = StyleSheet.create({
     scrollContent: {
         paddingTop: 10,
     },
-    
+
     // Grilles de layout
     mobileGrid: {
         width: '100%',
@@ -1913,7 +1915,7 @@ const styles = StyleSheet.create({
         flex: 1,
         minWidth: 0,
     },
-    
+
     // Cartes
     card: {
         backgroundColor: '#FFF',
@@ -1951,7 +1953,7 @@ const styles = StyleSheet.create({
         height: 1,
         marginVertical: 12,
     },
-    
+
     // Badges
     statusBadge: {
         paddingHorizontal: 12,
@@ -1964,7 +1966,7 @@ const styles = StyleSheet.create({
         paddingVertical: 4,
         borderRadius: 12,
     },
-    
+
     // Véhicule
     vehicleInfo: {
         alignItems: 'center',
@@ -1984,7 +1986,7 @@ const styles = StyleSheet.create({
         color: '#95A5A6',
         marginTop: 4,
     },
-    
+
     // Grille de stats
     statsGrid: {
         gap: 10,
@@ -2009,7 +2011,7 @@ const styles = StyleSheet.create({
         color: '#7F8C8D',
         textAlign: 'center',
     },
-    
+
     // Alertes
     alertsContainer: {
         marginTop: 8,
@@ -2049,7 +2051,7 @@ const styles = StyleSheet.create({
     alertDate: {
         color: '#95A5A6',
     },
-    
+
     // Mission
     missionDetails: {
         gap: 12,
@@ -2070,7 +2072,7 @@ const styles = StyleSheet.create({
         color: '#2C3E50',
         fontWeight: '500',
     },
-    
+
     // Map
     mapContainer: {
         width: '100%',
@@ -2099,7 +2101,7 @@ const styles = StyleSheet.create({
     coordinatesText: {
         color: '#7F8C8D',
     },
-    
+
     // Sections
     section: {
         marginTop: 20,
@@ -2118,7 +2120,7 @@ const styles = StyleSheet.create({
         color: '#2E86C1',
         fontWeight: '500',
     },
-    
+
     // Notifications
     notificationItem: {
         flexDirection: 'row',
@@ -2159,7 +2161,7 @@ const styles = StyleSheet.create({
         top: 16,
         right: 12,
     },
-    
+
     // Graphiques
     periodSelector: {
         marginBottom: 15,
@@ -2182,7 +2184,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#2C3E50',
     },
-    
+
     // Résumé frais
     summaryBox: {
         backgroundColor: '#F8F9FA',
@@ -2203,7 +2205,7 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#2C3E50',
     },
-    
+
     // Frais par type
     expenseTypesList: {
         marginTop: 20,
@@ -2239,7 +2241,7 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#2C3E50',
     },
-    
+
     // Salaire
     salaryMainBox: {
         alignItems: 'center',
@@ -2252,7 +2254,7 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#27AE60',
     },
-    
+
     salarySection: {
         marginBottom: 20,
     },
@@ -2264,7 +2266,7 @@ const styles = StyleSheet.create({
         borderBottomWidth: 2,
         borderBottomColor: '#E8EAED',
     },
-    
+
     salaryRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -2295,11 +2297,11 @@ const styles = StyleSheet.create({
         height: 2,
         marginVertical: 8,
     },
-    
+
     salaryActions: {
         flexDirection: 'row',
     },
-    
+
     // Historique salaire
     yearSelector: {
         flexDirection: 'row',
@@ -2315,7 +2317,7 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#2C3E50',
     },
-    
+
     summaryGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
@@ -2336,7 +2338,7 @@ const styles = StyleSheet.create({
     summarySmallValue: {
         fontWeight: '700',
     },
-    
+
     statusRow: {
         flexDirection: 'row',
         backgroundColor: '#F8F9FA',
@@ -2354,7 +2356,7 @@ const styles = StyleSheet.create({
     statusLabel: {
         color: '#7F8C8D',
     },
-    
+
     salaryList: {
         marginTop: 15,
     },
@@ -2385,7 +2387,7 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         marginBottom: 4,
     },
-    
+
     // États vides
     emptyContainer: {
         alignItems: 'center',
@@ -2397,12 +2399,12 @@ const styles = StyleSheet.create({
         marginTop: 16,
         textAlign: 'center',
     },
-    
+
     // Boutons d'action
     actionButton: {
         borderRadius: 8,
     },
-    
+
     // FAB Desktop
     fabContainer: {
         position: 'absolute',
@@ -2416,276 +2418,276 @@ const styles = StyleSheet.create({
         }),
     },
 
-fab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 28,
-    elevation: 6,
-    ...Platform.select({
-        web: {
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-        },
-        default: {
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.3,
-            shadowRadius: 6,
-        },
-    }),
-},
-fabText: {
-    color: '#FFF',
-    fontWeight: '600',
-    marginLeft: 8,
-},
+    fab: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 14,
+        paddingHorizontal: 20,
+        borderRadius: 28,
+        elevation: 6,
+        ...Platform.select({
+            web: {
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            },
+            default: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 6,
+            },
+        }),
+    },
+    fabText: {
+        color: '#FFF',
+        fontWeight: '600',
+        marginLeft: 8,
+    },
 
-// Actions mobiles
-mobileActions: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    backgroundColor: '#FFF',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E8EAED',
-    gap: 12,
-    elevation: 8,
-    ...Platform.select({
-        web: {
-            boxShadow: '0 -2px 10px rgba(0,0,0,0.1)',
-        },
-        default: {
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: -2 },
-            shadowOpacity: 0.1,
-            shadowRadius: 5,
-        },
-    }),
-},
-mobileAction: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
-    gap: 8,
-},
-mobileActionText: {
-    color: '#FFF',
-    fontWeight: '600',
-},
+    // Actions mobiles
+    mobileActions: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        flexDirection: 'row',
+        backgroundColor: '#FFF',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderTopWidth: 1,
+        borderTopColor: '#E8EAED',
+        gap: 12,
+        elevation: 8,
+        ...Platform.select({
+            web: {
+                boxShadow: '0 -2px 10px rgba(0,0,0,0.1)',
+            },
+            default: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: -2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 5,
+            },
+        }),
+    },
+    mobileAction: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        borderRadius: 8,
+        gap: 8,
+    },
+    mobileActionText: {
+        color: '#FFF',
+        fontWeight: '600',
+    },
 
-// Loading et erreur
-loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F5F6FA',
-},
-loadingText: {
-    marginTop: 16,
-    color: '#7F8C8D',
-},
-errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FADBD8',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-},
-errorText: {
-    flex: 1,
-    color: '#C0392B',
-},
+    // Loading et erreur
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#F5F6FA',
+    },
+    loadingText: {
+        marginTop: 16,
+        color: '#7F8C8D',
+    },
+    errorBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FADBD8',
+        padding: 12,
+        borderRadius: 8,
+        marginBottom: 16,
+    },
+    errorText: {
+        flex: 1,
+        color: '#C0392B',
+    },
 
-// Graphiques
-chartTitle: {
-    fontWeight: '600',
-    color: '#2C3E50',
-    textAlign: 'center',
-},
-chartsSubtitle: {
-    fontWeight: '600',
-    color: '#2C3E50',
-},
-chartContainer: {
-    marginVertical: 20,
-    alignItems: 'center',
-},
-chart: {
-    marginVertical: 8,
-    borderRadius: 16,
-},
+    // Graphiques
+    chartTitle: {
+        fontWeight: '600',
+        color: '#2C3E50',
+        textAlign: 'center',
+    },
+    chartsSubtitle: {
+        fontWeight: '600',
+        color: '#2C3E50',
+    },
+    chartContainer: {
+        marginVertical: 20,
+        alignItems: 'center',
+    },
+    chart: {
+        marginVertical: 8,
+        borderRadius: 16,
+    },
 
-// Notifications
-section: {
-    marginTop: 20,
-},
-sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-},
-sectionTitle: {
-    fontWeight: '700',
-    color: '#2C3E50',
-},
-seeAllText: {
-    color: '#2E86C1',
-    fontWeight: '500',
-},
-notificationItem: {
-    flexDirection: 'row',
-    padding: 12,
-    alignItems: 'flex-start',
-    position: 'relative',
-},
-notificationIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-},
-notificationContent: {
-    flex: 1,
-    marginLeft: 12,
-},
-notificationTitle: {
-    fontWeight: '600',
-    color: '#2C3E50',
-    marginBottom: 4,
-},
-notificationMessage: {
-    color: '#7F8C8D',
-    marginBottom: 4,
-    lineHeight: 18,
-},
-notificationTime: {
-    color: '#BDC3C7',
-},
-unreadIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#E74C3C',
-    position: 'absolute',
-    top: 16,
-    right: 12,
-},
+    // Notifications
+    section: {
+        marginTop: 20,
+    },
+    sectionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    sectionTitle: {
+        fontWeight: '700',
+        color: '#2C3E50',
+    },
+    seeAllText: {
+        color: '#2E86C1',
+        fontWeight: '500',
+    },
+    notificationItem: {
+        flexDirection: 'row',
+        padding: 12,
+        alignItems: 'flex-start',
+        position: 'relative',
+    },
+    notificationIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    notificationContent: {
+        flex: 1,
+        marginLeft: 12,
+    },
+    notificationTitle: {
+        fontWeight: '600',
+        color: '#2C3E50',
+        marginBottom: 4,
+    },
+    notificationMessage: {
+        color: '#7F8C8D',
+        marginBottom: 4,
+        lineHeight: 18,
+    },
+    notificationTime: {
+        color: '#BDC3C7',
+    },
+    unreadIndicator: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#E74C3C',
+        position: 'absolute',
+        top: 16,
+        right: 12,
+    },
 
-// Alertes
-alertCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#F39C12',
-},
-alertContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-},
-alertInfo: {
-    flex: 1,
-    marginLeft: 12,
-},
-alertTitle: {
-    fontWeight: '600',
-    color: '#2C3E50',
-    marginBottom: 4,
-},
-alertDescription: {
-    color: '#7F8C8D',
-    marginBottom: 4,
-},
-alertDate: {
-    color: '#95A5A6',
-},
+    // Alertes
+    alertCard: {
+        borderLeftWidth: 4,
+        borderLeftColor: '#F39C12',
+    },
+    alertContent: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+    },
+    alertInfo: {
+        flex: 1,
+        marginLeft: 12,
+    },
+    alertTitle: {
+        fontWeight: '600',
+        color: '#2C3E50',
+        marginBottom: 4,
+    },
+    alertDescription: {
+        color: '#7F8C8D',
+        marginBottom: 4,
+    },
+    alertDate: {
+        color: '#95A5A6',
+    },
 
-// Map
-mapContainer: {
-    width: '100%',
-    height: 300,
-    overflow: 'hidden',
-    borderRadius: 12,
-},
-webMapPlaceholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#ECF0F1',
-    padding: 20,
-},
-locationText: {
-    color: '#2C3E50',
-    fontWeight: '500',
-    textAlign: 'center',
-},
-coordinatesText: {
-    color: '#7F8C8D',
-},
+    // Map
+    mapContainer: {
+        width: '100%',
+        height: 300,
+        overflow: 'hidden',
+        borderRadius: 12,
+    },
+    webMapPlaceholder: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#ECF0F1',
+        padding: 20,
+    },
+    locationText: {
+        color: '#2C3E50',
+        fontWeight: '500',
+        textAlign: 'center',
+    },
+    coordinatesText: {
+        color: '#7F8C8D',
+    },
 
-// Types de frais
-expenseTypeInfo: {
-    flex: 1,
-},
-expenseTypeCount: {
-    color: '#95A5A6',
-},
+    // Types de frais
+    expenseTypeInfo: {
+        flex: 1,
+    },
+    expenseTypeCount: {
+        color: '#95A5A6',
+    },
 
-// Historique salaire
-yearButton: {
-    padding: 8,
-},
-statusRow: {
-    flexDirection: 'row',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 10,
-    padding: 12,
-},
-statusItem: {
-    flex: 1,
-    alignItems: 'center',
-},
-statusValue: {
-    fontWeight: '700',
-    marginBottom: 4,
-},
-statusLabel: {
-    color: '#7F8C8D',
-},
-salaryListItemRight: {
-    alignItems: 'flex-end',
-},
-salaryActions: {
-    flexDirection: 'row',
-},
+    // Historique salaire
+    yearButton: {
+        padding: 8,
+    },
+    statusRow: {
+        flexDirection: 'row',
+        backgroundColor: '#F8F9FA',
+        borderRadius: 10,
+        padding: 12,
+    },
+    statusItem: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    statusValue: {
+        fontWeight: '700',
+        marginBottom: 4,
+    },
+    statusLabel: {
+        color: '#7F8C8D',
+    },
+    salaryListItemRight: {
+        alignItems: 'flex-end',
+    },
+    salaryActions: {
+        flexDirection: 'row',
+    },
 
-// Layouts responsive supplémentaires
-desktopGrid: {
-    flexDirection: 'row',
-    gap: 20,
-    paddingHorizontal: 10,
-},
-desktopColumn: {
-    flex: 1,
-    minWidth: 0,
-},
-tabletGrid: {
-    width: '100%',
-},
-mobileGrid: {
-    width: '100%',
-},
+    // Layouts responsive supplémentaires
+    desktopGrid: {
+        flexDirection: 'row',
+        gap: 20,
+        paddingHorizontal: 10,
+    },
+    desktopColumn: {
+        flex: 1,
+        minWidth: 0,
+    },
+    tabletGrid: {
+        width: '100%',
+    },
+    mobileGrid: {
+        width: '100%',
+    },
 
-        card: {
+    card: {
         backgroundColor: '#FFF',
         borderRadius: 12,
         elevation: 2,
