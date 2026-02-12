@@ -2,10 +2,10 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../../database/db');
-const { 
-  authenticate, 
-  authorize, 
-  authorizeDepartment 
+const {
+  authenticate,
+  authorize,
+  authorizeDepartment
 } = require('../middleware/auth');
 const ExcelJS = require('exceljs');
 const PDFDocument = require('pdfkit');
@@ -317,7 +317,7 @@ router.get('/employees', authorize('manager', 'admin'), async (req, res) => {
       JOIN departements d ON u.id_departement = d.id
       WHERE u.id_departement = ?
     `;
-    
+
     const params = [id_departement];
 
     if (role && role !== 'all') {
@@ -355,9 +355,9 @@ router.get('/employees', authorize('manager', 'admin'), async (req, res) => {
          WHERE id = ?`,
         [emp.id, emp.id]
       );
-      
+
       const leaveBalance = Array.isArray(leaveBalanceResult) ? leaveBalanceResult[0] : leaveBalanceResult;
-      
+
       emp.leave_balance = {
         total: leaveBalance?.total || 0,
         used: leaveBalance?.used || 0,
@@ -369,6 +369,167 @@ router.get('/employees', authorize('manager', 'admin'), async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error fetching employees:', error);
+    res.status(500).json({ error: 'Erreur serveur', details: error.message });
+  }
+});
+
+// POST /api/manager/employees/:id/notify - Envoyer un email personnalisé à un employé
+router.post('/employees/:id/notify', authorize('manager', 'admin'), async (req, res) => {
+  try {
+    const { id: managerId, id_departement } = req.user;
+    const { id: employeeId } = req.params;
+    const { sujet, message } = req.body;
+
+    if (!sujet || !message) {
+      return res.status(400).json({ error: 'Sujet et message requis' });
+    }
+
+    // Vérifier que l'employé appartient au département
+    const [employee] = await pool.query(
+      'SELECT nom_complet, email FROM utilisateurs WHERE id = ? AND id_departement = ?',
+      [employeeId, id_departement]
+    );
+
+    if (!employee || employee.length === 0) {
+      return res.status(404).json({ error: 'Employé non trouvé dans votre département' });
+    }
+
+    const emailService = require('../emailService');
+    const result = await emailService.envoyerNotificationGenerale(
+      employee[0].email,
+      sujet,
+      `Message de votre manager :\n\n${message}`
+    );
+
+    if (result.success) {
+      // Trace
+      await pool.query(
+        'INSERT INTO traces (id_utilisateur, module, type_action, action_details) VALUES (?, ?, ?, ?)',
+        [managerId, 'rh', 'notification_email', `Email envoyé à ${employee[0].nom_complet}: ${sujet}`]
+      );
+
+      res.json({ success: true, message: 'Email envoyé avec succès' });
+    } else {
+      res.status(500).json({ error: 'Erreur lors de l\'envoi de l\'email', details: result.error });
+    }
+  } catch (error) {
+    console.error('❌ Error notifying employee:', error);
+    res.status(500).json({ error: 'Erreur serveur', details: error.message });
+  }
+});
+
+// POST /api/manager/employees/:id/toggle-status - Activer/Désactiver un employé
+router.post('/employees/:id/toggle-status', authorize('manager', 'admin'), async (req, res) => {
+  let connection;
+  try {
+    const { id: managerId, id_departement } = req.user;
+    const { id: employeeId } = req.params;
+
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    // Vérifier que l'employé appartient au département
+    const [employee] = await connection.query(
+      'SELECT id, nom_complet, email, statut FROM utilisateurs WHERE id = ? AND id_departement = ?',
+      [employeeId, id_departement]
+    );
+
+    if (!employee || employee.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'Employé non trouvé dans votre département' });
+    }
+
+    const currentStatus = employee[0].statut;
+    const newStatus = currentStatus === 'actif' ? 'inactif' : 'actif';
+
+    await connection.query(
+      'UPDATE utilisateurs SET statut = ? WHERE id = ?',
+      [newStatus, employeeId]
+    );
+
+    // Notification par email
+    const emailService = require('../emailService');
+    if (newStatus === 'actif') {
+      await emailService.envoyerNotificationActivation(employee[0].email, employee[0].nom_complet);
+    } else {
+      await emailService.envoyerNotificationDesactivation(employee[0].email, employee[0].nom_complet, 'Désactivé par votre manager');
+    }
+
+    // Trace
+    await connection.query(
+      'INSERT INTO traces (id_utilisateur, module, type_action, action_details) VALUES (?, ?, ?, ?)',
+      [managerId, 'rh', 'toggle_status', `Statut de ${employee[0].nom_complet} changé en ${newStatus}`]
+    );
+
+    await connection.commit();
+    res.json({ success: true, newStatus, message: `Employé ${newStatus === 'actif' ? 'activé' : 'désactivé'} avec succès` });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    console.error('❌ Error toggling employee status:', error);
+    res.status(500).json({ error: 'Erreur serveur', details: error.message });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+// POST /api/manager/employees/:id/mark-presence - Marquer présence/absence manuellement
+router.post('/employees/:id/mark-presence', authorize('manager', 'admin'), async (req, res) => {
+  try {
+    const { id: managerId, id_departement } = req.user;
+    const { id: employeeId } = req.params;
+    const { statut, date } = req.body; // statut: 'present', 'absent'
+
+    if (!['present', 'absent'].includes(statut)) {
+      return res.status(400).json({ error: 'Statut invalide' });
+    }
+
+    const targetDate = date || new Date().toISOString().split('T')[0];
+
+    // Vérifier que l'employé appartient au département
+    const [employee] = await pool.query(
+      'SELECT nom_complet FROM utilisateurs WHERE id = ? AND id_departement = ?',
+      [employeeId, id_departement]
+    );
+
+    if (!employee || employee.length === 0) {
+      return res.status(404).json({ error: 'Employé non trouvé dans votre département' });
+    }
+
+    // Vérifier si une présence existe déjà pour cette date
+    const [existing] = await pool.query(
+      'SELECT id FROM presences WHERE id_utilisateur = ? AND DATE(date) = ?',
+      [employeeId, targetDate]
+    );
+
+    if (existing && existing.length > 0) {
+      await pool.query(
+        `UPDATE presences SET 
+          statut = ?, 
+          heure_entree = ?, 
+          statut_validation = 'valide', 
+          valide_par = ?, 
+          date_validation = NOW() 
+        WHERE id = ?`,
+        [statut, statut === 'present' ? '08:00:00' : null, managerId, existing[0].id]
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO presences 
+          (id_utilisateur, date, statut, heure_entree, statut_validation, valide_par, date_validation) 
+         VALUES (?, ?, ?, ?, 'valide', ?, NOW())`,
+        [employeeId, targetDate, statut, statut === 'present' ? '08:00:00' : null, managerId]
+      );
+    }
+
+    // Trace
+    await pool.query(
+      'INSERT INTO traces (id_utilisateur, module, type_action, action_details) VALUES (?, ?, ?, ?)',
+      [managerId, 'rh', 'marquage_presence', `Présence de ${employee[0].nom_complet} marquée comme ${statut} pour le ${targetDate}`]
+    );
+
+    res.json({ success: true, message: `Présence marquée comme ${statut}` });
+  } catch (error) {
+    console.error('❌ Error marking presence:', error);
     res.status(500).json({ error: 'Erreur serveur', details: error.message });
   }
 });
@@ -407,7 +568,7 @@ router.get('/presences', authorize('manager', 'admin'), async (req, res) => {
 // POST /api/manager/presences/validate - Valider des présences
 router.post('/presences/validate', authorize('manager', 'admin'), async (req, res) => {
   let connection;
-  
+
   try {
     const { id: managerId, id_departement } = req.user;
     const { presenceIds } = req.body;
@@ -452,9 +613,9 @@ router.post('/presences/validate', authorize('manager', 'admin'), async (req, re
 
     await connection.commit();
 
-    res.json({ 
-      success: true, 
-      message: `${presenceIds.length} présence(s) validée(s)` 
+    res.json({
+      success: true,
+      message: `${presenceIds.length} présence(s) validée(s)`
     });
 
   } catch (error) {
@@ -503,7 +664,7 @@ router.get('/leave-requests', authorize('manager', 'admin'), async (req, res) =>
 // POST /api/manager/leave-requests/:id/process - Approuver/Rejeter congé
 router.post('/leave-requests/:id/process', authorize('manager', 'admin'), async (req, res) => {
   let connection;
-  
+
   try {
     const { id: managerId, id_departement } = req.user;
     const { id: leaveId } = req.params;
@@ -557,9 +718,9 @@ router.post('/leave-requests/:id/process', authorize('manager', 'admin'), async 
 
     await connection.commit();
 
-    res.json({ 
-      success: true, 
-      message: `Demande ${action === 'approve' ? 'approuvée' : 'rejetée'}` 
+    res.json({
+      success: true,
+      message: `Demande ${action === 'approve' ? 'approuvée' : 'rejetée'}`
     });
 
   } catch (error) {
@@ -606,7 +767,7 @@ router.get('/salaries', authorize('manager', 'admin'), async (req, res) => {
 // POST /api/manager/salaries/:id/mark-paid - Marquer salaire comme payé
 router.post('/salaries/:id/mark-paid', authorize('manager', 'admin'), async (req, res) => {
   let connection;
-  
+
   try {
     const { id: managerId, id_departement } = req.user;
     const { id: salaryId } = req.params;
@@ -1017,7 +1178,7 @@ router.get('/frais-department', authorize('manager', 'admin'), async (req, res) 
 // POST /api/manager/frais/:id/validate
 router.post('/frais/:id/validate', authorize('manager', 'admin'), async (req, res) => {
   let connection;
-  
+
   try {
     const { id: managerId, id_departement } = req.user;
     const { id: fraisId } = req.params;
@@ -1287,8 +1448,8 @@ router.get('/monthly-financial-trend', authorize('manager', 'admin'), async (req
 
   } catch (error) {
     console.error('❌ Error fetching financial trend:', error);
-    res.status(500).json({ 
-      error: 'Erreur serveur', 
+    res.status(500).json({
+      error: 'Erreur serveur',
       details: error.message
     });
   }
@@ -1373,7 +1534,7 @@ router.get('/budget-requests', authorize('manager', 'admin'), async (req, res) =
 // POST /api/manager/budget-requests
 router.post('/budget-requests', authorize('manager', 'admin'), async (req, res) => {
   let connection;
-  
+
   try {
     const { id: managerId, id_departement } = req.user;
     const { montant_demande, categorie, justification, urgence } = req.body;
@@ -1428,10 +1589,10 @@ router.post('/budget-requests', authorize('manager', 'admin'), async (req, res) 
 
     await connection.commit();
 
-    res.status(201).json({ 
-      success: true, 
+    res.status(201).json({
+      success: true,
       id: result.insertId,
-      message: 'Demande de budget soumise' 
+      message: 'Demande de budget soumise'
     });
 
   } catch (error) {
@@ -1567,6 +1728,61 @@ router.get('/revenues-by-source', authorize('manager', 'admin'), async (req, res
   }
 });
 
+// POST /api/manager/payment-requests/:id/send-verification-code - Envoyer code de vérification pour paiement
+router.post('/payment-requests/:id/send-verification-code', authorize('manager', 'admin'), async (req, res) => {
+  try {
+    const { id: managerId, id_departement } = req.user;
+    const { id: requestId } = req.params;
+
+    // Récupérer les infos de la demande et de l'employé
+    const [request] = await pool.query(
+      `SELECT r.*, u.nom_complet, u.email 
+       FROM demandes_paiement_salaire r
+       JOIN utilisateurs u ON r.id_employe = u.id
+       WHERE r.id = ? AND u.id_departement = ?`,
+      [requestId, id_departement]
+    );
+
+    if (!request || request.length === 0) {
+      return res.status(404).json({ error: 'Demande de paiement non trouvée' });
+    }
+
+    // Générer un code à 6 chiffres
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Mettre à jour la demande avec le code
+    await pool.query(
+      'UPDATE demandes_paiement_salaire SET code_verification = ?, date_envoi_code = NOW() WHERE id = ?',
+      [code, requestId]
+    );
+
+    // Envoyer l'email
+    const emailService = require('../emailService');
+    const result = await emailService.envoyerCodeVerification(
+      request[0].email,
+      code,
+      request[0].nom_complet,
+      request[0].mois,
+      request[0].annee
+    );
+
+    if (result.success) {
+      // Trace
+      await pool.query(
+        'INSERT INTO traces (id_utilisateur, module, type_action, action_details) VALUES (?, ?, ?, ?)',
+        [managerId, 'rh', 'envoi_code_verification', `Code envoyé à ${request[0].nom_complet} pour demande ID ${requestId}`]
+      );
+
+      res.json({ success: true, message: 'Code de vérification envoyé avec succès' });
+    } else {
+      res.status(500).json({ error: 'Erreur lors de l\'envoi de l\'email', details: result.error });
+    }
+  } catch (error) {
+    console.error('❌ Error sending verification code:', error);
+    res.status(500).json({ error: 'Erreur serveur', details: error.message });
+  }
+});
+
 // POST /api/manager/generate-financial-report
 router.post('/generate-financial-report', authorize('manager', 'admin'), async (req, res) => {
   try {
@@ -1600,19 +1816,19 @@ router.post('/generate-financial-report', authorize('manager', 'admin'), async (
     // Récupérer les données
     const deptResult = await pool.query('SELECT * FROM departements WHERE id = ?', [id_departement]);
     const dept = Array.isArray(deptResult) ? deptResult : [];
-    
+
     const budgetResult = await pool.query(
       'SELECT * FROM budgets_departements WHERE id_departement = ? AND annee = YEAR(CURDATE())',
       [id_departement]
     );
     const budget = Array.isArray(budgetResult) ? budgetResult : [];
-    
+
     const depensesResult = await pool.query(
       `SELECT * FROM depenses_departement WHERE id_departement = ? ${dateCondition} ORDER BY date_depense DESC`,
       [id_departement]
     );
     const depenses = Array.isArray(depensesResult) ? depensesResult : [];
-    
+
     const revenusResult = await pool.query(
       `SELECT * FROM revenus_departement WHERE id_departement = ? ${dateCondition.replace(/date_depense/g, 'date_revenu')} ORDER BY date_revenu DESC`,
       [id_departement]
@@ -1632,8 +1848,8 @@ router.post('/generate-financial-report', authorize('manager', 'admin'), async (
       fs.mkdirSync(reportsDir, { recursive: true });
     }
 
-    const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 
-                        'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+    const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+      'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
     const fileName = `Rapport_${type}_${dept[0]?.nom || 'Dept'}_${periode}_${Date.now()}.${format === 'excel' ? 'xlsx' : 'pdf'}`;
     const filePath = path.join(reportsDir, fileName);
 
@@ -1643,7 +1859,7 @@ router.post('/generate-financial-report', authorize('manager', 'admin'), async (
       workbook.created = new Date();
 
       const sheet = workbook.addWorksheet('Résumé Financier');
-      
+
       // En-tête
       sheet.mergeCells('A1:F1');
       const titleCell = sheet.getCell('A1');
@@ -1663,7 +1879,7 @@ router.post('/generate-financial-report', authorize('manager', 'admin'), async (
       // KPIs
       sheet.getCell('A6').value = 'INDICATEURS CLÉS';
       sheet.getCell('A6').font = { size: 14, bold: true };
-      
+
       const kpis = [
         ['Budget Alloué', budgetAlloue, 'FF3498DB'],
         ['Total Dépenses', totalBrut, 'FFE74C3C'],
@@ -1776,8 +1992,8 @@ router.post('/generate-financial-report', authorize('manager', 'admin'), async (
     const fileBuffer = fs.readFileSync(filePath);
     const base64Data = fileBuffer.toString('base64');
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Rapport généré avec succès',
       fileName: fileName,
       format: format,
@@ -1786,9 +2002,9 @@ router.post('/generate-financial-report', authorize('manager', 'admin'), async (
 
   } catch (error) {
     console.error('❌ Error generating report:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Erreur lors de la génération du rapport',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -1880,14 +2096,14 @@ router.get('/salaries-overview', authorize('manager', 'admin'), async (req, res)
 router.get('/salaries-detailed', authorize('manager', 'admin'), async (req, res) => {
   try {
     const { id_departement } = req.user;
-    const { 
-      month, 
-      year, 
-      type_employe, 
-      statut_paiement, 
+    const {
+      month,
+      year,
+      type_employe,
+      statut_paiement,
       confirme_reception,
       demande_paiement,
-      search 
+      search
     } = req.query;
 
     const targetMonth = month || new Date().getMonth() + 1;
@@ -1919,7 +2135,7 @@ router.get('/salaries-detailed', authorize('manager', 'admin'), async (req, res)
       WHERE u.id_departement = ?
       AND s.mois = ? AND s.annee = ?
     `;
-    
+
     const params = [id_departement, targetMonth, targetYear];
 
     // Filtres
@@ -2156,7 +2372,7 @@ router.get('/payment-requests', authorize('manager', 'admin'), async (req, res) 
        WHERE u.id_departement = ?
        AND dps.mois = ? AND dps.annee = ?
     `;
-    
+
     const params = [id_departement, targetMonth, targetYear];
 
     if (statut && statut !== 'all') {
@@ -2179,7 +2395,7 @@ router.get('/payment-requests', authorize('manager', 'admin'), async (req, res) 
 // POST /api/manager/salaries/:id/pay - Payer un salaire
 router.post('/salaries/:id/pay', authorize('manager', 'admin'), async (req, res) => {
   const connection = await pool.getConnection();
-  
+
   try {
     const { id: managerId, id_departement } = req.user;
     const { id: salaryId } = req.params;
@@ -2243,7 +2459,7 @@ router.post('/salaries/:id/pay', authorize('manager', 'admin'), async (req, res)
       `INSERT INTO traces (id_utilisateur, module, type_action, action_details, table_affectee, id_enregistrement)
        VALUES (?, 'rh', 'paiement_salaire', ?, 'salaires', ?)`,
       [
-        managerId, 
+        managerId,
         `Paiement salaire ${salary[0].nom_complet} - ${salary[0].mois}/${salary[0].annee} - ${salary[0].salaire_net} BIF`,
         salaryId
       ]
@@ -2262,8 +2478,8 @@ router.post('/salaries/:id/pay', authorize('manager', 'admin'), async (req, res)
 
     await connection.commit();
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Salaire payé avec succès',
       data: {
         id: salaryId,
@@ -2286,7 +2502,7 @@ router.post('/salaries/:id/pay', authorize('manager', 'admin'), async (req, res)
 // POST /api/manager/salaries/pay-multiple - Payer plusieurs salaires
 router.post('/salaries/pay-multiple', authorize('manager', 'admin'), async (req, res) => {
   const connection = await pool.getConnection();
-  
+
   try {
     const { id: managerId, id_departement } = req.user;
     const { salary_ids, mode_paiement, date_paiement, notes } = req.body;
@@ -2318,7 +2534,7 @@ router.post('/salaries/pay-multiple', authorize('manager', 'admin'), async (req,
     const alreadyPaid = salaries.filter(s => s.statut_paiement === 'payé');
     if (alreadyPaid.length > 0) {
       await connection.rollback();
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Certains salaires sont déjà payés',
         already_paid: alreadyPaid.map(s => ({ id: s.id, nom: s.nom_complet }))
       });
@@ -2384,15 +2600,15 @@ router.post('/salaries/pay-multiple', authorize('manager', 'admin'), async (req,
       `INSERT INTO traces (id_utilisateur, module, type_action, action_details)
        VALUES (?, 'rh', 'paiement_salaire_multiple', ?)`,
       [
-        managerId, 
+        managerId,
         `Paiement groupé de ${salary_ids.length} salaires - Total: ${totalAmount} BIF`
       ]
     );
 
     await connection.commit();
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: `${salary_ids.length} salaire(s) payé(s) avec succès`,
       data: {
         count: salary_ids.length,
@@ -2414,9 +2630,9 @@ router.post('/salaries/pay-multiple', authorize('manager', 'admin'), async (req,
 });
 
 // POST /api/manager/payment-requests/:id/process - Traiter une demande de paiement
-router.post('/payment-requests/:id/process',authorize('manager', 'admin'), async (req, res) => {
+router.post('/payment-requests/:id/process', authorize('manager', 'admin'), async (req, res) => {
   const connection = await pool.getConnection();
-  
+
   try {
     const { id: managerId, id_departement } = req.user;
     const { id: requestId } = req.params;
@@ -2520,16 +2736,16 @@ router.post('/payment-requests/:id/process',authorize('manager', 'admin'), async
       `INSERT INTO traces (id_utilisateur, module, type_action, action_details)
        VALUES (?, 'rh', 'traitement_demande_paiement', ?)`,
       [
-        managerId, 
+        managerId,
         `${action === 'approve' ? 'Approbation' : 'Rejet'} demande paiement ${request[0].nom_complet}`
       ]
     );
 
     await connection.commit();
 
-    res.json({ 
-      success: true, 
-      message: `Demande ${action === 'approve' ? 'approuvée et payée' : 'rejetée'}` 
+    res.json({
+      success: true,
+      message: `Demande ${action === 'approve' ? 'approuvée et payée' : 'rejetée'}`
     });
 
   } catch (error) {
@@ -2544,7 +2760,7 @@ router.post('/payment-requests/:id/process',authorize('manager', 'admin'), async
 // POST /api/manager/salaries/:id/send-reminder - Envoyer un rappel de confirmation
 router.post('/salaries/:id/send-reminder', authorize('manager', 'admin'), async (req, res) => {
   const connection = await pool.getConnection();
-  
+
   try {
     const { id: managerId, id_departement } = req.user;
     const { id: salaryId } = req.params;
@@ -2596,9 +2812,9 @@ router.post('/salaries/:id/send-reminder', authorize('manager', 'admin'), async 
 
     await connection.commit();
 
-    res.json({ 
-      success: true, 
-      message: 'Rappel envoyé avec succès' 
+    res.json({
+      success: true,
+      message: 'Rappel envoyé avec succès'
     });
 
   } catch (error) {
@@ -2676,10 +2892,10 @@ router.get('/salary-statistics', authorize('manager', 'admin'), async (req, res)
       annee: targetYear,
       evolution_mensuelle: monthlyEvolution || [],
       par_type_employe: byType || [],
-      taux_confirmation: confirmationRate[0] || { 
-        total_salaires_payes: 0, 
-        total_confirmes: 0, 
-        taux_confirmation: 0 
+      taux_confirmation: confirmationRate[0] || {
+        total_salaires_payes: 0,
+        total_confirmes: 0,
+        taux_confirmation: 0
       }
     });
 
@@ -2690,7 +2906,7 @@ router.get('/salary-statistics', authorize('manager', 'admin'), async (req, res)
 });
 
 // POST /api/manager/generate-salary-report - Générer rapport salaires
-router.post('/generate-salary-report',authorize('manager', 'admin'), async (req, res) => {
+router.post('/generate-salary-report', authorize('manager', 'admin'), async (req, res) => {
   try {
     const { id_departement } = req.user;
     const { month, year, format = 'excel', type = 'complete' } = req.body;
@@ -2700,7 +2916,7 @@ router.post('/generate-salary-report',authorize('manager', 'admin'), async (req,
 
     // Récupérer les données
     const [dept] = await pool.query('SELECT * FROM departements WHERE id = ?', [id_departement]);
-    
+
     const [salaries] = await pool.query(
       `SELECT 
         s.*,
@@ -2734,9 +2950,9 @@ router.post('/generate-salary-report',authorize('manager', 'admin'), async (req,
       fs.mkdirSync(reportsDir, { recursive: true });
     }
 
-    const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 
-                        'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-    const fileName = `Rapport_Salaires_${dept[0]?.nom || 'Dept'}_${monthNames[targetMonth-1]}_${targetYear}.${format === 'excel' ? 'xlsx' : 'pdf'}`;
+    const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+      'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+    const fileName = `Rapport_Salaires_${dept[0]?.nom || 'Dept'}_${monthNames[targetMonth - 1]}_${targetYear}.${format === 'excel' ? 'xlsx' : 'pdf'}`;
     const filePath = path.join(reportsDir, fileName);
 
     if (format === 'excel') {
@@ -2746,7 +2962,7 @@ router.post('/generate-salary-report',authorize('manager', 'admin'), async (req,
       // En-tête
       sheet.mergeCells('A1:M1');
       const titleCell = sheet.getCell('A1');
-      titleCell.value = `RAPPORT DE SALAIRES - ${monthNames[targetMonth-1]} ${targetYear}`;
+      titleCell.value = `RAPPORT DE SALAIRES - ${monthNames[targetMonth - 1]} ${targetYear}`;
       titleCell.font = { size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
       titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E86C1' } };
       titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -2756,15 +2972,15 @@ router.post('/generate-salary-report',authorize('manager', 'admin'), async (req,
       sheet.getCell('A3').value = 'Département:';
       sheet.getCell('B3').value = dept[0]?.nom || '';
       sheet.getCell('A4').value = 'Période:';
-      sheet.getCell('B4').value = `${monthNames[targetMonth-1]} ${targetYear}`;
+      sheet.getCell('B4').value = `${monthNames[targetMonth - 1]} ${targetYear}`;
       sheet.getCell('A5').value = 'Nombre d\'employés:';
       sheet.getCell('B5').value = salaries.length;
       sheet.getCell('A6').value = 'Payés:';
       sheet.getCell('B6').value = payes;
 
       // En-têtes colonnes
-      const headers = ['Matricule', 'Nom Complet', 'Type', 'Salaire Brut', 'INSS', 'Impôts', 
-                       'Autres Déd.', 'Primes', 'Salaire Net', 'Mode Paiement', 'Statut', 'Date Paiement', 'Référence'];
+      const headers = ['Matricule', 'Nom Complet', 'Type', 'Salaire Brut', 'INSS', 'Impôts',
+        'Autres Déd.', 'Primes', 'Salaire Net', 'Mode Paiement', 'Statut', 'Date Paiement', 'Référence'];
       headers.forEach((h, i) => {
         const cell = sheet.getCell(8, i + 1);
         cell.value = h;
@@ -2845,9 +3061,9 @@ router.post('/generate-salary-report',authorize('manager', 'admin'), async (req,
 
   } catch (error) {
     console.error('Error generating salary report:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Erreur lors de la génération du rapport',
-      details: error.message 
+      details: error.message
     });
   }
 });

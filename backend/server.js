@@ -88,6 +88,7 @@ const OperationsRoutes = require('./api/routes/operationsRoutes');
 const commercialRoutes = require('./api/routes/commercialRoutes');
 const rhsRoutes = require('./api/routes/rhRoutes');
 const systemRoutes = require('./api/routes/systemRoutes');
+const uploadRoutes = require('./api/routes/uploadRoutes');
 
 // ============================================
 // INITIALISATION DE L'APPLICATION
@@ -232,7 +233,8 @@ app.use(cors({
         'Authorization',
         'X-Requested-With',
         'Accept',
-        'Origin'
+        'Origin',
+        'Cache-Control'
     ],
     exposedHeaders: ['X-Total-Count', 'X-Auth-Token'],
     maxAge: 86400 // 24 heures
@@ -429,6 +431,7 @@ app.use('/api/finance', managerLimiter, financelRoutes);
 app.use('/api/operations', managerLimiter, OperationsRoutes);
 app.use('/api/personnel', managerLimiter, rhsRoutes);
 app.use('/api/system', managerLimiter, systemRoutes);
+app.use('/api/upload', managerLimiter, uploadRoutes);
 
 
 // Route de test basique

@@ -611,13 +611,13 @@ router.post('/vehicules', authenticate, authorize('admin', 'manager'), async (re
             immatriculation,
             marque,
             modele,
-            annee,
+            parseInt(annee, 10),
             couleur,
             type_vehicule,
-            capacite_carburant,
-            consommation_moyenne,
-            kilometrage_actuel || 0,
-            date_achat || new Date(),
+            parseFloat(capacite_carburant) || 0,
+            parseFloat(consommation_moyenne) || 0,
+            Math.round(parseFloat(kilometrage_actuel) || 0),
+            (date_achat ? new Date(date_achat) : new Date()).toISOString().split('T')[0],
             prix_achat,
             valeur_actuelle || prix_achat,
             id_chauffeur_attitre,
@@ -1319,11 +1319,12 @@ router.get('/parcelles', authenticate, authorize('admin', 'manager', 'agriculteu
         let sql = `
             SELECT 
                 p.*,
-                c.nom_culture as culture_actuelle,
+                tc.nom_culture as culture_actuelle, 
                 c.date_semaison as date_plantation,
                 c.date_recolte_prevue
             FROM parcelles p
             LEFT JOIN cultures c ON p.id_culture_actuelle = c.id AND c.statut = 'en_cours'
+            LEFT JOIN types_cultures tc ON c.id_type_culture = tc.id
             WHERE 1=1
         `;
         const params = [];
@@ -1366,8 +1367,10 @@ router.post('/parcelles', authenticate, authorize('admin', 'manager'), async (re
             nom_parcelle,
             superficie_hectares,
             localisation,
+
             coordonnees_gps,
             type_sol,
+
             ph_sol,
             taux_humidite,
             irrigation_installee,
@@ -1375,6 +1378,8 @@ router.post('/parcelles', authenticate, authorize('admin', 'manager'), async (re
             loyer_annuel,
             photo
         } = req.body;
+
+        const loyerAnnuelValue = loyer_annuel === '' ? null : loyer_annuel;
 
         // Validation
         if (!reference || !nom_parcelle || !superficie_hectares || !localisation || !type_sol) {
@@ -1403,7 +1408,7 @@ router.post('/parcelles', authenticate, authorize('admin', 'manager'), async (re
             taux_humidite,
             irrigation_installee || 0,
             proprietaire || 'propre',
-            loyer_annuel
+            loyerAnnuelValue
         ]);
 
         res.status(201).json({
@@ -1861,13 +1866,18 @@ router.post('/animaux', authenticate, authorize('admin', 'manager', 'veterinaire
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'vivant', 'bon')
         `;
 
+        const formatDate = (date) => {
+            if (!date) return null;
+            return new Date(date).toISOString().split('T')[0];
+        };
+
         const result = await db.query(sql, [
             numero_identification,
             nom_animal,
             espece,
             race,
             sexe,
-            date_naissance,
+            formatDate(date_naissance),
             poids_naissance,
             poids_actuel || poids_naissance,
             couleur,
@@ -1877,7 +1887,7 @@ router.post('/animaux', authenticate, authorize('admin', 'manager', 'veterinaire
             id_mere,
             id_pere,
             prix_achat,
-            date_acquisition || new Date(),
+            formatDate(date_acquisition || new Date()),
             photo,
             certificat_veterinaire
         ]);
@@ -1994,7 +2004,7 @@ router.delete('/animaux/:id', authenticate, authorize('admin', 'manager'), async
 
         await db.query(
             'UPDATE animaux SET statut = "decede", date_sortie = ?, raison_sortie = ? WHERE id = ?',
-            [date_sortie || new Date(), raison_sortie || 'Non spécifié', id]
+            [(date_sortie ? new Date(date_sortie) : new Date()).toISOString().split('T')[0], raison_sortie || 'Non spécifié', id]
         );
 
         res.status(200).json({
@@ -2056,7 +2066,7 @@ router.post('/suivis-sanitaires', authenticate, authorize('admin', 'manager', 'v
         const result = await db.query(sql, [
             id_animal,
             type_intervention,
-            date_intervention || new Date(),
+            (date_intervention ? new Date(date_intervention) : new Date()).toISOString().split('T')[0],
             symptomes,
             diagnostic,
             produit_utilise,
@@ -2064,7 +2074,7 @@ router.post('/suivis-sanitaires', authenticate, authorize('admin', 'manager', 'v
             mode_administration,
             veterinaire,
             id_technicien || req.userId,
-            date_prochaine_visite,
+            date_prochaine_visite ? new Date(date_prochaine_visite).toISOString().split('T')[0] : null,
             instructions_suivi,
             observations,
             cout_intervention || 0
@@ -2079,7 +2089,11 @@ router.post('/suivis-sanitaires', authenticate, authorize('admin', 'manager', 'v
         } else if (type_intervention === 'vaccination') {
             await db.query(
                 'UPDATE animaux SET derniere_vaccination = ?, prochaine_vaccination = ? WHERE id = ?',
-                [date_intervention || new Date(), date_prochaine_visite, id_animal]
+                [
+                    (date_intervention ? new Date(date_intervention) : new Date()).toISOString().split('T')[0],
+                    date_prochaine_visite ? new Date(date_prochaine_visite).toISOString().split('T')[0] : null,
+                    id_animal
+                ]
             );
         }
 
@@ -2168,7 +2182,7 @@ router.post('/productions-lait', authenticate, authorize('admin', 'manager', 've
 
         const result = await db.query(sql, [
             id_animal,
-            date_production || new Date(),
+            (date_production ? new Date(date_production) : new Date()).toISOString().split('T')[0],
             quantite_litres,
             taux_matiere_grasse,
             taux_proteine,
@@ -2244,7 +2258,7 @@ router.post('/productions-oeufs', authenticate, authorize('admin', 'manager'), a
 
         const result = await db.query(sql, [
             id_poulailler,
-            date_recolte || new Date(),
+            (date_recolte ? new Date(date_recolte) : new Date()).toISOString().split('T')[0],
             nombre_oeufs,
             oeufs_casses || 0,
             oeufs_sales || 0,
@@ -2459,6 +2473,81 @@ router.get('/stats/elevage', authenticate, authorize('admin', 'manager', 'veteri
         res.status(500).json({
             success: false,
             message: 'Erreur lors de la récupération des statistiques.'
+        });
+    }
+});
+
+/**
+ * GET /suivis-sanitaires - Liste des suivis sanitaires
+ */
+router.get('/suivis-sanitaires', authenticate, authorize('admin', 'manager', 'veterinaire'), async (req, res) => {
+    try {
+        // On essaie de joindre avec animaux si possible, sinon on fait un select simple
+        const sql = `
+            SELECT ss.*, a.numero_identification, a.nom_animal 
+            FROM suivis_sanitaires ss
+            LEFT JOIN animaux a ON ss.id_animal = a.id 
+            ORDER BY ss.date_intervention DESC
+        `;
+        const [suivis] = await db.query(sql);
+        res.status(200).json({
+            success: true,
+            data: suivis
+        });
+    } catch (error) {
+        console.error('Get suivis sanitaires error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors de la récupération des suivis sanitaires.'
+        });
+    }
+});
+
+/**
+ * GET /productions-lait - Historique production lait
+ */
+router.get('/productions-lait', authenticate, authorize('admin', 'manager', 'veterinaire'), async (req, res) => {
+    try {
+        const sql = `
+            SELECT pl.*, a.numero_identification, a.nom_animal 
+            FROM productions_lait pl
+            LEFT JOIN animaux a ON pl.id_animal = a.id 
+            ORDER BY pl.date_production DESC
+        `;
+        const [productions] = await db.query(sql);
+        res.status(200).json({
+            success: true,
+            data: productions
+        });
+    } catch (error) {
+        console.error('Get productions lait error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors de la récupération de la production de lait.'
+        });
+    }
+});
+
+/**
+ * GET /productions-oeufs - Historique production oeufs
+ */
+router.get('/productions-oeufs', authenticate, authorize('admin', 'manager', 'veterinaire'), async (req, res) => {
+    try {
+        const sql = `
+            SELECT po.* 
+            FROM productions_oeufs po
+            ORDER BY po.date_recolte DESC
+        `;
+        const [productions] = await db.query(sql);
+        res.status(200).json({
+            success: true,
+            data: productions
+        });
+    } catch (error) {
+        console.error('Get productions oeufs error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors de la récupération de la production d\'oeufs.'
         });
     }
 });

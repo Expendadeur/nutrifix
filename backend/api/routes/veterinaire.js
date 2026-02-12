@@ -10,15 +10,15 @@ router.get('/dashboard', authenticate, authorize('veterinaire'), async (req, res
         const userId = req.userId;
 
         // Récupérer les informations du vétérinaire
-        const userSql = `
-            SELECT 
-                u.*,
-                d.nom as departement_nom
-            FROM utilisateurs u
-            LEFT JOIN departements d ON u.id_departement = d.id
-            WHERE u.id = ?
-        `;
-        const [veterinaire] = await db.query(userSql, [userId]);
+        const resultsVet = await db.query(userSql, [userId]);
+        const veterinaire = (resultsVet && resultsVet.length > 0) ? resultsVet[0] : null;
+
+        if (!veterinaire) {
+            return res.status(404).json({
+                success: false,
+                message: 'Vétérinaire non trouvé.'
+            });
+        }
 
         // Supprimer le mot de passe
         delete veterinaire.mot_de_passe_hash;
@@ -57,10 +57,11 @@ router.get('/dashboard', authenticate, authorize('veterinaire'), async (req, res
                  AND id_technicien = ?) as totalInterventions
         `;
 
-        const [stats] = await db.query(statsSql, [
+        const resultsStats = await db.query(statsSql, [
             userId,
             currentMonth, currentYear, userId
         ]);
+        const stats = (resultsStats && resultsStats.length > 0) ? resultsStats[0] : {};
 
         // Interventions aujourd'hui
         const interventionsTodaySql = `
@@ -244,43 +245,8 @@ router.get('/animaux', authenticate, authorize('veterinaire'), async (req, res) 
 
         const animaux = await db.query(sql, params);
 
-        // Count total
-        let countSql = `
-            SELECT COUNT(*) as total
-            FROM animaux a
-            WHERE a.statut = 'vivant'
-        `;
-        const countParams = [];
-
-        if (espece) {
-            countSql += ' AND a.espece = ?';
-            countParams.push(espece);
-        }
-
-        if (statut === 'surveillance') {
-            countSql += ' AND a.statut_sante IN ("moyen", "malade", "en_traitement")';
-        } else if (statut === 'healthy') {
-            countSql += ' AND a.statut_sante IN ("excellent", "bon")';
-        } else if (statut === 'en_traitement') {
-            countSql += ' AND a.statut_sante = "en_traitement"';
-        }
-
-        if (type_animal) {
-            countSql += ' AND a.type_animal = ?';
-            countParams.push(type_animal);
-        }
-
-        if (search) {
-            countSql += ` AND (
-                a.numero_identification LIKE ? OR 
-                a.nom_animal LIKE ? OR 
-                a.marques_distinctives LIKE ?
-            )`;
-            const searchTerm = `%${search}%`;
-            countParams.push(searchTerm, searchTerm, searchTerm);
-        }
-
-        const [countResult] = await db.query(countSql, countParams);
+        const resultsCountAllVet = await db.query(countSql, countParams);
+        const countResult = (resultsCountAllVet && resultsCountAllVet.length > 0) ? resultsCountAllVet[0] : { total: 0 };
 
         res.status(200).json({
             success: true,
@@ -317,8 +283,9 @@ router.get('/animaux/:id', authenticate, authorize('veterinaire'), async (req, r
             WHERE a.id = ?
         `;
 
-        const [animal] = await db.query(sql, [animalId]);
-        
+        const resultsAnimalId = await db.query(sql, [animalId]);
+        const animal = (resultsAnimalId && resultsAnimalId.length > 0) ? resultsAnimalId[0] : null;
+
         if (!animal) {
             return res.status(404).json({
                 success: false,
@@ -441,7 +408,8 @@ router.get('/animaux/:id/historique', authenticate, authorize('veterinaire'), as
             FROM suivis_sanitaires 
             WHERE id_animal = ?
         `;
-        const [countResult] = await db.query(countSql, [animalId]);
+        const resultsCountHist = await db.query(countSql, [animalId]);
+        const countResult = (resultsCountHist && resultsCountHist.length > 0) ? resultsCountHist[0] : { total: 0 };
 
         res.status(200).json({
             success: true,
@@ -554,57 +522,8 @@ router.get('/interventions', authenticate, authorize('veterinaire'), async (req,
 
         const interventions = await db.query(sql, params);
 
-        // Count total
-        let countSql = `
-            SELECT COUNT(*) as total
-            FROM suivis_sanitaires ss
-            JOIN animaux a ON ss.id_animal = a.id
-            LEFT JOIN utilisateurs u ON ss.id_technicien = u.id
-            WHERE 1=1
-        `;
-        const countParams = [];
-
-        if (filter === 'today') {
-            countSql += ' AND DATE(ss.date_intervention) = CURDATE()';
-        } else if (filter === 'vaccinations') {
-            countSql += ' AND ss.type_intervention = "vaccination"';
-        } else if (filter === 'traitements') {
-            countSql += ' AND ss.type_intervention = "traitement"';
-        } else if (filter === 'urgents') {
-            countSql += ' AND (ss.observations LIKE "%urgent%" OR ss.observations LIKE "%urgence%")';
-        }
-
-        if (type_intervention) {
-            countSql += ' AND ss.type_intervention = ?';
-            countParams.push(type_intervention);
-        }
-
-        if (startDate) {
-            countSql += ' AND DATE(ss.date_intervention) >= ?';
-            countParams.push(startDate);
-        }
-
-        if (endDate) {
-            countSql += ' AND DATE(ss.date_intervention) <= ?';
-            countParams.push(endDate);
-        }
-
-        if (id_animal) {
-            countSql += ' AND ss.id_animal = ?';
-            countParams.push(id_animal);
-        }
-
-        if (search) {
-            countSql += ` AND (
-                a.numero_identification LIKE ? OR 
-                a.nom_animal LIKE ? OR 
-                u.nom_complet LIKE ?
-            )`;
-            const searchTerm = `%${search}%`;
-            countParams.push(searchTerm, searchTerm, searchTerm);
-        }
-
-        const [countResult] = await db.query(countSql, countParams);
+        const resultsCountInterv = await db.query(countSql, countParams);
+        const countResult = (resultsCountInterv && resultsCountInterv.length > 0) ? resultsCountInterv[0] : { total: 0 };
 
         res.status(200).json({
             success: true,
@@ -653,8 +572,8 @@ router.post('/interventions', authenticate, authorize('veterinaire'), async (req
         }
 
         // Vérifier que l'animal existe et est vivant
-        const animalSql = 'SELECT statut FROM animaux WHERE id = ?';
-        const [animal] = await db.query(animalSql, [id_animal]);
+        const resultsAnimalCheck = await db.query(animalSql, [id_animal]);
+        const animal = (resultsAnimalCheck && resultsAnimalCheck.length > 0) ? resultsAnimalCheck[0] : null;
 
         if (!animal || animal.statut !== 'vivant') {
             return res.status(400).json({
@@ -681,13 +600,13 @@ router.post('/interventions', authenticate, authorize('veterinaire'), async (req
             const [result] = await db.execute(insertSql, [
                 id_animal,
                 type_intervention,
-                date_intervention,
+                (date_intervention ? new Date(date_intervention) : new Date()).toISOString().split('T')[0],
                 symptomes || null,
                 diagnostic,
                 produit_utilise || null,
                 dosage || null,
                 mode_administration || null,
-                date_prochaine_visite || null,
+                date_prochaine_visite ? new Date(date_prochaine_visite).toISOString().split('T')[0] : null,
                 instructions_suivi || null,
                 observations || null,
                 cout_intervention || 0,
@@ -713,8 +632,8 @@ router.post('/interventions', authenticate, authorize('veterinaire'), async (req
                          prochaine_vaccination = DATE_ADD(?, INTERVAL 6 MONTH)
                      WHERE id = ?`,
                     [
-                        date_intervention,
-                        date_intervention,
+                        (date_intervention ? new Date(date_intervention) : new Date()).toISOString().split('T')[0],
+                        (date_intervention ? new Date(date_intervention) : new Date()).toISOString().split('T')[0],
                         id_animal
                     ]
                 );
@@ -787,8 +706,9 @@ router.get('/interventions/:id', authenticate, authorize('veterinaire'), async (
             WHERE ss.id = ?
         `;
 
-        const [intervention] = await db.query(sql, [interventionId]);
-        
+        const resultsIntervDetails = await db.query(sql, [interventionId]);
+        const intervention = (resultsIntervDetails && resultsIntervDetails.length > 0) ? resultsIntervDetails[0] : null;
+
         if (!intervention) {
             return res.status(404).json({
                 success: false,
@@ -816,8 +736,8 @@ router.put('/interventions/:id', authenticate, authorize('veterinaire'), async (
         const updateData = req.body;
 
         // Vérifier que l'intervention existe
-        const checkSql = 'SELECT id FROM suivis_sanitaires WHERE id = ?';
-        const [intervention] = await db.query(checkSql, [interventionId]);
+        const resultsCheckInterv = await db.query(checkSql, [interventionId]);
+        const intervention = (resultsCheckInterv && resultsCheckInterv.length > 0) ? resultsCheckInterv[0] : null;
 
         if (!intervention) {
             return res.status(404).json({
@@ -856,7 +776,7 @@ router.put('/interventions/:id', authenticate, authorize('veterinaire'), async (
         }
         if (updateData.date_prochaine_visite !== undefined) {
             fields.push('date_prochaine_visite = ?');
-            params.push(updateData.date_prochaine_visite);
+            params.push(updateData.date_prochaine_visite ? new Date(updateData.date_prochaine_visite).toISOString().split('T')[0] : null);
         }
 
         // Toujours mettre à jour la date de modification
@@ -897,16 +817,8 @@ router.get('/profil', authenticate, authorize('veterinaire'), async (req, res) =
         const userId = req.userId;
 
         // Informations utilisateur
-        const userSql = `
-            SELECT 
-                u.*,
-                d.nom as departement_nom,
-                d.type as departement_type
-            FROM utilisateurs u
-            LEFT JOIN departements d ON u.id_departement = d.id
-            WHERE u.id = ?
-        `;
-        const [user] = await db.query(userSql, [userId]);
+        const resultsUserProfile = await db.query(userSql, [userId]);
+        const user = (resultsUserProfile && resultsUserProfile.length > 0) ? resultsUserProfile[0] : null;
 
         // Supprimer le mot de passe
         delete user.mot_de_passe_hash;
@@ -940,11 +852,12 @@ router.get('/profil', authenticate, authorize('veterinaire'), async (req, res) =
                  AND statut = 'approuve') as solde_conges
         `;
 
-        const [stats] = await db.query(statsSql, [
+        const resultsStatsProfile = await db.query(statsSql, [
             userId, currentMonth, currentYear,
             userId, currentMonth, currentYear,
             userId, currentYear
         ]);
+        const stats = (resultsStatsProfile && resultsStatsProfile.length > 0) ? resultsStatsProfile[0] : {};
 
         // Présences récentes
         const presencesSql = `
@@ -1079,11 +992,12 @@ router.get('/statistiques', authenticate, authorize('veterinaire'), async (req, 
                  AND YEAR(date_intervention) = ?) as cout_total_mois
         `;
 
-        const [generalStats] = await db.query(generalSql, [
+        const resultsGeneralStats = await db.query(generalSql, [
             currentMonth, currentYear,
             currentMonth, currentYear,
             currentMonth, currentYear
         ]);
+        const generalStats = (resultsGeneralStats && resultsGeneralStats.length > 0) ? resultsGeneralStats[0] : {};
 
         // Interventions par type ce mois
         const interventionsByTypeSql = `
@@ -1197,25 +1111,8 @@ router.get('/salaires/historique', authenticate, authorize('veterinaire'), async
 
         const salaires = await db.query(sql, params);
 
-        // Count total
-        let countSql = `
-            SELECT COUNT(*) as total
-            FROM salaires
-            WHERE id_utilisateur = ?
-        `;
-        const countParams = [userId];
-
-        if (annee) {
-            countSql += ' AND annee = ?';
-            countParams.push(parseInt(annee));
-        }
-
-        if (statut) {
-            countSql += ' AND statut_paiement = ?';
-            countParams.push(statut);
-        }
-
-        const [countResult] = await db.query(countSql, countParams);
+        const resultsCountSal = await db.query(countSql, countParams);
+        const countResult = (resultsCountSal && resultsCountSal.length > 0) ? resultsCountSal[0] : { total: 0 };
 
         res.status(200).json({
             success: true,
@@ -1273,7 +1170,8 @@ router.get('/salaires/:id', authenticate, authorize('veterinaire'), async (req, 
             AND s.id_utilisateur = ?
         `;
 
-        const [salaire] = await db.query(sql, [salaireId, userId]);
+        const resultsSalaireDet = await db.query(sql, [salaireId, userId]);
+        const salaire = (resultsSalaireDet && resultsSalaireDet.length > 0) ? resultsSalaireDet[0] : null;
 
         if (!salaire) {
             return res.status(404).json({
@@ -1301,15 +1199,8 @@ router.post('/salaires/:id/demander-paiement', authenticate, authorize('veterina
         const salaireId = parseInt(req.params.id);
         const userId = req.userId;
 
-        // Vérifier que le salaire existe et appartient à l'utilisateur
-        const checkSql = `
-            SELECT s.*, u.nom_complet, u.email
-            FROM salaires s
-            JOIN utilisateurs u ON s.id_utilisateur = u.id
-            WHERE s.id = ?
-            AND s.id_utilisateur = ?
-        `;
-        const [salaire] = await db.query(checkSql, [salaireId, userId]);
+        const resultsSalaireCheck = await db.query(checkSql, [salaireId, userId]);
+        const salaire = (resultsSalaireCheck && resultsSalaireCheck.length > 0) ? resultsSalaireCheck[0] : null;
 
         if (!salaire) {
             return res.status(404).json({
@@ -1332,7 +1223,8 @@ router.post('/salaires/:id/demander-paiement', authenticate, authorize('veterina
             WHERE id_salaire = ?
             AND statut = 'en_attente'
         `;
-        const [demandeExistante] = await db.query(checkDemandeSql, [salaireId]);
+        const resultsDemandeExistant = await db.query(checkDemandeSql, [salaireId]);
+        const demandeExistante = (resultsDemandeExistant && resultsDemandeExistant.length > 0) ? resultsDemandeExistant[0] : null;
 
         if (demandeExistante) {
             return res.status(400).json({
@@ -1420,13 +1312,8 @@ router.post('/salaires/:id/confirmer-reception', authenticate, authorize('veteri
         const userId = req.userId;
         const { code_verification } = req.body;
 
-        // Vérifier que le salaire existe et appartient à l'utilisateur
-        const checkSql = `
-            SELECT * FROM salaires
-            WHERE id = ?
-            AND id_utilisateur = ?
-        `;
-        const [salaire] = await db.query(checkSql, [salaireId, userId]);
+        const resultsSalaireRec = await db.query(checkSql, [salaireId, userId]);
+        const salaire = (resultsSalaireRec && resultsSalaireRec.length > 0) ? resultsSalaireRec[0] : null;
 
         if (!salaire) {
             return res.status(404).json({
@@ -1461,7 +1348,8 @@ router.post('/salaires/:id/confirmer-reception', authenticate, authorize('veteri
                 AND date_expiration > NOW()
                 AND utilise = 0
             `;
-            const [codeVerif] = await db.query(verifSql, [salaireId, userId, code_verification]);
+            const resultsCodeVerif = await db.query(verifSql, [salaireId, userId, code_verification]);
+            const codeVerif = (resultsCodeVerif && resultsCodeVerif.length > 0) ? resultsCodeVerif[0] : null;
 
             if (!codeVerif) {
                 // Incrémenter les tentatives échouées
@@ -1749,7 +1637,8 @@ router.get('/statistiques/interventions-mensuelles', authenticate, authorize('ve
             AND YEAR(date_intervention) = ?
         `;
 
-        const [totaux] = await db.query(totalSql, [userId, parseInt(annee)]);
+        const resultsTotauxAnnuel = await db.query(totalSql, [userId, parseInt(annee)]);
+        const totaux = (resultsTotauxAnnuel && resultsTotauxAnnuel.length > 0) ? resultsTotauxAnnuel[0] : {};
 
         res.status(200).json({
             success: true,

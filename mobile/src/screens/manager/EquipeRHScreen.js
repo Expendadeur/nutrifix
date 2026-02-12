@@ -59,7 +59,7 @@ const EquipeRHScreen = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [authToken, setAuthToken] = useState(null);
-  
+
   // Employés
   const [employees, setEmployees] = useState([]);
   const [filteredEmployees, setFilteredEmployees] = useState([]);
@@ -108,6 +108,11 @@ const EquipeRHScreen = () => {
   // Menu
   const [menuVisible, setMenuVisible] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState({ x: 0, y: 0 });
+
+  // Notification Modal
+  const [notificationModalVisible, setNotificationModalVisible] = useState(false);
+  const [notifySubject, setNotifySubject] = useState('');
+  const [notifyMessage, setNotifyMessage] = useState('');
 
   // Récupérer le token au montage
   useEffect(() => {
@@ -165,128 +170,128 @@ const EquipeRHScreen = () => {
     }
   );
 
-const loadData = async () => {
-  try {
-    setLoading(true);
-    
-    switch(activeTab) {
-      case 'employes':
-        await loadEmployees();
-        break;
-      case 'presences':
-        await loadPresences();
-        break;
-      case 'conges':
-        await loadLeaveRequests();
-        break;
-      case 'salaires':
-        await loadSalaries();
-        await loadPaymentRequests();
-        break;
-      case 'performance':
-        await loadPerformance();
-        break;
+  const loadData = async () => {
+    try {
+      setLoading(true);
+
+      switch (activeTab) {
+        case 'employes':
+          await loadEmployees();
+          break;
+        case 'presences':
+          await loadPresences();
+          break;
+        case 'conges':
+          await loadLeaveRequests();
+          break;
+        case 'salaires':
+          await loadSalaries();
+          await loadPaymentRequests();
+          break;
+        case 'performance':
+          await loadPerformance();
+          break;
+      }
+    } catch (error) {
+      console.error('Error loading data:', error);
+      // Don't show alert on every error to avoid spamming
+      // Alert.alert('Erreur', 'Impossible de charger les données');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-  } catch (error) {
-    console.error('Error loading data:', error);
-    // Don't show alert on every error to avoid spamming
-    // Alert.alert('Erreur', 'Impossible de charger les données');
-  } finally {
-    setLoading(false);
-    setRefreshing(false);
-  }
-};
+  };
 
-const loadEmployees = async () => {
-  try {
-    const response = await apiClient.get('/manager/employees', {
-      params: { role: filterRole, statut: filterStatus, search: searchQuery }
-    });
-    setEmployees(Array.isArray(response.data) ? response.data : []);
-    setFilteredEmployees(Array.isArray(response.data) ? response.data : []);
-  } catch (error) {
-    console.error('Error loading employees:', error);
-    setEmployees([]);
-    setFilteredEmployees([]);
-    throw error;
-  }
-};
+  const loadEmployees = async () => {
+    try {
+      const response = await apiClient.get('/manager/employees', {
+        params: { role: filterRole, statut: filterStatus, search: searchQuery }
+      });
+      setEmployees(Array.isArray(response.data) ? response.data : []);
+      setFilteredEmployees(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error('Error loading employees:', error);
+      setEmployees([]);
+      setFilteredEmployees([]);
+      throw error;
+    }
+  };
 
-const loadPresences = async () => {
-  try {
-    const dateStr = selectedDate.toISOString().split('T')[0];
-    const response = await apiClient.get('/manager/presences', {
-      params: { date: dateStr }
-    });
-    setPresences(Array.isArray(response.data) ? response.data : []);
-  } catch (error) {
-    console.error('Error loading presences:', error);
-    setPresences([]); // Ensure presences is always an array
-    throw error;
-  }
-};
+  const loadPresences = async () => {
+    try {
+      const dateStr = selectedDate.toISOString().split('T')[0];
+      const response = await apiClient.get('/manager/presences', {
+        params: { date: dateStr }
+      });
+      setPresences(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error('Error loading presences:', error);
+      setPresences([]); // Ensure presences is always an array
+      throw error;
+    }
+  };
 
-const loadLeaveRequests = async () => {
-  try {
-    const response = await apiClient.get('/manager/leave-requests', {
-      params: { filter: leaveFilter }
-    });
-    setLeaveRequests(Array.isArray(response.data) ? response.data : []);
-  } catch (error) {
-    console.error('Error loading leave requests:', error);
-    setLeaveRequests([]);
-    throw error;
-  }
-};
+  const loadLeaveRequests = async () => {
+    try {
+      const response = await apiClient.get('/manager/leave-requests', {
+        params: { filter: leaveFilter }
+      });
+      setLeaveRequests(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error('Error loading leave requests:', error);
+      setLeaveRequests([]);
+      throw error;
+    }
+  };
 
- const loadSalaries = async () => {
-  try {
-    const response = await apiClient.get('/manager/salaries', {
-      params: { month: selectedMonth, year: selectedYear }
-    });
-    setSalaries(Array.isArray(response.data) ? response.data : []);
-  } catch (error) {
-    console.error('Error loading salaries:', error);
-    setSalaries([]);
-    throw error;
-  }
-};
+  const loadSalaries = async () => {
+    try {
+      const response = await apiClient.get('/manager/salaries', {
+        params: { month: selectedMonth, year: selectedYear }
+      });
+      setSalaries(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error('Error loading salaries:', error);
+      setSalaries([]);
+      throw error;
+    }
+  };
 
   // NOUVELLE FONCTIONNALITÉ : Charger les demandes de paiement
- const loadPaymentRequests = async () => {
-  try {
-    const response = await apiClient.get('/manager/payment-requests', {
-      params: { 
-        statut: paymentRequestsFilter,
-        month: selectedMonth,
-        year: selectedYear
-      }
-    });
-    setPaymentRequests(Array.isArray(response.data) ? response.data : []);
-  } catch (error) {
-    console.error('Error loading payment requests:', error);
-    setPaymentRequests([]);
-    throw error;
-  }
-};
+  const loadPaymentRequests = async () => {
+    try {
+      const response = await apiClient.get('/manager/payment-requests', {
+        params: {
+          statut: paymentRequestsFilter,
+          month: selectedMonth,
+          year: selectedYear
+        }
+      });
+      setPaymentRequests(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error('Error loading payment requests:', error);
+      setPaymentRequests([]);
+      throw error;
+    }
+  };
 
 
-const loadPerformance = async () => {
-  try {
-    const response = await apiClient.get('/manager/performance');
-    setPerformanceData(Array.isArray(response.data) ? response.data : []);
-  } catch (error) {
-    console.error('Error loading performance:', error);
-    setPerformanceData([]);
-    throw error;
-  }
-};
+  const loadPerformance = async () => {
+    try {
+      const response = await apiClient.get('/manager/performance');
+      setPerformanceData(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error('Error loading performance:', error);
+      setPerformanceData([]);
+      throw error;
+    }
+  };
 
   const filterEmployees = () => {
     let filtered = employees;
 
     if (searchQuery) {
-      filtered = filtered.filter(emp => 
+      filtered = filtered.filter(emp =>
         emp.nom_complet.toLowerCase().includes(searchQuery.toLowerCase()) ||
         emp.matricule.toLowerCase().includes(searchQuery.toLowerCase()) ||
         emp.email.toLowerCase().includes(searchQuery.toLowerCase())
@@ -309,6 +314,69 @@ const loadPerformance = async () => {
     loadData();
   }, [activeTab, selectedDate, selectedMonth, selectedYear, leaveFilter, paymentRequestsFilter]);
 
+  // =============== ACTIONS RH ===============
+
+  const handleMarkPresence = async (employeeId, statut) => {
+    try {
+      const response = await apiClient.post(`/manager/employees/${employeeId}/mark-presence`, { statut });
+      if (response.data.success) {
+        loadPresences();
+      }
+    } catch (error) {
+      console.error('Error marking presence:', error);
+      Alert.alert('Erreur', 'Impossible de marquer la présence');
+    }
+  };
+
+  const handleToggleStatus = async (employeeId) => {
+    try {
+      const response = await apiClient.post(`/manager/employees/${employeeId}/toggle-status`);
+      if (response.data.success) {
+        Alert.alert('Succès', response.data.message);
+        loadEmployees();
+        loadPresences();
+      }
+    } catch (error) {
+      console.error('Error toggling status:', error);
+      Alert.alert('Erreur', 'Impossible de changer le statut');
+    }
+  };
+
+  const handleSendNotification = async () => {
+    if (!selectedEmployee || !notifySubject || !notifyMessage) {
+      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
+      return;
+    }
+
+    try {
+      const response = await apiClient.post(`/manager/employees/${selectedEmployee.id}/notify`, {
+        sujet: notifySubject,
+        message: notifyMessage
+      });
+      if (response.data.success) {
+        Alert.alert('Succès', 'Notification envoyée');
+        setNotificationModalVisible(false);
+        setNotifySubject('');
+        setNotifyMessage('');
+      }
+    } catch (error) {
+      console.error('Error sending notification:', error);
+      Alert.alert('Erreur', 'Impossible d\'envoyer la notification');
+    }
+  };
+
+  const handleSendVerificationCode = async (requestId) => {
+    try {
+      const response = await apiClient.post(`/manager/payment-requests/${requestId}/send-verification-code`);
+      if (response.data.success) {
+        Alert.alert('Succès', 'Code de vérification envoyé à l\'employé');
+      }
+    } catch (error) {
+      console.error('Error sending verification code:', error);
+      Alert.alert('Erreur', 'Impossible d\'envoyer le code');
+    }
+  };
+
   // =============== EMPLOYÉS ===============
   const renderEmployeeCard = ({ item }) => (
     <TouchableOpacity
@@ -324,7 +392,7 @@ const loadPerformance = async () => {
       }}
     >
       <View style={styles.employeeHeader}>
-        <Avatar.Image 
+        <Avatar.Image
           size={isMobile ? 40 : isTablet ? 45 : 50}
           source={{ uri: item.photo_identite || 'https://via.placeholder.com/50' }}
         />
@@ -336,9 +404,9 @@ const loadPerformance = async () => {
           <Text style={styles.employeeRole}>{getRoleLabel(item.role)}</Text>
         </View>
         <View style={styles.employeeBadges}>
-          <Chip 
-            style={[styles.statusChip, { 
-              backgroundColor: getStatusColor(item.statut) 
+          <Chip
+            style={[styles.statusChip, {
+              backgroundColor: getStatusColor(item.statut)
             }]}
             textStyle={styles.chipText}
           >
@@ -347,9 +415,9 @@ const loadPerformance = async () => {
           <Text style={styles.employeeType}>{item.type_employe}</Text>
         </View>
       </View>
-      
+
       <Divider style={styles.divider} />
-      
+
       <View style={[
         styles.employeeStats,
         isMobile && styles.employeeStatsMobile
@@ -392,7 +460,7 @@ const loadPerformance = async () => {
           <ScrollView showsVerticalScrollIndicator={!isWeb}>
             {/* Header */}
             <View style={styles.modalHeader}>
-              <Avatar.Image 
+              <Avatar.Image
                 size={isMobile ? 50 : 60}
                 source={{ uri: selectedEmployee.photo_identite || 'https://via.placeholder.com/60' }}
               />
@@ -436,8 +504,8 @@ const loadPerformance = async () => {
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Statut:</Text>
-                <Chip style={{ 
-                  backgroundColor: getStatusColor(selectedEmployee.statut) 
+                <Chip style={{
+                  backgroundColor: getStatusColor(selectedEmployee.statut)
                 }}>
                   {selectedEmployee.statut}
                 </Chip>
@@ -540,9 +608,9 @@ const loadPerformance = async () => {
           value={searchQuery}
           style={styles.searchBar}
         />
-        
-        <ScrollView 
-          horizontal 
+
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.chipsContainer}
         >
@@ -577,9 +645,9 @@ const loadPerformance = async () => {
           >
             Inactifs
           </Chip>
-          
+
           <Divider style={styles.chipDivider} />
-          
+
           <Chip
             selected={filterRole === 'all'}
             onPress={() => setFilterRole('all')}
@@ -662,68 +730,115 @@ const loadPerformance = async () => {
 
   // =============== PRÉSENCES ===============
   const renderPresenceItem = ({ item }) => {
-    const isSelected = selectedPresences.includes(item.id);
-    
+    const isSelected = selectedPresences.includes(id_utilisateur_ou_id_presence(item));
+
+    // Helper pour identifier de manière unique (id de la présence ou id de l'employé pour le jour même)
+    function id_utilisateur_ou_id_presence(p) {
+      return p.id || p.id_utilisateur;
+    }
+
     return (
-      <TouchableOpacity
+      <Card
         style={[
           styles.presenceCard,
           isSelected && styles.presenceCardSelected,
           isMobile && styles.presenceCardMobile
         ]}
-        onPress={() => {
-          if (validationMode) {
-            togglePresenceSelection(item.id);
-          }
-        }}
       >
-        {validationMode && (
-          <Checkbox
-            status={isSelected ? 'checked' : 'unchecked'}
-            onPress={() => togglePresenceSelection(item.id)}
-          />
-        )}
-        
-        <Avatar.Image 
-          size={isMobile ? 35 : 40}
-          source={{ uri: item.employee_photo || 'https://via.placeholder.com/40' }}
-        />
-        
-        <View style={styles.presenceInfo}>
-          <Text style={[styles.presenceName, isMobile && styles.presenceNameMobile]}>
-            {item.employee_name}
-          </Text>
-          <Text style={styles.presenceMatricule}>{item.matricule}</Text>
-        </View>
-        
-        <View style={styles.presenceTimes}>
-          <View style={styles.timeItem}>
-            <MaterialIcons name="login" size={isMobile ? 14 : 16} color="#2ECC71" />
-            <Text style={[styles.timeText, isMobile && styles.timeTextMobile]}>
-              {item.heure_entree ? item.heure_entree.substring(0, 5) : '--:--'}
-            </Text>
+        <Card.Content style={styles.presenceCardContent}>
+          <View style={styles.presenceMainInfo}>
+            <View style={styles.employeeFlex}>
+              {validationMode && (
+                <Checkbox
+                  status={isSelected ? 'checked' : 'unchecked'}
+                  onPress={() => togglePresenceSelection(id_utilisateur_ou_id_presence(item))}
+                />
+              )}
+              <Avatar.Image
+                size={isMobile ? 35 : 40}
+                source={{ uri: item.employee_photo || 'https://via.placeholder.com/40' }}
+              />
+              <View style={styles.presenceTextInfo}>
+                <Text style={[styles.presenceName, isMobile && styles.presenceNameMobile]}>
+                  {item.employee_name}
+                </Text>
+                <Text style={styles.presenceMatricule}>{item.matricule}</Text>
+              </View>
+            </View>
+
+            <View style={styles.presenceStatusWrapper}>
+              <Chip
+                style={[styles.presenceStatus, {
+                  backgroundColor: getPresenceStatusColor(item.statut)
+                }]}
+                textStyle={{ color: '#FFF', fontSize: isMobile ? 10 : 11 }}
+              >
+                {item.statut || 'N/A'}
+              </Chip>
+              {item.statut_validation === 'en_attente' && (
+                <MaterialIcons name="pending" size={isMobile ? 18 : 20} color="#F39C12" />
+              )}
+            </View>
           </View>
-          <View style={styles.timeItem}>
-            <MaterialIcons name="logout" size={isMobile ? 14 : 16} color="#E74C3C" />
-            <Text style={[styles.timeText, isMobile && styles.timeTextMobile]}>
-              {item.heure_sortie ? item.heure_sortie.substring(0, 5) : '--:--'}
-            </Text>
-          </View>
-        </View>
-        
-        <Chip 
-          style={[styles.presenceStatus, { 
-            backgroundColor: getPresenceStatusColor(item.statut) 
-          }]}
-          textStyle={{ color: '#FFF', fontSize: isMobile ? 10 : 11 }}
-        >
-          {item.statut}
-        </Chip>
-        
-        {item.statut_validation === 'en_attente' && (
-          <MaterialIcons name="pending" size={isMobile ? 18 : 20} color="#F39C12" />
-        )}
-      </TouchableOpacity>
+
+          {!validationMode && (
+            <View style={styles.presenceTimesRow}>
+              <View style={styles.timeItem}>
+                <MaterialIcons name="login" size={isMobile ? 14 : 16} color="#2ECC71" />
+                <Text style={[styles.timeText, isMobile && styles.timeTextMobile]}>
+                  {item.heure_entree ? item.heure_entree.substring(0, 5) : '--:--'}
+                </Text>
+              </View>
+              <View style={styles.timeItem}>
+                <MaterialIcons name="logout" size={isMobile ? 14 : 16} color="#E74C3C" />
+                <Text style={[styles.timeText, isMobile && styles.timeTextMobile]}>
+                  {item.heure_sortie ? item.heure_sortie.substring(0, 5) : '--:--'}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* Nouveaux boutons d'action demandés */}
+          {!validationMode && (
+            <View style={styles.presenceActionsGrid}>
+              <TouchableOpacity
+                style={[styles.miniActionBtn, { backgroundColor: '#2ECC71' }]}
+                onPress={() => handleMarkPresence(id_utilisateur_ou_id_presence(item), 'present')}
+              >
+                <MaterialIcons name="check" size={16} color="#FFF" />
+                <Text style={styles.miniActionText}>Présent</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.miniActionBtn, { backgroundColor: '#E74C3C' }]}
+                onPress={() => handleMarkPresence(id_utilisateur_ou_id_presence(item), 'absent')}
+              >
+                <MaterialIcons name="close" size={16} color="#FFF" />
+                <Text style={styles.miniActionText}>Absent</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.miniActionBtn, { backgroundColor: '#3498DB' }]}
+                onPress={() => {
+                  setSelectedEmployee({ id: item.id_utilisateur || item.id_employe, nom_complet: item.employee_name });
+                  setNotificationModalVisible(true);
+                }}
+              >
+                <MaterialIcons name="email" size={16} color="#FFF" />
+                <Text style={styles.miniActionText}>Notifier</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.miniActionBtn, { backgroundColor: '#95A5A6' }]}
+                onPress={() => handleToggleStatus(item.id_utilisateur || item.id_employe)}
+              >
+                <MaterialIcons name="power-settings-new" size={16} color="#FFF" />
+                <Text style={styles.miniActionText}>Statut</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </Card.Content>
+      </Card>
     );
   };
 
@@ -769,7 +884,7 @@ const loadPerformance = async () => {
   };
 
   const getPresenceStatusColor = (status) => {
-    switch(status) {
+    switch (status) {
       case 'present': return '#2ECC71';
       case 'absent': return '#E74C3C';
       case 'retard': return '#F39C12';
@@ -915,7 +1030,7 @@ const loadPerformance = async () => {
       }}
     >
       <View style={styles.leaveHeader}>
-        <Avatar.Image 
+        <Avatar.Image
           size={isMobile ? 35 : 40}
           source={{ uri: item.employee_photo || 'https://via.placeholder.com/40' }}
         />
@@ -925,9 +1040,9 @@ const loadPerformance = async () => {
           </Text>
           <Text style={styles.leaveMatricule}>{item.matricule}</Text>
         </View>
-        <Chip 
-          style={[styles.leaveStatusChip, { 
-            backgroundColor: getLeaveStatusColor(item.statut) 
+        <Chip
+          style={[styles.leaveStatusChip, {
+            backgroundColor: getLeaveStatusColor(item.statut)
           }]}
           textStyle={{ color: '#FFF', fontSize: isMobile ? 10 : 11 }}
         >
@@ -1001,7 +1116,7 @@ const loadPerformance = async () => {
           setRejectReason('');
         }}
         contentContainerStyle={[
-          styles.modalContainer, 
+          styles.modalContainer,
           styles.rejectModal,
           isMobile && styles.modalContainerMobile
         ]}
@@ -1011,7 +1126,7 @@ const loadPerformance = async () => {
           <Text style={styles.rejectModalSubtitle}>
             Demande de {selectedLeave?.employee_name}
           </Text>
-          
+
           <TextInput
             label="Raison du rejet (optionnel)"
             value={rejectReason}
@@ -1055,7 +1170,7 @@ const loadPerformance = async () => {
 
   const handleLeaveAction = async (leaveId, action, reason = '') => {
     const leave = leaveRequests.find(l => l.id === leaveId);
-    
+
     if (action === 'approve') {
       Alert.alert(
         'Approuver la demande',
@@ -1091,7 +1206,7 @@ const loadPerformance = async () => {
   };
 
   const getLeaveStatusColor = (status) => {
-    switch(status) {
+    switch (status) {
       case 'en_attente': return '#F39C12';
       case 'approuve': return '#2ECC71';
       case 'rejete': return '#E74C3C';
@@ -1198,11 +1313,11 @@ const loadPerformance = async () => {
   );
 
   // =============== SALAIRES (AVEC NOUVELLES FONCTIONNALITÉS) ===============
-  
+
   // NOUVELLE FONCTIONNALITÉ : Render de la carte salaire avec sélection
   const renderSalaryCard = ({ item }) => {
     const isSelected = selectedSalaries.includes(item.id);
-    
+
     return (
       <TouchableOpacity
         style={[
@@ -1228,7 +1343,7 @@ const loadPerformance = async () => {
         )}
 
         <View style={styles.salaryHeader}>
-          <Avatar.Image 
+          <Avatar.Image
             size={isMobile ? 35 : 40}
             source={{ uri: item.employee_photo || 'https://via.placeholder.com/40' }}
           />
@@ -1238,9 +1353,9 @@ const loadPerformance = async () => {
             </Text>
             <Text style={styles.salaryMatricule}>{item.matricule}</Text>
           </View>
-          <Chip 
-            style={[styles.salaryStatusChip, { 
-              backgroundColor: getSalaryStatusColor(item.statut_paiement) 
+          <Chip
+            style={[styles.salaryStatusChip, {
+              backgroundColor: getSalaryStatusColor(item.statut_paiement)
             }]}
             textStyle={{ color: '#FFF', fontSize: isMobile ? 10 : 11 }}
           >
@@ -1278,13 +1393,13 @@ const loadPerformance = async () => {
           <Divider style={styles.salaryDivider} />
           <View style={styles.salaryRow}>
             <Text style={[
-              styles.salaryLabel, 
+              styles.salaryLabel,
               { fontWeight: 'bold', fontSize: isMobile ? 14 : 16 }
             ]}>
               Salaire net:
             </Text>
             <Text style={[
-              styles.salaryValue, 
+              styles.salaryValue,
               { fontWeight: 'bold', fontSize: isMobile ? 16 : 18, color: '#2ECC71' }
             ]}>
               {formatCurrency(item.salaire_net)}
@@ -1435,7 +1550,7 @@ const loadPerformance = async () => {
       }}
     >
       <View style={styles.paymentRequestHeader}>
-        <Avatar.Image 
+        <Avatar.Image
           size={isMobile ? 35 : 40}
           source={{ uri: item.employe_photo || 'https://via.placeholder.com/40' }}
         />
@@ -1449,9 +1564,9 @@ const loadPerformance = async () => {
           </Text>
         </View>
         <View style={styles.paymentRequestBadges}>
-          <Chip 
-            style={[styles.paymentRequestStatusChip, { 
-              backgroundColor: getPaymentRequestStatusColor(item.statut) 
+          <Chip
+            style={[styles.paymentRequestStatusChip, {
+              backgroundColor: getPaymentRequestStatusColor(item.statut)
             }]}
             textStyle={{ color: '#FFF', fontSize: isMobile ? 10 : 11 }}
           >
@@ -1483,8 +1598,8 @@ const loadPerformance = async () => {
         {item.motif && (
           <View style={styles.paymentRequestRow}>
             <MaterialIcons name="comment" size={14} color="#95A5A6" />
-            <Text 
-              style={[styles.paymentRequestText, isMobile && styles.paymentRequestTextMobile]} 
+            <Text
+              style={[styles.paymentRequestText, isMobile && styles.paymentRequestTextMobile]}
               numberOfLines={2}
             >
               {item.motif}
@@ -1523,11 +1638,11 @@ const loadPerformance = async () => {
   // NOUVELLE FONCTIONNALITÉ : Traiter une demande de paiement
   const handleProcessPaymentRequest = async (requestId, action) => {
     const request = paymentRequests.find(r => r.id === requestId);
-    
-    const title = action === 'approve' 
-      ? 'Approuver et payer' 
+
+    const title = action === 'approve'
+      ? 'Approuver et payer'
       : 'Rejeter la demande';
-    
+
     const message = action === 'approve'
       ? `Approuver et payer le salaire de ${request.employe_nom} (${formatCurrency(request.montant)}) ?`
       : `Rejeter la demande de ${request.employe_nom} ?`;
@@ -1548,9 +1663,9 @@ const loadPerformance = async () => {
                 commentaire: action === 'reject' ? 'Demande rejetée' : undefined
               });
               Alert.alert(
-                'Succès', 
-                action === 'approve' 
-                  ? 'Demande approuvée et salaire payé' 
+                'Succès',
+                action === 'approve'
+                  ? 'Demande approuvée et salaire payé'
                   : 'Demande rejetée'
               );
               loadPaymentRequests();
@@ -1567,7 +1682,7 @@ const loadPerformance = async () => {
   };
 
   const getPaymentRequestStatusColor = (status) => {
-    switch(status) {
+    switch (status) {
       case 'en_attente': return '#F39C12';
       case 'approuve': return '#2ECC71';
       case 'rejete': return '#E74C3C';
@@ -1581,7 +1696,7 @@ const loadPerformance = async () => {
         visible={paymentModalVisible}
         onDismiss={() => setPaymentModalVisible(false)}
         contentContainerStyle={[
-          styles.modalContainer, 
+          styles.modalContainer,
           styles.paymentModal,
           isMobile && styles.modalContainerMobile
         ]}
@@ -1697,280 +1812,347 @@ const loadPerformance = async () => {
 
   // Ajouter cette fonction de rendu après renderPaymentModal()
 
-const renderPaymentRequestModal = () => (
-  <Portal>
-    <Modal
-      visible={paymentRequestModalVisible}
-      onDismiss={() => {
-        setPaymentRequestModalVisible(false);
-        setSelectedPaymentRequest(null);
-      }}
-      contentContainerStyle={[
-        styles.modalContainer,
-        styles.paymentRequestModal,
-        isMobile && styles.modalContainerMobile
-      ]}
-    >
-      {selectedPaymentRequest && (
-        <ScrollView showsVerticalScrollIndicator={!isWeb}>
-          {/* Header */}
-          <View style={styles.paymentRequestModalHeader}>
-            <View style={styles.paymentRequestModalHeaderLeft}>
-              <Avatar.Image 
-                size={isMobile ? 50 : 60}
-                source={{ uri: selectedPaymentRequest.employe_photo || 'https://via.placeholder.com/60' }}
-              />
-              <View style={styles.paymentRequestModalHeaderInfo}>
-                <Title style={isMobile && styles.modalTitleMobile}>
-                  {selectedPaymentRequest.employe_nom}
-                </Title>
-                <Paragraph>{selectedPaymentRequest.matricule}</Paragraph>
-                <Chip 
-                  style={[
-                    styles.paymentRequestModalStatusChip, 
-                    { backgroundColor: getPaymentRequestStatusColor(selectedPaymentRequest.statut) }
-                  ]}
-                  textStyle={{ color: '#FFF', fontSize: 12 }}
-                >
-                  {selectedPaymentRequest.statut}
-                </Chip>
+  const renderPaymentRequestModal = () => (
+    <Portal>
+      <Modal
+        visible={paymentRequestModalVisible}
+        onDismiss={() => {
+          setPaymentRequestModalVisible(false);
+          setSelectedPaymentRequest(null);
+        }}
+        contentContainerStyle={[
+          styles.modalContainer,
+          styles.paymentRequestModal,
+          isMobile && styles.modalContainerMobile
+        ]}
+      >
+        {selectedPaymentRequest && (
+          <ScrollView showsVerticalScrollIndicator={!isWeb}>
+            {/* Header */}
+            <View style={styles.paymentRequestModalHeader}>
+              <View style={styles.paymentRequestModalHeaderLeft}>
+                <Avatar.Image
+                  size={isMobile ? 50 : 60}
+                  source={{ uri: selectedPaymentRequest.employe_photo || 'https://via.placeholder.com/60' }}
+                />
+                <View style={styles.paymentRequestModalHeaderInfo}>
+                  <Title style={isMobile && styles.modalTitleMobile}>
+                    {selectedPaymentRequest.employe_nom}
+                  </Title>
+                  <Paragraph>{selectedPaymentRequest.matricule}</Paragraph>
+                  <Chip
+                    style={[
+                      styles.paymentRequestModalStatusChip,
+                      { backgroundColor: getPaymentRequestStatusColor(selectedPaymentRequest.statut) }
+                    ]}
+                    textStyle={{ color: '#FFF', fontSize: 12 }}
+                  >
+                    {selectedPaymentRequest.statut}
+                  </Chip>
+                </View>
               </View>
+              <TouchableOpacity
+                onPress={() => {
+                  setPaymentRequestModalVisible(false);
+                  setSelectedPaymentRequest(null);
+                }}
+              >
+                <MaterialIcons name="close" size={24} color="#7F8C8D" />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity 
-              onPress={() => {
-                setPaymentRequestModalVisible(false);
-                setSelectedPaymentRequest(null);
-              }}
-            >
-              <MaterialIcons name="close" size={24} color="#7F8C8D" />
-            </TouchableOpacity>
-          </View>
 
-          <Divider />
+            <Divider />
 
-          {/* Informations de la demande */}
-          <View style={styles.modalSection}>
-            <Text style={styles.sectionTitle}>Informations de la Demande</Text>
-            
-            <View style={styles.paymentRequestModalInfoCard}>
-              <View style={styles.infoRow}>
-                <MaterialIcons name="calendar-today" size={20} color="#3498DB" />
-                <View style={styles.infoRowContent}>
-                  <Text style={styles.infoLabel}>Date de demande</Text>
-                  <Text style={styles.infoValue}>
-                    {formatDate(selectedPaymentRequest.date_demande)}
-                  </Text>
-                </View>
-              </View>
+            {/* Informations de la demande */}
+            <View style={styles.modalSection}>
+              <Text style={styles.sectionTitle}>Informations de la Demande</Text>
 
-              <View style={styles.infoRow}>
-                <MaterialIcons name="access-time" size={20} color="#F39C12" />
-                <View style={styles.infoRowContent}>
-                  <Text style={styles.infoLabel}>Délai d'attente</Text>
-                  <Text style={[
-                    styles.infoValue,
-                    selectedPaymentRequest.jours_attente > 5 && { color: '#E74C3C' }
-                  ]}>
-                    {selectedPaymentRequest.jours_attente} jour(s)
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.infoRow}>
-                <MaterialIcons name="event" size={20} color="#9B59B6" />
-                <View style={styles.infoRowContent}>
-                  <Text style={styles.infoLabel}>Période</Text>
-                  <Text style={styles.infoValue}>
-                    {new Date(selectedPaymentRequest.annee, selectedPaymentRequest.mois - 1).toLocaleDateString('fr-FR', {
-                      month: 'long',
-                      year: 'numeric'
-                    })}
-                  </Text>
-                </View>
-              </View>
-
-              {selectedPaymentRequest.motif && (
+              <View style={styles.paymentRequestModalInfoCard}>
                 <View style={styles.infoRow}>
-                  <MaterialIcons name="comment" size={20} color="#95A5A6" />
+                  <MaterialIcons name="calendar-today" size={20} color="#3498DB" />
                   <View style={styles.infoRowContent}>
-                    <Text style={styles.infoLabel}>Motif</Text>
-                    <Text style={[styles.infoValue, { fontStyle: 'italic' }]}>
-                      {selectedPaymentRequest.motif}
+                    <Text style={styles.infoLabel}>Date de demande</Text>
+                    <Text style={styles.infoValue}>
+                      {formatDate(selectedPaymentRequest.date_demande)}
                     </Text>
                   </View>
                 </View>
+
+                <View style={styles.infoRow}>
+                  <MaterialIcons name="access-time" size={20} color="#F39C12" />
+                  <View style={styles.infoRowContent}>
+                    <Text style={styles.infoLabel}>Délai d'attente</Text>
+                    <Text style={[
+                      styles.infoValue,
+                      selectedPaymentRequest.jours_attente > 5 && { color: '#E74C3C' }
+                    ]}>
+                      {selectedPaymentRequest.jours_attente} jour(s)
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.infoRow}>
+                  <MaterialIcons name="event" size={20} color="#9B59B6" />
+                  <View style={styles.infoRowContent}>
+                    <Text style={styles.infoLabel}>Période</Text>
+                    <Text style={styles.infoValue}>
+                      {new Date(selectedPaymentRequest.annee, selectedPaymentRequest.mois - 1).toLocaleDateString('fr-FR', {
+                        month: 'long',
+                        year: 'numeric'
+                      })}
+                    </Text>
+                  </View>
+                </View>
+
+                {selectedPaymentRequest.motif && (
+                  <View style={styles.infoRow}>
+                    <MaterialIcons name="comment" size={20} color="#95A5A6" />
+                    <View style={styles.infoRowContent}>
+                      <Text style={styles.infoLabel}>Motif</Text>
+                      <Text style={[styles.infoValue, { fontStyle: 'italic' }]}>
+                        {selectedPaymentRequest.motif}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            <Divider />
+
+            {/* Détails du salaire */}
+            <View style={styles.modalSection}>
+              <Text style={styles.sectionTitle}>Détails du Salaire</Text>
+
+              <View style={styles.paymentRequestModalSalaryCard}>
+                <View style={styles.salaryDetailRow}>
+                  <Text style={styles.salaryDetailLabel}>Salaire brut:</Text>
+                  <Text style={styles.salaryDetailValue}>
+                    {formatCurrency(selectedPaymentRequest.salaire_brut)}
+                  </Text>
+                </View>
+
+                <View style={styles.salaryDetailRow}>
+                  <Text style={styles.salaryDetailLabel}>Total déductions:</Text>
+                  <Text style={[styles.salaryDetailValue, { color: '#E74C3C' }]}>
+                    - {formatCurrency(selectedPaymentRequest.total_deductions)}
+                  </Text>
+                </View>
+
+                <View style={styles.salaryDetailRow}>
+                  <Text style={styles.salaryDetailLabel}>Total additions:</Text>
+                  <Text style={[styles.salaryDetailValue, { color: '#2ECC71' }]}>
+                    + {formatCurrency(selectedPaymentRequest.total_additions)}
+                  </Text>
+                </View>
+
+                <Divider style={{ marginVertical: 12 }} />
+
+                <View style={styles.salaryDetailRow}>
+                  <Text style={[styles.salaryDetailLabel, styles.salaryNetLabel]}>
+                    Salaire net (montant demandé):
+                  </Text>
+                  <Text style={[styles.salaryDetailValue, styles.salaryNetValue]}>
+                    {formatCurrency(selectedPaymentRequest.montant)}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <Divider />
+
+            {/* Historique et notes */}
+            {selectedPaymentRequest.commentaire && (
+              <>
+                <View style={styles.modalSection}>
+                  <Text style={styles.sectionTitle}>Commentaires</Text>
+                  <View style={styles.commentaireCard}>
+                    <MaterialIcons name="info" size={20} color="#3498DB" />
+                    <Text style={styles.commentaireText}>
+                      {selectedPaymentRequest.commentaire}
+                    </Text>
+                  </View>
+                </View>
+                <Divider />
+              </>
+            )}
+
+            {/* Actions selon le statut */}
+            <View style={styles.modalSection}>
+              {selectedPaymentRequest.statut === 'en_attente' ? (
+                <View style={styles.paymentRequestModalActions}>
+                  <Text style={styles.sectionTitle}>Actions</Text>
+
+                  <View style={[
+                    styles.paymentRequestModalButtonsContainer,
+                    isMobile && styles.paymentRequestModalButtonsContainerMobile
+                  ]}>
+                    <Button
+                      mode="contained"
+                      onPress={() => {
+                        setPaymentRequestModalVisible(false);
+                        handleProcessPaymentRequest(selectedPaymentRequest.id, 'approve');
+                      }}
+                      icon="check-circle"
+                      style={[styles.paymentRequestModalButton, styles.approveButton]}
+                      buttonColor="#2ECC71"
+                      contentStyle={styles.buttonContent}
+                      labelStyle={isMobile && styles.buttonLabelMobile}
+                    >
+                      Approuver & Payer
+                    </Button>
+
+                    <Button
+                      mode="outlined"
+                      onPress={() => {
+                        setPaymentRequestModalVisible(false);
+                        Alert.alert(
+                          'Rejeter la demande',
+                          `Voulez-vous vraiment rejeter la demande de ${selectedPaymentRequest.employe_nom} ?`,
+                          [
+                            { text: 'Annuler', style: 'cancel' },
+                            {
+                              text: 'Rejeter',
+                              style: 'destructive',
+                              onPress: () => handleProcessPaymentRequest(selectedPaymentRequest.id, 'reject')
+                            }
+                          ]
+                        );
+                      }}
+                      icon="close-circle"
+                      style={[styles.paymentRequestModalButton, styles.rejectButton]}
+                      textColor="#E74C3C"
+                      contentStyle={styles.buttonContent}
+                      labelStyle={isMobile && styles.buttonLabelMobile}
+                    >
+                      Rejeter
+                    </Button>
+                  </View>
+
+                  {/* Alert si urgence */}
+                  {selectedPaymentRequest.jours_attente > 5 && (
+                    <Surface style={styles.urgencyAlert}>
+                      <MaterialIcons name="warning" size={20} color="#E74C3C" />
+                      <Text style={styles.urgencyAlertText}>
+                        Cette demande est en attente depuis {selectedPaymentRequest.jours_attente} jours.
+                        Veuillez la traiter rapidement.
+                      </Text>
+                    </Surface>
+                  )}
+                </View>
+              ) : (
+                <View style={styles.paymentRequestModalStatusInfo}>
+                  <MaterialIcons
+                    name={selectedPaymentRequest.statut === 'approuve' ? 'check-circle' : 'cancel'}
+                    size={48}
+                    color={selectedPaymentRequest.statut === 'approuve' ? '#2ECC71' : '#E74C3C'}
+                  />
+                  <Text style={styles.statusInfoText}>
+                    {selectedPaymentRequest.statut === 'approuve'
+                      ? 'Cette demande a été approuvée et le salaire a été payé.'
+                      : 'Cette demande a été rejetée.'}
+                  </Text>
+                  {selectedPaymentRequest.date_traitement && (
+                    <Text style={styles.statusInfoDate}>
+                      Traitée le {formatDate(selectedPaymentRequest.date_traitement)}
+                    </Text>
+                  )}
+                </View>
               )}
             </View>
-          </View>
 
-          <Divider />
-
-          {/* Détails du salaire */}
-          <View style={styles.modalSection}>
-            <Text style={styles.sectionTitle}>Détails du Salaire</Text>
-            
-            <View style={styles.paymentRequestModalSalaryCard}>
-              <View style={styles.salaryDetailRow}>
-                <Text style={styles.salaryDetailLabel}>Salaire brut:</Text>
-                <Text style={styles.salaryDetailValue}>
-                  {formatCurrency(selectedPaymentRequest.salaire_brut)}
-                </Text>
-              </View>
-
-              <View style={styles.salaryDetailRow}>
-                <Text style={styles.salaryDetailLabel}>Total déductions:</Text>
-                <Text style={[styles.salaryDetailValue, { color: '#E74C3C' }]}>
-                  - {formatCurrency(selectedPaymentRequest.total_deductions)}
-                </Text>
-              </View>
-
-              <View style={styles.salaryDetailRow}>
-                <Text style={styles.salaryDetailLabel}>Total additions:</Text>
-                <Text style={[styles.salaryDetailValue, { color: '#2ECC71' }]}>
-                  + {formatCurrency(selectedPaymentRequest.total_additions)}
-                </Text>
-              </View>
-
-              <Divider style={{ marginVertical: 12 }} />
-
-              <View style={styles.salaryDetailRow}>
-                <Text style={[styles.salaryDetailLabel, styles.salaryNetLabel]}>
-                  Salaire net (montant demandé):
-                </Text>
-                <Text style={[styles.salaryDetailValue, styles.salaryNetValue]}>
-                  {formatCurrency(selectedPaymentRequest.montant)}
-                </Text>
-              </View>
+            {/* Bouton fermer en bas */}
+            <View style={styles.modalFooter}>
+              <Button
+                mode="outlined"
+                onPress={() => {
+                  setPaymentRequestModalVisible(false);
+                  setSelectedPaymentRequest(null);
+                }}
+                style={styles.closeButton}
+                icon="close"
+              >
+                Fermer
+              </Button>
             </View>
-          </View>
+          </ScrollView>
+        )}
+      </Modal>
+    </Portal>
+  );
 
-          <Divider />
+  // Appeler ce modal dans le return du composant principal, après renderPaymentModal()
+  // {renderPaymentRequestModal()}
 
-          {/* Historique et notes */}
-          {selectedPaymentRequest.commentaire && (
-            <>
-              <View style={styles.modalSection}>
-                <Text style={styles.sectionTitle}>Commentaires</Text>
-                <View style={styles.commentaireCard}>
-                  <MaterialIcons name="info" size={20} color="#3498DB" />
-                  <Text style={styles.commentaireText}>
-                    {selectedPaymentRequest.commentaire}
-                  </Text>
-                </View>
-              </View>
-              <Divider />
-            </>
-          )}
+  const renderNotificationModal = () => (
+    <Portal>
+      <Modal
+        visible={notificationModalVisible}
+        onDismiss={() => {
+          setNotificationModalVisible(false);
+          setNotifySubject('');
+          setNotifyMessage('');
+        }}
+        contentContainerStyle={[
+          styles.modalContainer,
+          styles.notificationModal,
+          isMobile && styles.modalContainerMobile
+        ]}
+      >
+        <View style={styles.notificationModalContent}>
+          <Text style={styles.notificationModalTitle}>Envoyer une notification</Text>
+          <Text style={styles.notificationModalSubtitle}>
+            À: {selectedEmployee?.nom_complet}
+          </Text>
 
-          {/* Actions selon le statut */}
-          <View style={styles.modalSection}>
-            {selectedPaymentRequest.statut === 'en_attente' ? (
-              <View style={styles.paymentRequestModalActions}>
-                <Text style={styles.sectionTitle}>Actions</Text>
-                
-                <View style={[
-                  styles.paymentRequestModalButtonsContainer,
-                  isMobile && styles.paymentRequestModalButtonsContainerMobile
-                ]}>
-                  <Button
-                    mode="contained"
-                    onPress={() => {
-                      setPaymentRequestModalVisible(false);
-                      handleProcessPaymentRequest(selectedPaymentRequest.id, 'approve');
-                    }}
-                    icon="check-circle"
-                    style={[styles.paymentRequestModalButton, styles.approveButton]}
-                    buttonColor="#2ECC71"
-                    contentStyle={styles.buttonContent}
-                    labelStyle={isMobile && styles.buttonLabelMobile}
-                  >
-                    Approuver & Payer
-                  </Button>
+          <TextInput
+            label="Sujet"
+            value={notifySubject}
+            onChangeText={setNotifySubject}
+            style={styles.notificationInput}
+            mode="outlined"
+          />
 
-                  <Button
-                    mode="outlined"
-                    onPress={() => {
-                      setPaymentRequestModalVisible(false);
-                      Alert.alert(
-                        'Rejeter la demande',
-                        `Voulez-vous vraiment rejeter la demande de ${selectedPaymentRequest.employe_nom} ?`,
-                        [
-                          { text: 'Annuler', style: 'cancel' },
-                          {
-                            text: 'Rejeter',
-                            style: 'destructive',
-                            onPress: () => handleProcessPaymentRequest(selectedPaymentRequest.id, 'reject')
-                          }
-                        ]
-                      );
-                    }}
-                    icon="close-circle"
-                    style={[styles.paymentRequestModalButton, styles.rejectButton]}
-                    textColor="#E74C3C"
-                    contentStyle={styles.buttonContent}
-                    labelStyle={isMobile && styles.buttonLabelMobile}
-                  >
-                    Rejeter
-                  </Button>
-                </View>
+          <TextInput
+            label="Message"
+            value={notifyMessage}
+            onChangeText={setNotifyMessage}
+            multiline
+            numberOfLines={6}
+            style={styles.notificationInput}
+            mode="outlined"
+          />
 
-                {/* Alert si urgence */}
-                {selectedPaymentRequest.jours_attente > 5 && (
-                  <Surface style={styles.urgencyAlert}>
-                    <MaterialIcons name="warning" size={20} color="#E74C3C" />
-                    <Text style={styles.urgencyAlertText}>
-                      Cette demande est en attente depuis {selectedPaymentRequest.jours_attente} jours. 
-                      Veuillez la traiter rapidement.
-                    </Text>
-                  </Surface>
-                )}
-              </View>
-            ) : (
-              <View style={styles.paymentRequestModalStatusInfo}>
-                <MaterialIcons 
-                  name={selectedPaymentRequest.statut === 'approuve' ? 'check-circle' : 'cancel'} 
-                  size={48} 
-                  color={selectedPaymentRequest.statut === 'approuve' ? '#2ECC71' : '#E74C3C'} 
-                />
-                <Text style={styles.statusInfoText}>
-                  {selectedPaymentRequest.statut === 'approuve' 
-                    ? 'Cette demande a été approuvée et le salaire a été payé.'
-                    : 'Cette demande a été rejetée.'}
-                </Text>
-                {selectedPaymentRequest.date_traitement && (
-                  <Text style={styles.statusInfoDate}>
-                    Traitée le {formatDate(selectedPaymentRequest.date_traitement)}
-                  </Text>
-                )}
-              </View>
-            )}
-          </View>
-
-          {/* Bouton fermer en bas */}
-          <View style={styles.modalFooter}>
+          <View style={styles.notificationModalActions}>
             <Button
               mode="outlined"
               onPress={() => {
-                setPaymentRequestModalVisible(false);
-                setSelectedPaymentRequest(null);
+                setNotificationModalVisible(false);
+                setNotifySubject('');
+                setNotifyMessage('');
               }}
-              style={styles.closeButton}
-              icon="close"
+              style={styles.notificationModalButton}
             >
-              Fermer
+              Annuler
+            </Button>
+            <Button
+              mode="contained"
+              onPress={handleSendNotification}
+              icon="send"
+              style={styles.notificationModalButton}
+              buttonColor="#3498DB"
+              disabled={!notifySubject || !notifyMessage}
+            >
+              Envoyer
             </Button>
           </View>
-        </ScrollView>
-      )}
-    </Modal>
-  </Portal>
-);
-
-// Appeler ce modal dans le return du composant principal, après renderPaymentModal()
-// {renderPaymentRequestModal()}
+        </View>
+      </Modal>
+    </Portal>
+  );
 
   const getSalaryStatusColor = (status) => {
-    switch(status) {
+    switch (status) {
       case 'calculé': return '#F39C12';
       case 'payé': return '#2ECC71';
       case 'reporté': return '#3498DB';
@@ -2019,7 +2201,7 @@ const renderPaymentRequestModal = () => (
             const currentDate = new Date();
             const maxMonth = currentDate.getMonth() + 1;
             const maxYear = currentDate.getFullYear();
-            
+
             if (selectedYear < maxYear || (selectedYear === maxYear && selectedMonth < maxMonth)) {
               const newMonth = selectedMonth === 12 ? 1 : selectedMonth + 1;
               const newYear = selectedMonth === 12 ? selectedYear + 1 : selectedYear;
@@ -2242,19 +2424,19 @@ const renderPaymentRequestModal = () => (
       );
     }
 
-    const filteredData = performanceFilter === 'all' 
-      ? performanceData 
+    const filteredData = performanceFilter === 'all'
+      ? performanceData
       : performanceData.filter(item => {
-          if (performanceFilter === 'top') {
-            return (item.avg_score || 0) >= 7;
-          } else if (performanceFilter === 'low') {
-            return (item.avg_score || 0) < 5;
-          }
-          return true;
-        });
+        if (performanceFilter === 'top') {
+          return (item.avg_score || 0) >= 7;
+        } else if (performanceFilter === 'low') {
+          return (item.avg_score || 0) < 5;
+        }
+        return true;
+      });
 
     const chartData = {
-      labels: filteredData.slice(0, 10).map(item => 
+      labels: filteredData.slice(0, 10).map(item =>
         item.nom_complet.split(' ')[0].substring(0, 8)
       ),
       datasets: [{
@@ -2262,8 +2444,8 @@ const renderPaymentRequestModal = () => (
       }]
     };
 
-    const chartWidth = isMobile 
-      ? screenWidth - 40 
+    const chartWidth = isMobile
+      ? screenWidth - 40
       : Math.max(screenWidth - 60, filteredData.length * 50);
 
     return (
@@ -2274,7 +2456,7 @@ const renderPaymentRequestModal = () => (
             <Paragraph style={isMobile && styles.chartParagraphMobile}>
               Top 10 employés par score moyen
             </Paragraph>
-            
+
             <ScrollView horizontal showsHorizontalScrollIndicator={!isWeb}>
               <BarChart
                 data={chartData}
@@ -2312,11 +2494,11 @@ const renderPaymentRequestModal = () => (
             <Paragraph style={isMobile && styles.chartParagraphMobile}>
               Répartition des taux de présence
             </Paragraph>
-            
+
             <View style={styles.presenceDistribution}>
               {filteredData.slice(0, 5).map((item, index) => (
                 <View key={index} style={styles.presenceDistributionItem}>
-                  <Avatar.Image 
+                  <Avatar.Image
                     size={isMobile ? 35 : 40}
                     source={{ uri: item.photo_identite || 'https://via.placeholder.com/40' }}
                   />
@@ -2327,8 +2509,8 @@ const renderPaymentRequestModal = () => (
                     ]}>
                       {item.nom_complet}
                     </Text>
-                    <ProgressBar 
-                      progress={(item.presence_rate || 0) / 100} 
+                    <ProgressBar
+                      progress={(item.presence_rate || 0) / 100}
                       color={getPresenceRateColor(item.presence_rate)}
                       style={styles.progressBar}
                     />
@@ -2350,16 +2532,16 @@ const renderPaymentRequestModal = () => (
       return null;
     }
 
-    const filteredData = performanceFilter === 'all' 
-      ? performanceData 
+    const filteredData = performanceFilter === 'all'
+      ? performanceData
       : performanceData.filter(item => {
-          if (performanceFilter === 'top') {
-            return (item.avg_score || 0) >= 7;
-          } else if (performanceFilter === 'low') {
-            return (item.avg_score || 0) < 5;
-          }
-          return true;
-        });
+        if (performanceFilter === 'top') {
+          return (item.avg_score || 0) >= 7;
+        } else if (performanceFilter === 'low') {
+          return (item.avg_score || 0) < 5;
+        }
+        return true;
+      });
 
     return (
       <View style={styles.performanceCardsContainer}>
@@ -2367,7 +2549,7 @@ const renderPaymentRequestModal = () => (
           <Card key={index} style={[styles.performanceEmployeeCard, isMobile && styles.performanceEmployeeCardMobile]}>
             <Card.Content>
               <View style={styles.performanceEmployeeHeader}>
-                <Avatar.Image 
+                <Avatar.Image
                   size={isMobile ? 40 : 50}
                   source={{ uri: item.photo_identite || 'https://via.placeholder.com/50' }}
                 />
@@ -2425,7 +2607,7 @@ const renderPaymentRequestModal = () => (
   };
 
   const renderPerformanceTab = () => (
-    <ScrollView 
+    <ScrollView
       style={styles.tabContainer}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -2470,7 +2652,7 @@ const renderPaymentRequestModal = () => (
             <View style={styles.performanceStatItem}>
               <MaterialIcons name="star" size={isMobile ? 24 : 30} color="#F39C12" />
               <Text style={[styles.performanceStatValue, isMobile && styles.performanceStatValueMobile]}>
-                {performanceData.length > 0 
+                {performanceData.length > 0
                   ? (performanceData.reduce((sum, item) => sum + (item.avg_score || 0), 0) / performanceData.length).toFixed(1)
                   : '0.0'
                 }
@@ -2480,7 +2662,7 @@ const renderPaymentRequestModal = () => (
             <View style={styles.performanceStatItem}>
               <MaterialIcons name="event-available" size={isMobile ? 24 : 30} color="#2ECC71" />
               <Text style={[styles.performanceStatValue, isMobile && styles.performanceStatValueMobile]}>
-                {performanceData.length > 0 
+                {performanceData.length > 0
                   ? Math.round(performanceData.reduce((sum, item) => sum + (item.presence_rate || 0), 0) / performanceData.length)
                   : 0
                 }%
@@ -2490,7 +2672,7 @@ const renderPaymentRequestModal = () => (
             <View style={styles.performanceStatItem}>
               <MaterialIcons name="schedule" size={isMobile ? 24 : 30} color="#3498DB" />
               <Text style={[styles.performanceStatValue, isMobile && styles.performanceStatValueMobile]}>
-                {performanceData.length > 0 
+                {performanceData.length > 0
                   ? Math.round(performanceData.reduce((sum, item) => sum + (item.total_hours || 0), 0) / performanceData.length)
                   : 0
                 }h
@@ -2528,7 +2710,7 @@ const renderPaymentRequestModal = () => (
   };
 
   const getStatusColor = (status) => {
-    switch(status) {
+    switch (status) {
       case 'actif': return '#2ECC71';
       case 'congé': return '#F39C12';
       case 'inactif': return '#E74C3C';
@@ -2562,7 +2744,7 @@ const renderPaymentRequestModal = () => (
 
   return (
     <View style={[
-      styles.container, 
+      styles.container,
       isWeb && styles.containerWeb,
       isDesktop && styles.containerDesktop
     ]}>
@@ -2573,13 +2755,13 @@ const renderPaymentRequestModal = () => (
             style={[styles.tab, activeTab === 'employes' && styles.activeTab]}
             onPress={() => setActiveTab('employes')}
           >
-            <MaterialIcons 
-              name="people" 
-              size={isMobile ? 18 : 20} 
-              color={activeTab === 'employes' ? '#2E86C1' : '#7F8C8D'} 
+            <MaterialIcons
+              name="people"
+              size={isMobile ? 18 : 20}
+              color={activeTab === 'employes' ? '#2E86C1' : '#7F8C8D'}
             />
             <Text style={[
-              styles.tabText, 
+              styles.tabText,
               activeTab === 'employes' && styles.activeTabText,
               isMobile && styles.tabTextMobile
             ]}>
@@ -2591,13 +2773,13 @@ const renderPaymentRequestModal = () => (
             style={[styles.tab, activeTab === 'presences' && styles.activeTab]}
             onPress={() => setActiveTab('presences')}
           >
-            <MaterialIcons 
-              name="event-available" 
-              size={isMobile ? 18 : 20} 
-              color={activeTab === 'presences' ? '#2E86C1' : '#7F8C8D'} 
+            <MaterialIcons
+              name="event-available"
+              size={isMobile ? 18 : 20}
+              color={activeTab === 'presences' ? '#2E86C1' : '#7F8C8D'}
             />
             <Text style={[
-              styles.tabText, 
+              styles.tabText,
               activeTab === 'presences' && styles.activeTabText,
               isMobile && styles.tabTextMobile
             ]}>
@@ -2609,13 +2791,13 @@ const renderPaymentRequestModal = () => (
             style={[styles.tab, activeTab === 'conges' && styles.activeTab]}
             onPress={() => setActiveTab('conges')}
           >
-            <MaterialIcons 
-              name="beach-access" 
-              size={isMobile ? 18 : 20} 
-              color={activeTab === 'conges' ? '#2E86C1' : '#7F8C8D'} 
+            <MaterialIcons
+              name="beach-access"
+              size={isMobile ? 18 : 20}
+              color={activeTab === 'conges' ? '#2E86C1' : '#7F8C8D'}
             />
             <Text style={[
-              styles.tabText, 
+              styles.tabText,
               activeTab === 'conges' && styles.activeTabText,
               isMobile && styles.tabTextMobile
             ]}>
@@ -2632,13 +2814,13 @@ const renderPaymentRequestModal = () => (
             style={[styles.tab, activeTab === 'salaires' && styles.activeTab]}
             onPress={() => setActiveTab('salaires')}
           >
-            <MaterialIcons 
-              name="attach-money" 
-              size={isMobile ? 18 : 20} 
-              color={activeTab === 'salaires' ? '#2E86C1' : '#7F8C8D'} 
+            <MaterialIcons
+              name="attach-money"
+              size={isMobile ? 18 : 20}
+              color={activeTab === 'salaires' ? '#2E86C1' : '#7F8C8D'}
             />
             <Text style={[
-              styles.tabText, 
+              styles.tabText,
               activeTab === 'salaires' && styles.activeTabText,
               isMobile && styles.tabTextMobile
             ]}>
@@ -2656,13 +2838,13 @@ const renderPaymentRequestModal = () => (
             style={[styles.tab, activeTab === 'performance' && styles.activeTab]}
             onPress={() => setActiveTab('performance')}
           >
-            <MaterialIcons 
-              name="bar-chart" 
-              size={isMobile ? 18 : 20} 
-              color={activeTab === 'performance' ? '#2E86C1' : '#7F8C8D'} 
+            <MaterialIcons
+              name="bar-chart"
+              size={isMobile ? 18 : 20}
+              color={activeTab === 'performance' ? '#2E86C1' : '#7F8C8D'}
             />
             <Text style={[
-              styles.tabText, 
+              styles.tabText,
               activeTab === 'performance' && styles.activeTabText,
               isMobile && styles.tabTextMobile
             ]}>
@@ -2681,8 +2863,9 @@ const renderPaymentRequestModal = () => (
 
       {/* Modals */}
       {renderEmployeeDetailModal()}
-         {renderPaymentModal()}
+      {renderPaymentModal()}
       {renderPaymentRequestModal()}
+      {renderNotificationModal()}
     </View>
   );
 };
@@ -2751,7 +2934,7 @@ const styles = StyleSheet.create({
   tabContainer: {
     flex: 1,
   },
-  
+
   // Employés
   filtersContainer: {
     backgroundColor: '#FFF',
@@ -2888,7 +3071,7 @@ const styles = StyleSheet.create({
   statTextMobile: {
     fontSize: 11,
   },
-  
+
   // Modal
   modalContainer: {
     backgroundColor: 'white',
@@ -2999,7 +3182,7 @@ const styles = StyleSheet.create({
   actionButton: {
     marginBottom: 10,
   },
-  
+
   // Présences
   presenceHeader: {
     backgroundColor: '#FFF',
@@ -3131,7 +3314,7 @@ const styles = StyleSheet.create({
     height: 24,
     marginRight: 8,
   },
-  
+
   // Congés
   leaveFilters: {
     backgroundColor: '#FFF',
@@ -3281,7 +3464,7 @@ const styles = StyleSheet.create({
   rejectConfirmButton: {
     backgroundColor: '#E74C3C',
   },
-  
+
   // Salaires
   periodSelector: {
     flexDirection: 'row',
@@ -3310,7 +3493,7 @@ const styles = StyleSheet.create({
   periodTextMobile: {
     fontSize: 14,
   },
-  
+
   // NOUVELLES: Styles pour paiement groupé
   bulkPaymentBar: {
     backgroundColor: '#FFF',
@@ -3341,7 +3524,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
   },
-  
+
   // Sous-tabs (Salaires / Demandes)
   subTabBar: {
     flexDirection: 'row',
@@ -3374,7 +3557,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F39C12',
     marginLeft: 8,
   },
-  
+
   salarySummaryCard: {
     margin: 10,
   },
@@ -3480,7 +3663,7 @@ const styles = StyleSheet.create({
   paySalaryButton: {
     backgroundColor: '#2ECC71',
   },
-  
+
   // NOUVELLE: Warning confirmation
   salaryWarning: {
     flexDirection: 'row',
@@ -3496,7 +3679,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#856404',
   },
-  
+
   salaryFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -3572,7 +3755,7 @@ const styles = StyleSheet.create({
   paymentConfirmButton: {
     backgroundColor: '#2ECC71',
   },
-  
+
   // NOUVELLES: Styles demandes de paiement
   paymentRequestFilters: {
     backgroundColor: '#FFF',
@@ -3627,10 +3810,10 @@ const styles = StyleSheet.create({
   paymentRequestStatusChip: {
     height: 24,
   },
-urgentBadge: {
+  urgentBadge: {
     backgroundColor: '#E74C3C',
   },
-  
+
   // DEMANDES DE PAIEMENT (suite)
   paymentRequestDetails: {
     marginVertical: 8,
@@ -3661,7 +3844,7 @@ urgentBadge: {
   paymentRequestButton: {
     flex: 1,
   },
-// MODAL DEMANDE DE PAIEMENT
+  // MODAL DEMANDE DE PAIEMENT
   paymentRequestModal: {
     maxWidth: 600,
     maxHeight: '90%',
@@ -3684,7 +3867,7 @@ urgentBadge: {
     marginTop: 8,
     alignSelf: 'flex-start',
   },
-  
+
   paymentRequestModalInfoCard: {
     backgroundColor: '#F8F9F9',
     borderRadius: 10,
@@ -3709,7 +3892,7 @@ urgentBadge: {
     color: '#2C3E50',
     fontWeight: '600',
   },
-  
+
   paymentRequestModalSalaryCard: {
     backgroundColor: '#F8F9F9',
     borderRadius: 10,
@@ -3740,7 +3923,7 @@ urgentBadge: {
     fontWeight: 'bold',
     color: '#2ECC71',
   },
-  
+
   commentaireCard: {
     flexDirection: 'row',
     backgroundColor: '#E8F4F8',
@@ -3756,7 +3939,7 @@ urgentBadge: {
     color: '#2C3E50',
     fontStyle: 'italic',
   },
-  
+
   paymentRequestModalActions: {
     marginTop: 10,
   },
@@ -3784,7 +3967,7 @@ urgentBadge: {
   buttonLabelMobile: {
     fontSize: 13,
   },
-  
+
   urgencyAlert: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3802,7 +3985,7 @@ urgentBadge: {
     color: '#2C3E50',
     fontWeight: '500',
   },
-  
+
   paymentRequestModalStatusInfo: {
     alignItems: 'center',
     padding: 20,
@@ -3819,7 +4002,7 @@ urgentBadge: {
     color: '#7F8C8D',
     marginTop: 8,
   },
-  
+
   modalFooter: {
     padding: 20,
     borderTopWidth: 1,
@@ -3828,7 +4011,7 @@ urgentBadge: {
   closeButton: {
     borderColor: '#95A5A6',
   },
-  
+
   // ANIMATIONS (optionnel avec Animated)
   paymentRequestModalVisible: {
     transform: [{ scale: 1 }],
@@ -3881,7 +4064,7 @@ urgentBadge: {
     marginTop: 4,
     textAlign: 'center',
   },
-  
+
   // GRAPHIQUES DE PERFORMANCE
   chartCard: {
     margin: 10,
@@ -3929,7 +4112,7 @@ urgentBadge: {
     fontWeight: 'bold',
     textAlign: 'right',
   },
-  
+
   // CARTES EMPLOYÉS PERFORMANCE
   performanceCardsContainer: {
     padding: 10,
@@ -4017,7 +4200,7 @@ urgentBadge: {
   performanceMetricValueMobile: {
     fontSize: 14,
   },
-  
+
   // EMPTY STATES
   emptyContainer: {
     flex: 1,
@@ -4031,7 +4214,7 @@ urgentBadge: {
     marginTop: 15,
     textAlign: 'center',
   },
-  
+
   // ÉTATS GLOBAUX
   errorContainer: {
     flex: 1,
@@ -4049,7 +4232,7 @@ urgentBadge: {
     marginTop: 20,
     backgroundColor: '#3498DB',
   },
-  
+
   // OVERLAYS & MODALS
   overlay: {
     ...StyleSheet.absoluteFillObject,
@@ -4057,7 +4240,7 @@ urgentBadge: {
     justifyContent: 'center',
     alignItems: 'center',
   },
-  
+
   // RESPONSIVE BREAKPOINTS
   // Desktop (> 1024px)
   desktopContainer: {
@@ -4072,7 +4255,7 @@ urgentBadge: {
   desktopColumn: {
     flex: 1,
   },
-  
+
   // Tablet (768px - 1024px)
   tabletContainer: {
     maxWidth: 1024,
@@ -4083,7 +4266,7 @@ urgentBadge: {
     flexDirection: 'row',
     gap: 15,
   },
-  
+
   // Mobile (< 768px)
   mobileContainer: {
     paddingHorizontal: 10,
@@ -4091,7 +4274,7 @@ urgentBadge: {
   mobileFullWidth: {
     width: '100%',
   },
-  
+
   // UTILITAIRES
   shadow: {
     shadowColor: '#000',
@@ -4121,33 +4304,118 @@ urgentBadge: {
     shadowRadius: 8,
     elevation: 6,
   },
-  
+
+  // NOUVEAUX STYLES PRÉSENCES & NOTIFICATIONS
+  presenceCardContent: {
+    padding: 10,
+  },
+  presenceMainInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  employeeFlex: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  presenceTextInfo: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  presenceStatusWrapper: {
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  presenceTimesRow: {
+    flexDirection: 'row',
+    marginTop: 10,
+    gap: 15,
+  },
+  presenceActionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#ECF0F1',
+  },
+  miniActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    minWidth: 80,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  miniActionText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: 'bold',
+    marginLeft: 4,
+  },
+  notificationModal: {
+    maxWidth: 500,
+  },
+  notificationModalContent: {
+    padding: 20,
+  },
+  notificationModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2C3E50',
+    marginBottom: 5,
+  },
+  notificationModalSubtitle: {
+    fontSize: 14,
+    color: '#7F8C8D',
+    marginBottom: 15,
+  },
+  notificationInput: {
+    marginBottom: 15,
+  },
+  notificationModalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+  },
+  notificationModalButton: {
+    flex: 1,
+  },
+  sendCodeButton: {
+    flex: 1,
+    borderColor: '#3498DB',
+  },
+
   // SPACING
   p5: { padding: 5 },
   p10: { padding: 10 },
   p15: { padding: 15 },
   p20: { padding: 20 },
-  
+
   mt5: { marginTop: 5 },
   mt10: { marginTop: 10 },
   mt15: { marginTop: 15 },
   mt20: { marginTop: 20 },
-  
+
   mb5: { marginBottom: 5 },
   mb10: { marginBottom: 10 },
   mb15: { marginBottom: 15 },
   mb20: { marginBottom: 20 },
-  
+
   mx5: { marginHorizontal: 5 },
   mx10: { marginHorizontal: 10 },
   mx15: { marginHorizontal: 15 },
   mx20: { marginHorizontal: 20 },
-  
+
   my5: { marginVertical: 5 },
   my10: { marginVertical: 10 },
   my15: { marginVertical: 15 },
   my20: { marginVertical: 20 },
-  
+
   // FLEX UTILITIES
   flexRow: {
     flexDirection: 'row',
@@ -4168,7 +4436,7 @@ urgentBadge: {
   flexWrap: {
     flexWrap: 'wrap',
   },
-  
+
   // TEXT UTILITIES
   textCenter: {
     textAlign: 'center',
@@ -4182,7 +4450,7 @@ urgentBadge: {
   textSemiBold: {
     fontWeight: '600',
   },
-  
+
   // COLOR UTILITIES
   bgWhite: { backgroundColor: '#FFF' },
   bgGray: { backgroundColor: '#F8F9F9' },
@@ -4191,7 +4459,7 @@ urgentBadge: {
   bgWarning: { backgroundColor: '#F39C12' },
   bgDanger: { backgroundColor: '#E74C3C' },
   bgInfo: { backgroundColor: '#3498DB' },
-  
+
   textPrimary: { color: '#2C3E50' },
   textSecondary: { color: '#7F8C8D' },
   textSuccess: { color: '#2ECC71' },
@@ -4199,14 +4467,14 @@ urgentBadge: {
   textDanger: { color: '#E74C3C' },
   textInfo: { color: '#3498DB' },
   textMuted: { color: '#95A5A6' },
-  
+
   // BORDER UTILITIES
   borderRadius5: { borderRadius: 5 },
   borderRadius8: { borderRadius: 8 },
   borderRadius10: { borderRadius: 10 },
   borderRadius12: { borderRadius: 12 },
   borderRadiusCircle: { borderRadius: 9999 },
-  
+
   // ANIMATIONS (pour future implémentation)
   fadeIn: {
     opacity: 1,
@@ -4214,7 +4482,7 @@ urgentBadge: {
   fadeOut: {
     opacity: 0,
   },
-  
+
   // WEB SPECIFIC
   ...(Platform.OS === 'web' && {
     webScrollbar: {

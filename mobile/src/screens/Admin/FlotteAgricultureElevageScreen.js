@@ -458,7 +458,8 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
         method,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
         }
       };
 
@@ -1375,7 +1376,7 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
     }
   };
 
-  const handleAddProductionLait = (animal) => {
+  const handleAddProductionLait = (animal = null) => {
     setSelectedAnimal(animal);
     setProductionLaitForm({
       id_animal: animal?.id || null,
@@ -1387,7 +1388,7 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
       ph: '',
       qualite: 'B',
       observations: '',
-      heure_traite: '',
+      heure_traite: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
       methode_traite: 'manuel',
       destination: 'vente',
       id_reservoir: null
@@ -1448,36 +1449,83 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
       Alert.alert('Erreur', error.response?.data?.message || 'Impossible d\'enregistrer la production');
     }
   };
-
   const handlePickImage = async (formSetter, formData, source = 'library') => {
-    let result;
-    if (source === 'camera') {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission refusée', 'Nous avons besoin d\'accéder à votre caméra.');
-        return;
-      }
-      result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-    } else {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission refusée', 'Nous avons besoin d\'accéder à votre galerie.');
-        return;
-      }
-      result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.8,
-      });
-    }
+    try {
+      let result;
 
-    if (!result.canceled) {
-      formSetter({ ...formData, photo: result.assets[0].uri });
+      if (source === 'camera') {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') return;
+
+        result = await ImagePicker.launchCameraAsync({
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.7,
+        });
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') return;
+
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 0.7,
+        });
+      }
+
+      if (result.canceled || !result.assets?.length) return;
+
+      const asset = result.assets[0];
+      const uploadData = new FormData();
+
+      const extension = asset.uri.split('.').pop().toLowerCase();
+      const mimeType =
+        extension === 'png' ? 'image/png' :
+          extension === 'gif' ? 'image/gif' :
+            'image/jpeg';
+
+      let file;
+
+      if (Platform.OS === 'web') {
+        const blob = await fetch(asset.uri).then(r => r.blob());
+        file = new File([blob], `upload_${Date.now()}.${extension}`, {
+          type: mimeType
+        });
+      } else {
+        file = {
+          uri: asset.uri,
+          name: `upload_${Date.now()}.${extension}`,
+          type: mimeType
+        };
+      }
+
+      uploadData.append('photo', file);
+
+      const token = await AsyncStorage.getItem('userToken');
+
+      const response = await fetch(`${API_BASE_URL}/upload`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: uploadData,
+      });
+
+      const json = await response.json();
+
+      if (!response.ok || !json.success) {
+        throw new Error(json.message || 'Upload échoué');
+      }
+
+      const rootUrl = API_BASE_URL.replace(/\/api\/?$/, '');
+      const fullUrl = `${rootUrl}/${json.url}`;
+
+      formSetter({ ...formData, photo: fullUrl });
+
+    } catch (error) {
+      console.error('Erreur pick/upload image:', error);
+      Alert.alert('Erreur', 'Impossible de télécharger l’image');
     }
   };
 
@@ -1557,7 +1605,11 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
       <View style={styles.cardHeader}>
         <View style={styles.cardHeaderLeft}>
           <View style={[styles.cardIcon, { backgroundColor: '#E67E2220' }]}>
-            <MaterialIcons name="local-shipping" size={isDesktop ? 32 : 28} color="#E67E22" />
+            {item.photo ? (
+              <Image source={{ uri: item.photo }} style={styles.animalPhoto} />
+            ) : (
+              <MaterialIcons name="local-shipping" size={isDesktop ? 32 : 28} color="#E67E22" />
+            )}
           </View>
           <View style={styles.cardInfo}>
             <Text style={[styles.cardTitle, isDesktop && styles.cardTitleDesktop]}>
@@ -1666,7 +1718,11 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
       <View style={styles.cardHeader}>
         <View style={styles.cardHeaderLeft}>
           <View style={[styles.cardIcon, { backgroundColor: '#27AE6020' }]}>
-            <MaterialIcons name="landscape" size={isDesktop ? 32 : 28} color="#27AE60" />
+            {item.photo ? (
+              <Image source={{ uri: item.photo }} style={styles.animalPhoto} />
+            ) : (
+              <MaterialIcons name="landscape" size={isDesktop ? 32 : 28} color="#27AE60" />
+            )}
           </View>
           <View style={styles.cardInfo}>
             <Text style={[styles.cardTitle, isDesktop && styles.cardTitleDesktop]}>
@@ -1891,6 +1947,233 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
     );
   };
 
+  // ============================================
+  // RENDER FLOTTE PRODUCTION SECTION
+  // ============================================
+  const renderFlotteProductionSection = () => {
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+
+    // Début de semaine (Lundi)
+    const startOfWeek = new Date(now);
+    const day = startOfWeek.getDay() || 7;
+    startOfWeek.setDate(now.getDate() - day + 1);
+    const startOfWeekStr = startOfWeek.toISOString().split('T')[0];
+
+    // Sécurisation
+    const mouvsData = Array.isArray(mouvementsVehicules) ? mouvementsVehicules : [];
+
+    // Calculs
+    const kmToday = mouvsData
+      .filter(m => m.date_mission && m.date_mission.startsWith(today))
+      .reduce((acc, curr) => acc + (parseFloat(curr.kilometrage_retour || 0) - parseFloat(curr.kilometrage_depart || 0)), 0);
+
+    const kmWeek = mouvsData
+      .filter(m => m.date_mission && m.date_mission >= startOfWeekStr && m.date_mission <= today)
+      .reduce((acc, curr) => acc + (parseFloat(curr.kilometrage_retour || 0) - parseFloat(curr.kilometrage_depart || 0)), 0);
+
+    const fuelToday = mouvsData
+      .filter(m => m.date_mission && m.date_mission.startsWith(today))
+      .reduce((acc, curr) => acc + parseFloat(curr.quantite_carburant || 0), 0);
+
+    const fuelWeek = mouvsData
+      .filter(m => m.date_mission && m.date_mission >= startOfWeekStr && m.date_mission <= today)
+      .reduce((acc, curr) => acc + parseFloat(curr.quantite_carburant || 0), 0);
+
+    return (
+      <View style={{ paddingHorizontal: isDesktop ? 32 : 16, marginVertical: 10 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <Text style={styles.sectionTitle}>Performance & Consommation</Text>
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 16 }}>
+          {/* Card KM */}
+          <Surface style={[styles.statCard, { marginRight: 12, minWidth: 180, backgroundColor: '#E8F6F3' }]} elevation={1}>
+            <View style={{ padding: 16 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <MaterialIcons name="speed" size={24} color="#1ABC9C" />
+              </View>
+              <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#2C3E50', marginTop: 8 }}>
+                {kmToday.toFixed(0)} km
+              </Text>
+              <Text style={{ fontSize: 12, color: '#7F8C8D' }}>Parcourus (Aujourd'hui)</Text>
+              <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: '#A3E4D7', paddingTop: 4 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#16A085' }}>
+                  Semaine: {kmWeek.toFixed(0)} km
+                </Text>
+              </View>
+            </View>
+          </Surface>
+
+          {/* Card Carburant */}
+          <Surface style={[styles.statCard, { marginRight: 12, minWidth: 180, backgroundColor: '#FDEDEC' }]} elevation={1}>
+            <View style={{ padding: 16 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <MaterialIcons name="local-gas-station" size={24} color="#E74C3C" />
+              </View>
+              <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#2C3E50', marginTop: 8 }}>
+                {fuelToday.toFixed(1)} L
+              </Text>
+              <Text style={{ fontSize: 12, color: '#7F8C8D' }}>Consommés (Aujourd'hui)</Text>
+              <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: '#FADBD8', paddingTop: 4 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#C0392B' }}>
+                  Semaine: {fuelWeek.toFixed(1)} L
+                </Text>
+              </View>
+            </View>
+          </Surface>
+        </ScrollView>
+      </View>
+    );
+  };
+
+  // ============================================
+  // RENDER AGRICULTURE PRODUCTION SECTION
+  // ============================================
+  const renderAgricultureProductionSection = () => {
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+
+    // Début de semaine
+    const startOfWeek = new Date(now);
+    const day = startOfWeek.getDay() || 7;
+    startOfWeek.setDate(now.getDate() - day + 1);
+    const startOfWeekStr = startOfWeek.toISOString().split('T')[0];
+
+    // Sécurisation
+    const culturesData = Array.isArray(cultures) ? cultures : [];
+
+    // Récoltes prévues
+    const harvestsToday = culturesData
+      .filter(c => c.statut === 'en_cours' && c.date_recolte_prevue && c.date_recolte_prevue.startsWith(today))
+      .length;
+
+    const harvestsWeek = culturesData
+      .filter(c => c.statut === 'en_cours' && c.date_recolte_prevue && c.date_recolte_prevue >= startOfWeekStr && c.date_recolte_prevue <= today)
+      .length;
+
+    return (
+      <View style={{ paddingHorizontal: isDesktop ? 32 : 16, marginVertical: 10 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <Text style={styles.sectionTitle}>Récoltes & Productions</Text>
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 16 }}>
+          {/* Card Récoltes Prévues */}
+          <Surface style={[styles.statCard, { marginRight: 12, minWidth: 180, backgroundColor: '#F4ECF7' }]} elevation={1}>
+            <View style={{ padding: 16 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <MaterialIcons name="agriculture" size={24} color="#9B59B6" />
+              </View>
+              <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#2C3E50', marginTop: 8 }}>
+                {harvestsToday}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#7F8C8D' }}>Récoltes Prévues (Aujourd'hui)</Text>
+              <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: '#D7BDE2', paddingTop: 4 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#8E44AD' }}>
+                  Semaine: {harvestsWeek}
+                </Text>
+              </View>
+            </View>
+          </Surface>
+
+          {/* Note informative */}
+          <View style={{ justifyContent: 'center', maxWidth: 200, marginLeft: 8 }}>
+            <Text style={{ fontSize: 12, color: '#7F8C8D', fontStyle: 'italic' }}>
+              * Basé sur les dates prévisionnelles des cultures actives.
+            </Text>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  };
+
+
+  // ============================================
+  // RENDER PRODUCTIONS SECTION
+  // ============================================
+  const renderProductionsSection = () => {
+    // Calculer les productions du jour et de la semaine
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+
+    // Début de semaine (Lundi)
+    const startOfWeek = new Date(now);
+    const day = startOfWeek.getDay() || 7;
+    startOfWeek.setDate(now.getDate() - day + 1);
+    const startOfWeekStr = startOfWeek.toISOString().split('T')[0];
+
+    // Sécurisation des données
+    const laitData = Array.isArray(productionsLait) ? productionsLait : [];
+    const oeufsData = Array.isArray(productionsOeufs) ? productionsOeufs : [];
+
+    // Lait
+    const milkToday = laitData
+      .filter(p => p.date_production && p.date_production.startsWith(today))
+      .reduce((acc, curr) => acc + parseFloat(curr.quantite_litres || 0), 0);
+
+    const milkWeek = laitData
+      .filter(p => p.date_production && p.date_production >= startOfWeekStr && p.date_production <= today)
+      .reduce((acc, curr) => acc + parseFloat(curr.quantite_litres || 0), 0);
+
+    // Oeufs
+    const eggsToday = oeufsData
+      .filter(p => p.date_recolte && p.date_recolte.startsWith(today))
+      .reduce((acc, curr) => acc + parseInt(curr.nombre_oeufs || 0), 0);
+
+    const eggsWeek = oeufsData
+      .filter(p => p.date_recolte && p.date_recolte >= startOfWeekStr && p.date_recolte <= today)
+      .reduce((acc, curr) => acc + parseInt(curr.nombre_oeufs || 0), 0);
+
+    return (
+      <View style={{ paddingHorizontal: isDesktop ? 32 : 16, marginVertical: 10 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <Text style={styles.sectionTitle}>Productions & Récoltes</Text>
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 16 }}>
+          {/* Card Lait */}
+          <Surface style={[styles.statCard, { marginRight: 12, minWidth: 180, backgroundColor: '#EBF5FB' }]} elevation={1}>
+            <TouchableOpacity style={{ padding: 16 }} onPress={() => handleAddProductionLait()}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <MaterialIcons name="water-drop" size={24} color="#3498DB" />
+                <MaterialIcons name="add-circle" size={24} color="#3498DB" />
+              </View>
+              <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#2C3E50', marginTop: 8 }}>
+                {milkToday.toFixed(1)} L
+              </Text>
+              <Text style={{ fontSize: 12, color: '#7F8C8D' }}>Aujourd'hui</Text>
+              <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: '#AED6F1', paddingTop: 4 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#2980B9' }}>
+                  Semaine: {milkWeek.toFixed(1)} L
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </Surface>
+
+          {/* Card Oeufs */}
+          <Surface style={[styles.statCard, { marginRight: 12, minWidth: 180, backgroundColor: '#FEF9E7' }]} elevation={1}>
+            <TouchableOpacity style={{ padding: 16 }} onPress={handleAddProductionOeufs}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <MaterialIcons name="egg" size={24} color="#F1C40F" />
+                <MaterialIcons name="add-circle" size={24} color="#F1C40F" />
+              </View>
+              <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#2C3E50', marginTop: 8 }}>
+                {eggsToday}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#7F8C8D' }}>Aujourd'hui</Text>
+              <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: '#F9E79F', paddingTop: 4 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: '#F39C12' }}>
+                  Semaine: {eggsWeek}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </Surface>
+
+        </ScrollView>
+      </View>
+    );
+  };
 
   // ============================================
   // RENDER TAB CONTENT
@@ -1919,6 +2202,9 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
 
             {/* Stats */}
             {renderStatsCards(statsFlotte, 'flotte')}
+
+            {/* Productions Section */}
+            {renderFlotteProductionSection()}
 
             {/* Liste des véhicules */}
             <FlatList
@@ -1958,6 +2244,9 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
             />
 
             {renderStatsCards(statsAgriculture, 'agriculture')}
+
+            {/* Productions Section */}
+            {renderAgricultureProductionSection()}
 
             {/* BOUTONS BONUS AGRICULTURE */}
             <View style={[styles.quickActions, isDesktop && styles.quickActionsDesktop]}>
@@ -2028,17 +2317,8 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
             {/* Stats */}
             {renderStatsCards(statsElevage, 'elevage')}
 
-            {/* Actions rapides */}
-            <View style={[styles.quickActions, isDesktop && styles.quickActionsDesktop]}>
-              <Button
-                mode="outlined"
-                onPress={handleAddProductionOeufs}
-                icon="egg"
-                style={styles.quickActionButton}
-              >
-                Production Œufs
-              </Button>
-            </View>
+            {/* Productions Section */}
+            {renderProductionsSection()}
 
             {/* Liste des animaux */}
             <FlatList
@@ -2765,9 +3045,11 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
                   style={[styles.input, styles.halfInput]}
                   mode="outlined"
                   error={!!parcelleRefError}
-                  right={checkingParcelleRef ? <TextInput.Icon icon={() => <ActivityIndicator size="small" color="#2E86C1" />} /> :
-                    !isParcelleRefUnique ? <TextInput.Icon icon="alert-circle" color="#E74C3C" /> :
-                      parcelleForm.reference && parcelleMode === 'add' ? <TextInput.Icon icon="check-circle" color="#27AE60" /> : null}
+                  right={
+                    checkingParcelleRef ? <TextInput.Icon key="loading" icon={() => <ActivityIndicator size="small" color="#2E86C1" />} /> :
+                      !isParcelleRefUnique ? <TextInput.Icon key="alert" icon="alert-circle" color="#E74C3C" /> :
+                        (parcelleForm.reference && parcelleMode === 'add') ? <TextInput.Icon key="check" icon="check-circle" color="#27AE60" /> : null
+                  }
                 />
                 <TextInput
                   label="Nom de la parcelle *"
@@ -3096,9 +3378,11 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
                   style={[styles.input, styles.halfInput]}
                   mode="outlined"
                   error={!!animalIdError}
-                  right={checkingAnimalId ? <TextInput.Icon icon={() => <ActivityIndicator size="small" color="#2E86C1" />} /> :
-                    !isAnimalIdUnique ? <TextInput.Icon icon="alert-circle" color="#E74C3C" /> :
-                      animalForm.numero_identification && animalMode === 'add' ? <TextInput.Icon icon="check-circle" color="#27AE60" /> : null}
+                  right={
+                    checkingAnimalId ? <TextInput.Icon key="loading" icon={() => <ActivityIndicator size="small" color="#2E86C1" />} /> :
+                      !isAnimalIdUnique ? <TextInput.Icon key="alert" icon="alert-circle" color="#E74C3C" /> :
+                        (animalForm.numero_identification && animalMode === 'add') ? <TextInput.Icon key="check" icon="check-circle" color="#27AE60" /> : null
+                  }
                 />
                 <TextInput
                   label="Nom de l'animal"
@@ -3745,10 +4029,40 @@ const FlotteAgricultureElevageScreen = ({ navigation, route }) => {
         <ScrollView>
           <Title style={styles.modalTitle}>Production de Lait</Title>
 
-          <Text style={styles.inputLabel}>Animal</Text>
-          <Chip icon="paw">
-            {selectedAnimal?.nom_animal || selectedAnimal?.numero_identification}
-          </Chip>
+          {!selectedAnimal ? (
+            <View style={{ marginBottom: 16 }}>
+              <Text style={styles.inputLabel}>Sélectionner un animal *</Text>
+              <ScrollView style={{ maxHeight: 150, borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 8 }}>
+                {animaux.filter(a => ['vache', 'chevre', 'brebis'].includes(a.espece)).map(animal => (
+                  <TouchableOpacity
+                    key={animal.id}
+                    style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' }}
+                    onPress={() => {
+                      setSelectedAnimal(animal);
+                      setProductionLaitForm({ ...productionLaitForm, id_animal: animal.id });
+                    }}
+                  >
+                    <Text style={{ fontWeight: 'bold' }}>{animal.nom_animal || animal.numero_identification}</Text>
+                    <Text style={{ fontSize: 12, color: '#757575' }}>{animal.espece} - {animal.race}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.inputLabel}>Animal</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                <Chip icon="paw" style={{ flex: 1 }}>
+                  {selectedAnimal?.nom_animal || selectedAnimal?.numero_identification}
+                </Chip>
+                <IconButton
+                  icon="pencil"
+                  size={20}
+                  onPress={() => setSelectedAnimal(null)}
+                />
+              </View>
+            </>
+          )}
 
           <Button
             mode="outlined"
@@ -4876,6 +5190,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#E1E8EE',
+  },
+  animalPhoto: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
   removePhotoIcon: {
     position: 'absolute',

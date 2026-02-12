@@ -99,7 +99,7 @@ async function getKPIs(dateFilters) {
         // ============================================
         // CHIFFRE D'AFFAIRES
         // ============================================
-        const [caResults] = await db.query(`
+        const caResults = await db.query(`
             SELECT 
                 COALESCE(SUM(CASE 
                     WHEN date_commande BETWEEN ? AND ? 
@@ -125,7 +125,7 @@ async function getKPIs(dateFilters) {
         // ============================================
         // BÉNÉFICE NET
         // ============================================
-        const [beneficeResults] = await db.query(`
+        const beneficeResults = await db.query(`
             SELECT 
                 COALESCE(SUM(CASE 
                     WHEN type_mouvement IN ('entree', 'recette') 
@@ -151,7 +151,7 @@ async function getKPIs(dateFilters) {
         // ============================================
         // EMPLOYÉS
         // ============================================
-        const [employesResults] = await db.query(`
+        const employesResults = await db.query(`
             SELECT 
                 COUNT(*) as total,
                 SUM(CASE WHEN statut = 'actif' THEN 1 ELSE 0 END) as actifs
@@ -170,7 +170,7 @@ async function getKPIs(dateFilters) {
         // ============================================
         // VÉHICULES
         // ============================================
-        const [vehiculesResults] = await db.query(`
+        const vehiculesResults = await db.query(`
             SELECT 
                 COUNT(*) as total,
                 SUM(CASE WHEN statut = 'actif' THEN 1 ELSE 0 END) as actifs,
@@ -190,7 +190,7 @@ async function getKPIs(dateFilters) {
         // ============================================
         // ANIMAUX
         // ============================================
-        const [animauxResults] = await db.query(`
+        const animauxResults = await db.query(`
             SELECT 
                 COUNT(*) as total,
                 SUM(CASE WHEN statut = 'vivant' THEN 1 ELSE 0 END) as vivants
@@ -208,7 +208,7 @@ async function getKPIs(dateFilters) {
         // ============================================
         // COMMANDES
         // ============================================
-        const [commandesResults] = await db.query(`
+        const commandesResults = await db.query(`
             SELECT 
                 COUNT(CASE WHEN statut IN ('brouillon', 'confirmee', 'en_preparation') THEN 1 END) as en_cours,
                 COUNT(CASE WHEN statut = 'livree_complete' 
@@ -262,7 +262,7 @@ async function getAlerts() {
         // ============================================
         // MAINTENANCES VÉHICULES
         // ============================================
-        const [maintenancesResult] = await db.query(`
+        const maintenancesResult = await db.query(`
             SELECT 
                 v.immatriculation,
                 v.marque,
@@ -297,7 +297,7 @@ async function getAlerts() {
         // ============================================
         // STOCKS FAIBLES
         // ============================================
-        const [stocksResult] = await db.query(`
+        const stocksResult = await db.query(`
             SELECT 
                 s.type_article,
                 s.id_article,
@@ -329,7 +329,7 @@ async function getAlerts() {
         // ============================================
         // FACTURES IMPAYÉES
         // ============================================
-        const [facturesResult] = await db.query(`
+        const facturesResult = await db.query(`
             SELECT 
                 numero_facture,
                 montant_du,
@@ -359,7 +359,7 @@ async function getAlerts() {
         // ============================================
         // CONGÉS EN ATTENTE
         // ============================================
-        const [congesResult] = await db.query(`
+        const congesResult = await db.query(`
             SELECT 
                 c.id,
                 u.nom_complet,
@@ -391,7 +391,7 @@ async function getAlerts() {
         // ============================================
         // ASSURANCES VÉHICULES
         // ============================================
-        const [assurancesResult] = await db.query(`
+        const assurancesResult = await db.query(`
             SELECT 
                 v.immatriculation,
                 a.compagnie_assurance,
@@ -442,7 +442,7 @@ async function getCharts(dateFilters) {
         // ============================================
         // ÉVOLUTION CA (30 derniers jours)
         // ============================================
-        const [evolutionCAResult] = await db.query(`
+        const evolutionCAResult = await db.query(`
             SELECT 
                 DATE(date_commande) as date,
                 COALESCE(SUM(montant_total), 0) as montant
@@ -458,7 +458,7 @@ async function getCharts(dateFilters) {
         // ============================================
         // RÉPARTITION REVENUS
         // ============================================
-        const [repartitionRevenusResult] = await db.query(`
+        const repartitionRevenusResult = await db.query(`
             SELECT 
                 categorie,
                 COALESCE(SUM(montant), 0) as montant
@@ -513,7 +513,7 @@ async function getTopPerformers(dateFilters) {
         // ============================================
         // TOP CLIENTS
         // ============================================
-        const [topClientsResult] = await db.query(`
+        const topClientsResult = await db.query(`
             SELECT 
                 c.id,
                 c.nom_client as nom,
@@ -533,7 +533,7 @@ async function getTopPerformers(dateFilters) {
         // ============================================
         // TOP PRODUITS
         // ============================================
-        const [topProduitsResult] = await db.query(`
+        const topProduitsResult = await db.query(`
             SELECT 
                 lcv.designation as nom,
                 COUNT(*) as ventes,
@@ -582,7 +582,7 @@ async function getModuleStats(dateFilters) {
         // ============================================
         // RH
         // ============================================
-        const [rhStatsResult] = await db.query(`
+        const rhStatsResult = await db.query(`
             SELECT 
                 COUNT(DISTINCT u.id) as operations,
                 COALESCE(SUM(s.salaire_net), 0) as montant
@@ -606,7 +606,7 @@ async function getModuleStats(dateFilters) {
         // ============================================
         // COMMERCIAL
         // ============================================
-        const [commercialStatsResult] = await db.query(`
+        const commercialStatsResult = await db.query(`
             SELECT 
                 COUNT(*) as operations,
                 COALESCE(SUM(montant_total), 0) as montant
@@ -626,7 +626,7 @@ async function getModuleStats(dateFilters) {
         // ============================================
         // FINANCE
         // ============================================
-        const [financeStatsResult] = await db.query(`
+        const financeStatsResult = await db.query(`
             SELECT 
                 COUNT(*) as operations,
                 COALESCE(SUM(CASE 
@@ -649,7 +649,7 @@ async function getModuleStats(dateFilters) {
         // ============================================
         // ÉLEVAGE
         // ============================================
-        const [elevageStatsResult] = await db.query(`
+        const elevageStatsResult = await db.query(`
             SELECT 
                 COUNT(*) as operations,
                 COALESCE(SUM(quantite_litres * 1800), 0) as montant
@@ -669,7 +669,7 @@ async function getModuleStats(dateFilters) {
         // ============================================
         // AGRICULTURE
         // ============================================
-        const [agricultureStatsResult] = await db.query(`
+        const agricultureStatsResult = await db.query(`
             SELECT 
                 COUNT(*) as operations,
                 COALESCE(SUM(cout_total), 0) as montant

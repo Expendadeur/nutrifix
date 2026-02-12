@@ -1104,6 +1104,166 @@ class EmailService {
   }
 
   /**
+   * Notifier l'employé de l'activation de son compte
+   */
+  async envoyerNotificationActivation(destinataire, nomEmploye) {
+    try {
+      const mailOptions = {
+        from: {
+          name: 'NUTRIFIX - Système RH',
+          address: process.env.EMAIL_USER
+        },
+        to: destinataire,
+        subject: 'Compte activé - NUTRIFIX',
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <style>
+              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              .header { background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+              .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
+              .success-box { background: #D1FAE5; border-left: 4px solid #10B981; padding: 15px; margin: 20px 0; border-radius: 4px; }
+              .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB; color: #6B7280; font-size: 12px; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>Compte Activé</h1>
+              </div>
+              
+              <div class="content">
+                <p>Bonjour <strong>${nomEmploye}</strong>,</p>
+                
+                <div class="success-box">
+                  <p style="margin: 0; font-size: 18px; font-weight: bold; color: #059669;">
+                    ✓ Votre compte a été activé avec succès
+                  </p>
+                </div>
+                
+                <p>Vous pouvez désormais accéder à l'application NUTRIFIX et utiliser tous les services disponibles.</p>
+                
+                <p><strong>Prochaines étapes :</strong></p>
+                <ul>
+                  <li>Connectez-vous à l'application NUTRIFIX</li>
+                  <li>Vérifiez vos informations de profil</li>
+                  <li>Consultez vos missions et tâches assignées</li>
+                </ul>
+                
+                <p style="color: #6B7280; font-size: 14px; margin-top: 30px;">
+                  Si vous avez des questions, n'hésitez pas à contacter le service RH.<br>
+                  📧 rh@nutrifix.bi | 📞 +257 22 XX XX XX
+                </p>
+              </div>
+              
+              <div class="footer">
+                <p><strong>NUTRIFIX</strong> - Système de Gestion des Ressources Humaines</p>
+                <p>&copy; ${new Date().getFullYear()} NUTRIFIX. Tous droits réservés.</p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log('Email activation compte envoyé:', info.messageId);
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      console.error('Erreur envoi notification activation:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Notifier l'employé de la désactivation de son compte
+   */
+  async envoyerNotificationDesactivation(destinataire, nomEmploye, raison) {
+    try {
+      const mailOptions = {
+        from: {
+          name: 'NUTRIFIX - Système RH',
+          address: process.env.EMAIL_USER
+        },
+        to: destinataire,
+        subject: 'Compte désactivé - NUTRIFIX',
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <style>
+              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              .header { background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+              .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
+              .warning-box { background: #FEE2E2; border-left: 4px solid #EF4444; padding: 15px; margin: 20px 0; border-radius: 4px; }
+              .info-box { background: white; border: 1px solid #E5E7EB; padding: 15px; margin: 20px 0; border-radius: 8px; }
+              .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB; color: #6B7280; font-size: 12px; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>Compte Désactivé</h1>
+              </div>
+              
+              <div class="content">
+                <p>Bonjour <strong>${nomEmploye}</strong>,</p>
+                
+                <div class="warning-box">
+                  <p style="margin: 0; font-size: 18px; font-weight: bold; color: #DC2626;">
+                    Votre compte a été désactivé
+                  </p>
+                </div>
+                
+                <p>Votre accès à l'application NUTRIFIX a été temporairement suspendu.</p>
+                
+                ${raison ? `
+                <div class="info-box">
+                  <p><strong>Raison :</strong> ${raison}</p>
+                </div>
+                ` : ''}
+                
+                <p><strong>Conséquences :</strong></p>
+                <ul>
+                  <li>Vous ne pouvez plus vous connecter à l'application</li>
+                  <li>Vos accès aux ressources de l'entreprise sont suspendus</li>
+                  <li>Vos missions en cours sont réassignées</li>
+                </ul>
+                
+                <p style="color: #DC2626; font-weight: bold; margin-top: 20px;">
+                  Pour toute question ou contestation, veuillez contacter immédiatement le service RH.
+                </p>
+                
+                <p style="color: #6B7280; font-size: 14px; margin-top: 30px;">
+                  📧 rh@nutrifix.bi | 📞 +257 22 XX XX XX
+                </p>
+              </div>
+              
+              <div class="footer">
+                <p><strong>NUTRIFIX</strong> - Système de Gestion des Ressources Humaines</p>
+                <p>&copy; ${new Date().getFullYear()} NUTRIFIX. Tous droits réservés.</p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log('Email désactivation compte envoyé:', info.messageId);
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      console.error('Erreur envoi notification désactivation:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Helper: Obtenir le nom du mois
    */
   getMoisNom(mois) {

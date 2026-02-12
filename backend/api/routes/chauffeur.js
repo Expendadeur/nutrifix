@@ -314,7 +314,7 @@ router.get('/missions/history', authenticate, authorize(['chauffeur']), async (r
             ORDER BY m.date_mission DESC, m.heure_depart DESC
             LIMIT ${limit} OFFSET ${offset}
         `;
-        
+
         const [missions] = await db.query(countSql, queryParams);
 
         res.json({
@@ -399,7 +399,7 @@ router.post('/missions/start', authenticate, authorize(['chauffeur']), async (re
         }
 
         const vehicleId = vehicle[0].id;
-        const kmDepart = parseFloat(kilometrage_depart);
+        const kmDepart = Math.round(parseFloat(kilometrage_depart) || 0);
 
         // Vérifier cohérence kilométrage
         if (kmDepart < vehicle[0].kilometrage_actuel) {
@@ -552,7 +552,7 @@ router.post('/missions/end', authenticate, authorize(['chauffeur']), async (req,
         }
 
         const missionData = mission[0];
-        const kmRetour = parseFloat(kilometrage_retour);
+        const kmRetour = Math.round(parseFloat(kilometrage_retour) || 0);
         const kmDepart = parseFloat(missionData.kilometrage_depart);
 
         // Vérifier cohérence kilométrage
@@ -918,7 +918,7 @@ router.get('/expenses', authenticate, authorize(['chauffeur']), async (req, res)
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
         const status = req.query.status;
         const type = req.query.type;
-        
+
         const offset = (page - 1) * limit;
 
         let whereConditions = ['m.id_chauffeur = ?'];
@@ -968,7 +968,7 @@ router.get('/expenses', authenticate, authorize(['chauffeur']), async (req, res)
             ORDER BY f.date DESC, f.id DESC
             LIMIT ${limit} OFFSET ${offset}
         `;
-        
+
         const [frais] = await db.query(fraisSql, queryParams);
 
         res.json({
@@ -1223,7 +1223,7 @@ router.get('/notifications', authenticate, authorize(['chauffeur']), async (req,
             ORDER BY n.priorite DESC, n.date_creation DESC
             LIMIT ${limitNum} OFFSET ${offset}
         `;
-        
+
         const [notifications] = await db.query(notifSql, params);
 
         const totalNotifications = countResult && countResult.length > 0 ? countResult[0].total : 0;
@@ -1479,7 +1479,7 @@ router.get('/salary/history', authenticate, authorize(['chauffeur']), async (req
             ORDER BY s.annee DESC, s.mois DESC
             LIMIT ${limit} OFFSET ${offset}
         `;
-        
+
         const [salaries] = await db.query(salarySql, [userId, year]);
 
         // Compter total
@@ -1687,7 +1687,7 @@ router.get('/salary/payment-requests', authenticate, authorize(['chauffeur']), a
         const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
         const status = req.query.status;
-        
+
         const offset = (page - 1) * limit;
 
         let whereConditions = ['d.id_employe = ?'];
@@ -1748,7 +1748,7 @@ router.get('/salary/payment-requests', authenticate, authorize(['chauffeur']), a
             ORDER BY d.date_demande DESC
             LIMIT ${limit} OFFSET ${offset}
         `;
-        
+
         const [requests] = await db.query(requestsSql, queryParams);
 
         res.json({

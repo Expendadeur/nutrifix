@@ -399,7 +399,7 @@ router.post('/utilisateurs', authenticate, authorize(['admin']), async (req, res
             [matricule, email]
         );
 
-        if (existingUser[0]) {
+        if (existingUser) {
             return res.status(400).json({
                 success: false,
                 message: 'Un utilisateur avec ce matricule ou cet email existe déjà.'

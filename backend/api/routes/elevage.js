@@ -83,12 +83,8 @@ router.get('/animaux', authenticate, authorize('admin', 'manager', 'veterinaire'
             countParams.push(espece);
         }
 
-        if (statut) {
-            countSql += ' AND statut = ?';
-            countParams.push(statut);
-        }
-
-        const [countResult] = await db.query(countSql, countParams);
+        const resultsCountAll = await db.query(countSql, countParams);
+        const countResult = (resultsCountAll && resultsCountAll.length > 0) ? resultsCountAll[0] : { total: 0 };
 
         res.status(200).json({
             success: true,
@@ -298,7 +294,8 @@ router.post('/productions-lait', authenticate, authorize('admin', 'manager', 've
 
         // Check if animal is a female and of milk-producing species
         const animalSql = `SELECT espece, sexe FROM animaux WHERE id = ? AND statut = 'vivant'`;
-        const [animal] = await db.query(animalSql, [id_animal]);
+        const resultsAnimal = await db.query(animalSql, [id_animal]);
+        const animal = (resultsAnimal && resultsAnimal.length > 0) ? resultsAnimal[0] : null;
 
         if (!animal) {
             return res.status(404).json({
@@ -468,8 +465,9 @@ router.post('/rations-alimentaires', authenticate, authorize('admin', 'manager')
         }
 
         // Check aliment stock
-        const alimentSql = `SELECT quantite_stock, seuil_alerte FROM aliments_betail WHERE id = ?`;
-        const [aliment] = await db.query(alimentSql, [id_aliment]);
+        const alimentSql = `SELECT quantite_stock, seuil_alerte, nom_aliment FROM aliments_betail WHERE id = ?`;
+        const resultsAliment = await db.query(alimentSql, [id_aliment]);
+        const aliment = (resultsAliment && resultsAliment.length > 0) ? resultsAliment[0] : null;
 
         if (!aliment) {
             return res.status(404).json({
@@ -570,7 +568,8 @@ router.get('/statistiques', authenticate, authorize('admin', 'manager', 'veterin
                 COUNT(DISTINCT race) as nombre_races
             FROM animaux
         `;
-        const [animalStats] = await db.query(animalSql);
+        const resultsAnimalStats = await db.query(animalSql);
+        const animalStats = (resultsAnimalStats && resultsAnimalStats.length > 0) ? resultsAnimalStats[0] : {};
 
         // Health statistics
         const healthSql = `
@@ -606,7 +605,8 @@ router.get('/statistiques', authenticate, authorize('admin', 'manager', 'veterin
             milkParams.push(endDate);
         }
 
-        const [milkStats] = await db.query(milkSql, milkParams);
+        const resultsMilkStats = await db.query(milkSql, milkParams);
+        const milkStats = (resultsMilkStats && resultsMilkStats.length > 0) ? resultsMilkStats[0] : {};
 
         // Egg production statistics
         let eggSql = `
@@ -631,7 +631,8 @@ router.get('/statistiques', authenticate, authorize('admin', 'manager', 'veterin
             eggParams.push(endDate);
         }
 
-        const [eggStats] = await db.query(eggSql, eggParams);
+        const resultsEggStats = await db.query(eggSql, eggParams);
+        const eggStats = (resultsEggStats && resultsEggStats.length > 0) ? resultsEggStats[0] : {};
 
         // Feed consumption statistics
         let feedSql = `
@@ -654,7 +655,8 @@ router.get('/statistiques', authenticate, authorize('admin', 'manager', 'veterin
             feedParams.push(endDate);
         }
 
-        const [feedStats] = await db.query(feedSql, feedParams);
+        const resultsFeedStats = await db.query(feedSql, feedParams);
+        const feedStats = (resultsFeedStats && resultsFeedStats.length > 0) ? resultsFeedStats[0] : {};
 
         res.status(200).json({
             success: true,

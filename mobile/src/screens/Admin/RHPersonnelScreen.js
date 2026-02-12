@@ -190,6 +190,10 @@ const RHPersonnelScreen = ({ navigation }) => {
   const [matriculeError, setMatriculeError] = useState(null);
   const [isMatriculeUnique, setIsMatriculeUnique] = useState(true);
 
+  const [checkingCNI, setCheckingCNI] = useState(false);
+  const [cniError, setCniError] = useState(null);
+  const [isCNIUnique, setIsCNIUnique] = useState(true);
+
   // DEPARTEMENTS
   const [departements, setDepartements] = useState([]);
   const [selectedDepartementData, setSelectedDepartementData] = useState(null);
@@ -265,6 +269,33 @@ const RHPersonnelScreen = ({ navigation }) => {
     }
   };
 
+  const checkCNIUniqueness = async (cni) => {
+    if (!cni) return;
+
+    // Si on est en mode édition et que le CNI n'a pas changé, pas besoin de vérifier
+    if (employeMode === 'edit' && cni === selectedEmploye?.numero_cni) {
+      setIsCNIUnique(true);
+      setCniError(null);
+      return;
+    }
+
+    try {
+      setCheckingCNI(true);
+      setCniError(null);
+      const response = await api.get(`/system/check-uniqueness?table=employes&field=numero_cni&value=${cni}`);
+      if (response.data.success) {
+        setIsCNIUnique(response.data.isUnique);
+        if (!response.data.isUnique) {
+          setCniError('Ce numéro CNI est déjà utilisé.');
+        }
+      }
+    } catch (error) {
+      console.error('Error checking CNI:', error);
+    } finally {
+      setCheckingCNI(false);
+    }
+  };
+
   useEffect(() => {
     const timer = setTimeout(() => {
       if (employeForm.matricule && employeMode === 'add') {
@@ -276,6 +307,18 @@ const RHPersonnelScreen = ({ navigation }) => {
     }, 600);
     return () => clearTimeout(timer);
   }, [employeForm.matricule, employeMode]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (employeForm.numero_cni) {
+        checkCNIUniqueness(employeForm.numero_cni);
+      } else {
+        setIsCNIUnique(true);
+        setCniError(null);
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [employeForm.numero_cni, employeMode]);
 
   // ============================================
   // HELPER FUNCTIONS
@@ -321,12 +364,26 @@ const RHPersonnelScreen = ({ navigation }) => {
   // ============================================
   const loadEmployes = useCallback(async () => {
     try {
-      const params = {};
-      if (selectedTypeEmploye !== 'all') params.type_employe = selectedTypeEmploye;
-      if (selectedDepartement !== 'all') params.id_departement = selectedDepartement;
+      const params = {
+        ts: Date.now(), // force refresh
+      };
 
-      const response = await api.get('/personnel/employes', { params });
-      setEmployes(response.data.data || []);
+      if (selectedTypeEmploye !== 'all') {
+        params.type_employe = selectedTypeEmploye;
+      }
+
+      if (selectedDepartement !== 'all') {
+        params.id_departement = selectedDepartement;
+      }
+
+      const response = await api.get('/personnel/employes', {
+        params,
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
+
+      setEmployes(response?.data?.data || []);
       setError(null);
     } catch (err) {
       setError('Erreur lors du chargement des employés');
@@ -334,10 +391,19 @@ const RHPersonnelScreen = ({ navigation }) => {
     }
   }, [selectedTypeEmploye, selectedDepartement]);
 
+  /**
+   * DÉPARTEMENTS
+   */
   const loadDepartements = useCallback(async () => {
     try {
-      const response = await api.get('/personnel/departements');
-      setDepartements(response.data.data || []);
+      const response = await api.get('/personnel/departements', {
+        params: { ts: Date.now() },
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
+
+      setDepartements(response?.data?.data || []);
       setError(null);
     } catch (err) {
       setError('Erreur lors du chargement des départements');
@@ -345,11 +411,26 @@ const RHPersonnelScreen = ({ navigation }) => {
     }
   }, []);
 
+  /**
+   * PRÉSENCES
+   */
   const loadPresences = useCallback(async () => {
     try {
-      const dateStr = selectedDatePresence.toISOString().split('T')[0];
-      const response = await api.get('/personnel/presences', { params: { date: dateStr } });
-      setPresences(response.data.data || []);
+      const dateStr = selectedDatePresence
+        .toISOString()
+        .split('T')[0];
+
+      const response = await api.get('/personnel/presences', {
+        params: {
+          date: dateStr,
+          ts: Date.now(),
+        },
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
+
+      setPresences(response?.data?.data || []);
       setError(null);
     } catch (err) {
       setError('Erreur lors du chargement des présences');
@@ -357,12 +438,26 @@ const RHPersonnelScreen = ({ navigation }) => {
     }
   }, [selectedDatePresence]);
 
+  /**
+   * SALAIRES
+   */
   const loadSalaires = useCallback(async () => {
     try {
       const mois = selectedMoisSalaire.getMonth() + 1;
       const annee = selectedMoisSalaire.getFullYear();
-      const response = await api.get('/personnel/salaires', { params: { mois, annee } });
-      setSalaires(response.data.data || []);
+
+      const response = await api.get('/personnel/salaires', {
+        params: {
+          mois,
+          annee,
+          ts: Date.now(),
+        },
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
+
+      setSalaires(response?.data?.data || []);
       setError(null);
     } catch (err) {
       setError('Erreur lors du chargement des salaires');
@@ -370,12 +465,23 @@ const RHPersonnelScreen = ({ navigation }) => {
     }
   }, [selectedMoisSalaire]);
 
+  /**
+   * CONGÉS
+   */
   const loadConges = useCallback(async () => {
     try {
-      const response = await api.get('/personnel/conges');
-      setConges(response.data.data || []);
+      const response = await api.get('/personnel/conges', {
+        params: { ts: Date.now() },
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
+
+      const conges = response?.data?.data || [];
+
+      setConges(conges);
       setCongesPendingCount(
-        (response.data.data || []).filter(c => c.statut === 'en_attente').length
+        conges.filter(c => c.statut === 'en_attente').length
       );
       setError(null);
     } catch (err) {
@@ -384,10 +490,19 @@ const RHPersonnelScreen = ({ navigation }) => {
     }
   }, []);
 
+  /**
+   * HISTORIQUE
+   */
   const loadHistorique = useCallback(async () => {
     try {
-      const response = await api.get('/personnel/historique');
-      setHistorique(response.data.data || []);
+      const response = await api.get('/personnel/historique', {
+        params: { ts: Date.now() },
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
+
+      setHistorique(response?.data?.data || []);
       setError(null);
     } catch (err) {
       setError('Erreur lors du chargement de l\'historique');
@@ -406,7 +521,7 @@ const RHPersonnelScreen = ({ navigation }) => {
           await loadDepartements();
           break;
         case 'presences':
-          await loadPresences();
+          await Promise.all([loadEmployes(), loadPresences()]);
           break;
         case 'salaires':
           await loadSalaires();
@@ -523,6 +638,37 @@ const RHPersonnelScreen = ({ navigation }) => {
     } finally {
       setActionInProgress(null);
     }
+  };
+
+  const handleToggleStatus = (employe) => {
+    const newStatus = employe.statut === 'actif' ? 'inactif' : 'actif';
+    const actionText = newStatus === 'actif' ? 'activer' : 'désactiver';
+
+    Alert.alert(
+      'Confirmation',
+      `Êtes-vous sûr de vouloir ${actionText} ${employe.nom_complet} ?${newStatus === 'inactif' ? '\n\nUn email de notification sera envoyé à l\'employé.' : ''}`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: actionText.charAt(0).toUpperCase() + actionText.slice(1),
+          style: newStatus === 'inactif' ? 'destructive' : 'default',
+          onPress: async () => {
+            try {
+              setActionInProgress('toggle_status');
+              await api.post(`/personnel/employes/${employe.id}/toggle-status`, {
+                raison: newStatus === 'inactif' ? 'Désactivation administrative' : undefined
+              });
+              Alert.alert('Succès', `Employé ${newStatus === 'actif' ? 'activé' : 'désactivé'} avec succès.\nUn email de notification a été envoyé.`);
+              await loadEmployes();
+            } catch (err) {
+              Alert.alert('Erreur', err.response?.data?.message || 'Impossible de changer le statut');
+            } finally {
+              setActionInProgress(null);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handlePrintCarte = async () => {
@@ -684,6 +830,29 @@ const RHPersonnelScreen = ({ navigation }) => {
     }
   };
 
+  const handleMarkPresence = async (employeId, statut) => {
+    try {
+      setActionInProgress(`mark_presence_${employeId}`);
+      const dateStr = selectedDatePresence.toISOString().split('T')[0];
+
+      const payload = {
+        id_utilisateur: employeId,
+        date: dateStr,
+        heure_entree: statut === 'présent' ? new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '00:00',
+        statut: statut,
+      };
+
+      await api.post('/personnel/presences', payload);
+      // Reload presences to update UI
+      await loadPresences();
+    } catch (err) {
+      console.error('Error marking presence:', err);
+      Alert.alert('Erreur', 'Impossible de marquer la présence');
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
   // ============================================
   // EFFECTS
   // ============================================
@@ -820,6 +989,20 @@ const RHPersonnelScreen = ({ navigation }) => {
         </TouchableOpacity>
 
         <TouchableOpacity
+          style={[styles.cardActionBtn, { padding: 16 / 2, flexDirection: 'row', alignItems: 'center' }]}
+          onPress={(e) => {
+            e.stopPropagation();
+            handleToggleStatus(item);
+          }}
+        >
+          <MaterialIcons
+            name={item.statut === 'actif' ? 'toggle-on' : 'toggle-off'}
+            size={18}
+            color={item.statut === 'actif' ? '#10B981' : '#6B7280'}
+          />
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={[styles.cardActionBtn, { padding: 16 / 2 }]}
           onPress={(e) => {
             e.stopPropagation();
@@ -947,53 +1130,99 @@ const RHPersonnelScreen = ({ navigation }) => {
   // ============================================
   // RENDER PRESENCES - CLICKABLE CARDS
   // ============================================
-  const PresenceCard = ({ item }) => (
-    <TouchableOpacity
-      style={[
-        styles.presenceCard,
-        {
-          width: layout.cardWidth,
-          margin: 16 / 2,
-          padding: layout.cardPadding,
-        }
-      ]}
-      activeOpacity={0.7}
-    >
-      <View style={styles.presenceCardHeader}>
-        <Avatar.Image
-          size={50}
-          source={item.photo ? { uri: item.photo } : require('../../../assets/images/default-avatar.png')}
-        />
-        <Chip
-          mode="flat"
-          textStyle={{ fontSize: 16 - 2 }}
-          style={styles.presenceStatusChip}
-        >
-          {item.statut}
-        </Chip>
-      </View>
+  // ============================================
+  // RENDER PRESENCES - LISTE DES EMPLOYÉS AVEC STATUT
+  // ============================================
+  const PresenceCard = ({ item }) => {
+    // Chercher la présence pour cet employé
+    const presence = presences.find(p => p.id_utilisateur === item.id);
+    const dateStr = selectedDatePresence.toISOString().split('T')[0];
+    const isToday = dateStr === new Date().toISOString().split('T')[0];
+    const isLoading = actionInProgress === `mark_presence_${item.id}`;
 
-      <Text style={[styles.presenceCardName, { fontSize: 18, marginTop: 16 }]}>
-        {item.employe_nom}
-      </Text>
-
-      <View style={[styles.presenceTimeInfo, { marginTop: 16 }]}>
-        <View style={styles.presenceTimeRow}>
-          <MaterialIcons name="login" size={16} color="#27AE60" />
-          <Text style={[styles.presenceTimeText, { fontSize: 16, marginLeft: 4 }]}>
-            {item.heure_entree}
-          </Text>
+    return (
+      <View
+        style={[
+          styles.presenceCard,
+          {
+            width: layout.cardWidth,
+            margin: 16 / 2,
+            padding: layout.cardPadding,
+            backgroundColor: presence ? (presence.statut === 'présent' ? '#E8F8F5' : '#FDEDEC') : '#FFFFFF',
+            borderLeftWidth: 4,
+            borderLeftColor: presence ? (presence.statut === 'présent' ? '#27AE60' : '#E74C3C') : '#BDC3C7'
+          }
+        ]}
+      >
+        <View style={styles.presenceCardHeader}>
+          <Avatar.Image
+            size={50}
+            source={item.photo_identite ? { uri: item.photo_identite } : require('../../../assets/images/default-avatar.png')}
+          />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={[styles.presenceCardName, { fontSize: 16 }]} numberOfLines={1}>
+              {item.nom_complet}
+            </Text>
+            <Text style={{ fontSize: 12, color: '#7F8C8D' }}>
+              {item.role}
+            </Text>
+          </View>
         </View>
 
-        <View style={[styles.presenceTimeRow, { marginTop: 4 }]}>
-          <MaterialIcons name="logout" size={16} color="#E74C3C" />
-          <Text style={[styles.presenceTimeText, { fontSize: 16, marginLeft: 4 }]}>
-            {item.heure_sortie || 'En cours'}
-          </Text>
+        <View style={{ marginTop: 16 }}>
+          {presence ? (
+            <View>
+              <Chip
+                icon={presence.statut === 'présent' ? 'check' : 'close'}
+                mode="flat"
+                style={{ backgroundColor: presence.statut === 'présent' ? '#D4EFDF' : '#FADBD8', alignSelf: 'flex-start' }}
+                textStyle={{ color: presence.statut === 'présent' ? '#145A32' : '#7B241C' }}
+              >
+                {presence.statut.toUpperCase()}
+              </Chip>
+              {presence.statut === 'présent' && (
+                <Text style={{ marginTop: 8, fontSize: 12, color: '#27AE60' }}>
+                  Arrivée: {presence.heure_entree}
+                </Text>
+              )}
+            </View>
+          ) : (
+            <Text style={{ fontStyle: 'italic', color: '#95A5A6', marginBottom: 8 }}>
+              Non marqué
+            </Text>
+          )}
+        </View>
+
+        {/* Actions buttons if today and not marked or modifying */}
+        <View style={{ flexDirection: 'row', marginTop: 16, justifyContent: 'space-between' }}>
+          <Button
+            mode={presence?.statut === 'présent' ? 'contained' : 'outlined'}
+            onPress={() => handleMarkPresence(item.id, 'présent')}
+            style={{ flex: 1, marginRight: 4, borderColor: '#27AE60' }}
+            textColor={presence?.statut === 'présent' ? '#FFF' : '#27AE60'}
+            buttonColor={presence?.statut === 'présent' ? '#27AE60' : undefined}
+            compact
+            loading={isLoading}
+            disabled={isLoading}
+          >
+            Présent
+          </Button>
+          <Button
+            mode={presence?.statut === 'absent' ? 'contained' : 'outlined'}
+            onPress={() => handleMarkPresence(item.id, 'absent')}
+            style={{ flex: 1, marginLeft: 4, borderColor: '#E74C3C' }}
+            textColor={presence?.statut === 'absent' ? '#FFF' : '#E74C3C'}
+            buttonColor={presence?.statut === 'absent' ? '#E74C3C' : undefined}
+            compact
+            loading={isLoading}
+            disabled={isLoading}
+          >
+            Absent
+          </Button>
         </View>
       </View>
-    </TouchableOpacity>
-  );
+    );
+  };
 
   const PresenceListView = () => (
     <>
@@ -1004,13 +1233,20 @@ const RHPersonnelScreen = ({ navigation }) => {
         >
           <MaterialIcons name="calendar-today" size={20} color="#2E86C1" />
           <Text style={[styles.datePickerText, { fontSize: 18, marginLeft: 16 / 2 }]}>
-            {selectedDatePresence.toLocaleDateString('fr-FR')}
+            {selectedDatePresence.toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </Text>
         </TouchableOpacity>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={{ alignItems: 'flex-end', marginRight: 16 }}>
+            <Text style={{ fontSize: 12, color: '#7F8C8D' }}>Présents: {presences.filter(p => p.statut === 'présent').length}</Text>
+            <Text style={{ fontSize: 12, color: '#7F8C8D' }}>Absents: {presences.filter(p => p.statut === 'absent').length}</Text>
+          </View>
+        </View>
       </View>
 
       <FlatList
-        data={presences}
+        data={filteredEmployes.filter(e => e.statut === 'actif')} // Show only active employees
         renderItem={({ item }) => <PresenceCard item={item} />}
         keyExtractor={item => item.id?.toString()}
         numColumns={layout.numColumns}
@@ -1018,9 +1254,9 @@ const RHPersonnelScreen = ({ navigation }) => {
         contentContainerStyle={[styles.gridContent, { padding: 16 / 2 }]}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <MaterialIcons name="assignment-turned-in" size={80} color="#BDC3C7" />
+            <MaterialIcons name="people-outline" size={80} color="#BDC3C7" />
             <Text style={[styles.emptyText, { fontSize: 18, marginTop: 16 }]}>
-              Aucune présence
+              Aucun employé actif trouvé
             </Text>
           </View>
         }
@@ -1500,20 +1736,25 @@ const RHPersonnelScreen = ({ navigation }) => {
                         mode="outlined"
                         editable={employeMode === 'add'}
                         error={!!matriculeError}
-                        right={checkingMatricule ? <TextInput.Icon icon={() => <ActivityIndicator size="small" color="#2E86C1" />} /> :
-                          !isMatriculeUnique ? <TextInput.Icon icon="alert-circle" color="#E74C3C" /> :
-                            employeForm.matricule && employeMode === 'add' ? <TextInput.Icon icon="check-circle" color="#27AE60" /> : null}
+                        right={checkingMatricule ? <TextInput.Icon key="loading" icon={() => <ActivityIndicator size="small" color="#2E86C1" />} /> :
+                          !isMatriculeUnique ? <TextInput.Icon key="alert" icon="alert-circle" color="#E74C3C" /> :
+                            employeForm.matricule && employeMode === 'add' ? <TextInput.Icon key="check" icon="check-circle" color="#27AE60" /> : null}
                       />
                       {matriculeError && <Text style={styles.errorTextSmall}>{matriculeError}</Text>}
                     </View>
                     <View style={{ flex: 1, marginLeft: 8 }}>
                       <TextInput
                         label="CNI"
-                        value={employeForm.CNI || ''}
-                        onChangeText={(text) => setEmployeForm({ ...employeForm, CNI: text })}
+                        value={employeForm.numero_cni || ''}
+                        onChangeText={(text) => setEmployeForm({ ...employeForm, numero_cni: text })}
                         style={styles.input}
                         mode="outlined"
+                        error={!!cniError}
+                        right={checkingCNI ? <TextInput.Icon key="loading" icon={() => <ActivityIndicator size="small" color="#2E86C1" />} /> :
+                          !isCNIUnique ? <TextInput.Icon key="alert" icon="alert-circle" color="#E74C3C" /> :
+                            employeForm.numero_cni && isCNIUnique ? <TextInput.Icon key="check" icon="check-circle" color="#27AE60" /> : null}
                       />
+                      {cniError && <Text style={styles.errorTextSmall}>{cniError}</Text>}
                     </View>
                   </View>
 

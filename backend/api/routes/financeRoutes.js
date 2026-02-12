@@ -15,30 +15,33 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager', 'comptable'
         const end = endDate || new Date().toISOString().split('T')[0];
 
         // Totaux généraux
-        const [totaux] = await db.query(`
+        const resultsTotaux = await db.query(`
             SELECT 
                 COALESCE(SUM(CASE WHEN type_mouvement IN ('entree', 'recette') THEN montant ELSE 0 END), 0) as total_entrees,
                 COALESCE(SUM(CASE WHEN type_mouvement IN ('sortie', 'depense') THEN montant ELSE 0 END), 0) as total_sorties
             FROM journal_comptable
             WHERE date_operation >= ? AND date_operation <= ?
         `, [start, end]);
+        const totaux = (resultsTotaux && resultsTotaux.length > 0) ? resultsTotaux[0] : { total_entrees: 0, total_sorties: 0 };
 
         // Créances et Dettes
-        const [creances] = await db.query(`
+        const resultsCreances = await db.query(`
             SELECT 
                 COUNT(*) as nombre,
                 COALESCE(SUM(montant_du), 0) as total
             FROM factures
             WHERE type_facture = 'vente' AND statut_paiement != 'payee'
         `);
+        const creances = (resultsCreances && resultsCreances.length > 0) ? resultsCreances[0] : { nombre: 0, total: 0 };
 
-        const [dettes] = await db.query(`
+        const resultsDettes = await db.query(`
             SELECT 
                 COUNT(*) as nombre,
                 COALESCE(SUM(montant_du), 0) as total
             FROM factures
             WHERE type_facture = 'achat' AND statut_paiement != 'payee'
         `);
+        const dettes = (resultsDettes && resultsDettes.length > 0) ? resultsDettes[0] : { nombre: 0, total: 0 };
 
         // Évolution mensuelle
         const evolutionMensuelle = await db.query(`
@@ -67,12 +70,13 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager', 'comptable'
         `, [start, end]);
 
         // Factures en retard
-        const [facturesRetard] = await db.query(`
+        const resultsFacturesRetard = await db.query(`
             SELECT COUNT(*) as nombre
             FROM factures
             WHERE statut_paiement IN ('impayee', 'partiellement_payee')
             AND date_echeance < CURDATE()
         `);
+        const facturesRetard = (resultsFacturesRetard && resultsFacturesRetard.length > 0) ? resultsFacturesRetard[0] : { nombre: 0 };
 
         res.status(200).json({
             success: true,
@@ -482,7 +486,7 @@ router.put('/paiements/:id', authenticate, authorize('admin', 'comptable'), asyn
 
         // Récupérer le paiement actuel
         const [paiement] = await connection.query('SELECT * FROM paiements WHERE id = ?', [id]);
-        
+
         if (!paiement) {
             await connection.rollback();
             return res.status(404).json({
@@ -551,7 +555,7 @@ router.delete('/paiements/:id', authenticate, authorize('admin'), async (req, re
 
         // Vérifier existence
         const [paiement] = await connection.query('SELECT * FROM paiements WHERE id = ?', [id]);
-        
+
         if (!paiement) {
             await connection.rollback();
             return res.status(404).json({
@@ -615,9 +619,9 @@ router.delete('/paiements/:id', authenticate, authorize('admin'), async (req, re
 // ============================================
 router.get('/journal-comptable', authenticate, authorize('admin', 'manager', 'comptable'), async (req, res) => {
     try {
-        const { 
-            startDate, endDate, categorie, type_mouvement, 
-            table_source, search, limit = 1000 
+        const {
+            startDate, endDate, categorie, type_mouvement,
+            table_source, search, limit = 1000
         } = req.query;
 
         let sql = `
@@ -667,7 +671,7 @@ router.get('/journal-comptable', authenticate, authorize('admin', 'manager', 'co
         const mouvements = await db.query(sql, params);
 
         // Calculer totaux pour la période
-        const [totaux] = await db.query(`
+        const resultsTotauxPeriode = await db.query(`
             SELECT 
                 COALESCE(SUM(CASE WHEN type_mouvement IN ('entree', 'recette') THEN montant ELSE 0 END), 0) as total_entrees,
                 COALESCE(SUM(CASE WHEN type_mouvement IN ('sortie', 'depense') THEN montant ELSE 0 END), 0) as total_sorties,
@@ -675,9 +679,10 @@ router.get('/journal-comptable', authenticate, authorize('admin', 'manager', 'co
             FROM journal_comptable
             WHERE date_operation >= ? AND date_operation <= ?
         `, [
-            startDate || '1900-01-01', 
+            startDate || '1900-01-01',
             endDate || '2100-12-31'
         ]);
+        const totaux = (resultsTotauxPeriode && resultsTotauxPeriode.length > 0) ? resultsTotauxPeriode[0] : { total_entrees: 0, total_sorties: 0, nombre_operations: 0 };
 
         const solde = parseFloat(totaux.total_entrees) - parseFloat(totaux.total_sorties);
 

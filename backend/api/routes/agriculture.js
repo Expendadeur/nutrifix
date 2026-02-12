@@ -6,8 +6,8 @@ const db = require('../../database/db');
 // Gestion des parcelles
 router.get('/parcelles', authenticate, authorize('admin', 'manager', 'agriculteur'), async (req, res) => {
     try {
-        const { 
-            statut, 
+        const {
+            statut,
             type_sol,
             search,
             page = 1,
@@ -54,7 +54,7 @@ router.get('/parcelles', authenticate, authorize('admin', 'manager', 'agriculteu
         }
 
         sql += ' ORDER BY p.reference ASC';
-        
+
         // Pagination
         const offset = (page - 1) * limit;
         sql += ' LIMIT ? OFFSET ?';
@@ -62,16 +62,8 @@ router.get('/parcelles', authenticate, authorize('admin', 'manager', 'agriculteu
 
         const parcelles = await db.query(sql, params);
 
-        // Count total
-        let countSql = `SELECT COUNT(*) as total FROM parcelles WHERE 1=1`;
-        const countParams = [];
-
-        if (statut) {
-            countSql += ' AND statut = ?';
-            countParams.push(statut);
-        }
-
-        const [countResult] = await db.query(countSql, countParams);
+        const resultsCount = await db.query(countSql, countParams);
+        const countResult = (resultsCount && resultsCount.length > 0) ? resultsCount[0] : { total: 0 };
 
         res.status(200).json({
             success: true,
@@ -176,7 +168,8 @@ router.post('/cultures', authenticate, authorize('admin', 'manager', 'agriculteu
 
         // Check if parcel is available
         const parcelleSql = `SELECT statut, id_culture_actuelle FROM parcelles WHERE id = ?`;
-        const [parcelle] = await db.query(parcelleSql, [id_parcelle]);
+        const resultsParcelle = await db.query(parcelleSql, [id_parcelle]);
+        const parcelle = (resultsParcelle && resultsParcelle.length > 0) ? resultsParcelle[0] : null;
 
         if (!parcelle || parcelle.statut !== 'active') {
             return res.status(400).json({
@@ -194,7 +187,8 @@ router.post('/cultures', authenticate, authorize('admin', 'manager', 'agriculteu
 
         // Get culture type info for harvest date
         const typeCultureSql = `SELECT duree_cycle_jours FROM types_cultures WHERE id = ?`;
-        const [typeCulture] = await db.query(typeCultureSql, [id_type_culture]);
+        const resultsType = await db.query(typeCultureSql, [id_type_culture]);
+        const typeCulture = (resultsType && resultsType.length > 0) ? resultsType[0] : null;
 
         if (!typeCulture) {
             return res.status(404).json({
@@ -304,7 +298,8 @@ router.post('/recoltes', authenticate, authorize('admin', 'manager', 'agriculteu
             JOIN types_cultures tc ON c.id_type_culture = tc.id
             WHERE c.id = ?
         `;
-        const [culture] = await db.query(cultureSql, [id_culture]);
+        const resultsCulture = await db.query(cultureSql, [id_culture]);
+        const culture = (resultsCulture && resultsCulture.length > 0) ? resultsCulture[0] : null;
 
         if (!culture) {
             return res.status(404).json({
@@ -321,10 +316,11 @@ router.post('/recoltes', authenticate, authorize('admin', 'manager', 'agriculteu
         }
 
         // Calculate estimated revenue based on average price
-        const typeCultureSql = `SELECT prix_moyen_kg FROM types_cultures WHERE id = ?`;
-        const [typeCulture] = await db.query(typeCultureSql, [culture.id_type_culture]);
-        
-        const revenu_estime = typeCulture.prix_moyen_kg ? 
+        const typeCultureSqlCalcul = `SELECT prix_moyen_kg FROM types_cultures WHERE id = ?`;
+        const resultsTypeCalcul = await db.query(typeCultureSqlCalcul, [culture.id_type_culture]);
+        const typeCulture = (resultsTypeCalcul && resultsTypeCalcul.length > 0) ? resultsTypeCalcul[0] : {};
+
+        const revenu_estime = typeCulture.prix_moyen_kg ?
             rendement_obtenu_kg * typeCulture.prix_moyen_kg : 0;
 
         // Start transaction
@@ -343,7 +339,7 @@ router.post('/recoltes', authenticate, authorize('admin', 'manager', 'agriculteu
             `;
 
             await connection.execute(updateCultureSql, [
-                date_recolte_reelle,
+                new Date(date_recolte_reelle).toISOString().split('T')[0],
                 rendement_obtenu_kg,
                 qualite || 'bonne',
                 taux_perte || 0,
@@ -400,8 +396,8 @@ router.post('/recoltes', authenticate, authorize('admin', 'manager', 'agriculteu
 // Gestion des intrants agricoles
 router.get('/intrants', authenticate, authorize('admin', 'manager', 'agriculteur'), async (req, res) => {
     try {
-        const { 
-            type, 
+        const {
+            type,
             statut,
             stock_bas,
             search,
@@ -444,7 +440,7 @@ router.get('/intrants', authenticate, authorize('admin', 'manager', 'agriculteur
         }
 
         sql += ' GROUP BY ia.id ORDER BY ia.nom_intrant ASC';
-        
+
         // Pagination
         const offset = (page - 1) * limit;
         sql += ' LIMIT ? OFFSET ?';
@@ -452,16 +448,8 @@ router.get('/intrants', authenticate, authorize('admin', 'manager', 'agriculteur
 
         const intrants = await db.query(sql, params);
 
-        // Count total
-        let countSql = `SELECT COUNT(*) as total FROM intrants_agricoles WHERE 1=1`;
-        const countParams = [];
-
-        if (type) {
-            countSql += ' AND type = ?';
-            countParams.push(type);
-        }
-
-        const [countResult] = await db.query(countSql, countParams);
+        const resultsCountIntrants = await db.query(countSql, countParams);
+        const countResult = (resultsCountIntrants && resultsCountIntrants.length > 0) ? resultsCountIntrants[0] : { total: 0 };
 
         res.status(200).json({
             success: true,
@@ -506,8 +494,9 @@ router.post('/applications-intrants', authenticate, authorize('admin', 'manager'
         }
 
         // Check intrant stock
-        const intrantSql = `SELECT quantite_stock, seuil_alerte FROM intrants_agricoles WHERE id = ?`;
-        const [intrant] = await db.query(intrantSql, [id_intrant]);
+        const intrantSql = `SELECT quantite_stock, seuil_alerte, nom_intrant FROM intrants_agricoles WHERE id = ?`;
+        const resultsIntrant = await db.query(intrantSql, [id_intrant]);
+        const intrant = (resultsIntrant && resultsIntrant.length > 0) ? resultsIntrant[0] : null;
 
         if (!intrant) {
             return res.status(404).json({
@@ -609,7 +598,8 @@ router.get('/statistiques', authenticate, authorize('admin', 'manager'), async (
                 AVG(productivite_moyenne) as productivite_moyenne
             FROM parcelles
         `;
-        const [parcelleStats] = await db.query(parcelleSql);
+        const resultsParcelleStats = await db.query(parcelleSql);
+        const parcelleStats = (resultsParcelleStats && resultsParcelleStats.length > 0) ? resultsParcelleStats[0] : {};
 
         // Culture statistics
         let cultureSql = `
@@ -635,7 +625,8 @@ router.get('/statistiques', authenticate, authorize('admin', 'manager'), async (
             cultureParams.push(endDate);
         }
 
-        const [cultureStats] = await db.query(cultureSql, cultureParams);
+        const resultsCultureStats = await db.query(cultureSql, cultureParams);
+        const cultureStats = (resultsCultureStats && resultsCultureStats.length > 0) ? resultsCultureStats[0] : {};
 
         // Intrant usage statistics
         const intrantSql = `

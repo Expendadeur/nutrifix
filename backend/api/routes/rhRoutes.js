@@ -51,7 +51,7 @@ router.get('/employes', authenticate, authorize('admin', 'manager'), async (req,
 
         sql += ' ORDER BY u.nom_complet';
 
-        const [employes] = await db.query(sql, params);
+        const employes = await db.query(sql, params);
 
         res.status(200).json({
             success: true,
@@ -74,7 +74,7 @@ router.get('/employes/:id', authenticate, authorize('admin', 'manager'), async (
     try {
         const { id } = req.params;
 
-        const [employe] = await db.query(`
+        const results = await db.query(`
             SELECT 
                 u.*,
                 d.nom as departement_nom,
@@ -91,7 +91,7 @@ router.get('/employes/:id', authenticate, authorize('admin', 'manager'), async (
             WHERE u.id = ?
         `, [id]);
 
-        if (!employe || employe.length === 0) {
+        if (!results || results.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'Employé non trouvé.'
@@ -100,7 +100,7 @@ router.get('/employes/:id', authenticate, authorize('admin', 'manager'), async (
 
         res.status(200).json({
             success: true,
-            data: employe[0]
+            data: results[0]
         });
     } catch (error) {
         console.error('Get employe error:', error);
@@ -135,6 +135,7 @@ router.post('/employes', authenticate, authorize('admin', 'manager'), async (req
             ville,
             pays,
             numero_cnss,
+            numero_cni,
             salaire_base,
             jours_conges_annuels,
             compte_bancaire,
@@ -149,7 +150,7 @@ router.post('/employes', authenticate, authorize('admin', 'manager'), async (req
         }
 
         // Vérifier si le matricule existe déjà
-        const [existingMatricule] = await connection.query(
+        const existingMatricule = await connection.query(
             'SELECT id FROM employes WHERE matricule = ?',
             [matricule]
         );
@@ -159,13 +160,25 @@ router.post('/employes', authenticate, authorize('admin', 'manager'), async (req
         }
 
         // Vérifier si l'email existe déjà
-        const [existingEmail] = await connection.query(
+        const existingEmail = await connection.query(
             'SELECT id FROM employes WHERE email = ?',
             [email]
         );
 
         if (existingEmail && existingEmail.length > 0) {
             throw new Error('Cet email existe déjà.');
+        }
+
+        // Vérifier si le CNI existe déjà (si fourni)
+        if (numero_cni) {
+            const existingCNI = await connection.query(
+                'SELECT id, nom_complet FROM employes WHERE numero_cni = ?',
+                [numero_cni]
+            );
+
+            if (existingCNI && existingCNI.length > 0) {
+                throw new Error(`Ce numéro CNI est déjà utilisé par ${existingCNI[0].nom_complet}.`);
+            }
         }
 
         // Générer un mot de passe temporaire
@@ -190,14 +203,14 @@ router.post('/employes', authenticate, authorize('admin', 'manager'), async (req
                 matricule, email, mot_de_passe_hash, nom_complet, telephone,
                 type_employe, role, id_departement, date_embauche,
                 salaire_base, statut, date_naissance, adresse, ville, pays,
-                numero_cnss, jours_conges_annuels, compte_bancaire, nom_banque,
+                numero_cnss, numero_cni, jours_conges_annuels, compte_bancaire, nom_banque,
                 qr_code, photo_identite, doit_changer_mdp, cree_par
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
         `, [
             matricule, email, mot_de_passe_hash, nom_complet, telephone,
             type_employe, role, id_departement, date_embauche,
             salaire_base, statut || 'actif', date_naissance, adresse, ville,
-            pays || 'Burundi', numero_cnss, jours_conges_annuels || 20,
+            pays || 'Burundi', numero_cnss, numero_cni, jours_conges_annuels || 20,
             compte_bancaire, nom_banque, qr_code, photo_identite, req.userId
         ]);
 
@@ -232,7 +245,7 @@ router.post('/employes', authenticate, authorize('admin', 'manager'), async (req
         }
 
         // ✅ NOTIFIER LES ADMINS RH
-        const [adminsRH] = await connection.query(`
+        const adminsRH = await connection.query(`
             SELECT email, nom_complet FROM employes 
             WHERE role IN ('admin', 'manager') 
             AND statut = 'actif' 
@@ -298,6 +311,7 @@ router.put('/employes/:id', authenticate, authorize('admin', 'manager'), async (
             ville,
             pays,
             numero_cnss,
+            numero_cni,
             salaire_base,
             jours_conges_annuels,
             compte_bancaire,
@@ -307,15 +321,30 @@ router.put('/employes/:id', authenticate, authorize('admin', 'manager'), async (
         } = req.body;
 
         // Vérifier si l'employé existe
-        const [employe] = await db.query('SELECT * FROM employes WHERE id = ?', [id]);
-        if (!employe || employe.length === 0) {
+        const results = await db.query('SELECT * FROM employes WHERE id = ?', [id]);
+        if (!results || results.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'Employé non trouvé.'
             });
         }
 
-        const employeData = employe[0];
+        const employeData = results[0];
+
+        // Vérifier si le CNI existe déjà (si fourni et différent de l'actuel)
+        if (numero_cni && numero_cni !== employeData.numero_cni) {
+            const existingCNI = await db.query(
+                'SELECT id, nom_complet FROM employes WHERE numero_cni = ? AND id != ?',
+                [numero_cni, id]
+            );
+
+            if (existingCNI && existingCNI.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Ce numéro CNI est déjà utilisé par ${existingCNI[0].nom_complet}.`
+                });
+            }
+        }
 
         // Sauvegarder l'ancien état pour l'historique
         const donnees_avant = { ...employeData };
@@ -326,15 +355,17 @@ router.put('/employes/:id', authenticate, authorize('admin', 'manager'), async (
                 matricule = ?, email = ?, nom_complet = ?, telephone = ?,
                 type_employe = ?, role = ?, id_departement = ?, date_embauche = ?,
                 date_naissance = ?, adresse = ?, ville = ?, pays = ?,
-                numero_cnss = ?, salaire_base = ?, jours_conges_annuels = ?,
+                numero_cnss = ?, numero_cni = ?, salaire_base = ?, jours_conges_annuels = ?,
                 compte_bancaire = ?, nom_banque = ?, photo_identite = ?,
                 statut = ?, modifie_par = ?, date_modification = NOW()
             WHERE id = ?
         `, [
             matricule, email, nom_complet, telephone,
-            type_employe, role, id_departement, date_embauche,
-            date_naissance, adresse, ville, pays || 'Burundi',
-            numero_cnss, salaire_base, jours_conges_annuels || 20,
+            type_employe, role, id_departement,
+            date_embauche ? new Date(date_embauche).toISOString().split('T')[0] : null,
+            date_naissance ? new Date(date_naissance).toISOString().split('T')[0] : null,
+            adresse, ville, pays || 'Burundi',
+            numero_cnss, numero_cni, salaire_base, jours_conges_annuels || 20,
             compte_bancaire, nom_banque, photo_identite,
             statut, req.userId, id
         ]);
@@ -344,7 +375,7 @@ router.put('/employes/:id', authenticate, authorize('admin', 'manager'), async (
             matricule, email, nom_complet, telephone,
             type_employe, role, id_departement, date_embauche,
             date_naissance, adresse, ville, pays,
-            numero_cnss, salaire_base, jours_conges_annuels,
+            numero_cnss, numero_cni, salaire_base, jours_conges_annuels,
             compte_bancaire, nom_banque, photo_identite, statut
         };
 
@@ -395,16 +426,16 @@ router.delete('/employes/:id', authenticate, authorize('admin'), async (req, res
     try {
         const { id } = req.params;
 
-        const [employe] = await db.query('SELECT * FROM employes WHERE id = ?', [id]);
+        const results = await db.query('SELECT * FROM employes WHERE id = ?', [id]);
 
-        if (!employe || employe.length === 0) {
+        if (!results || results.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'Employé non trouvé.'
             });
         }
 
-        const employeData = employe[0];
+        const employeData = results[0];
 
         // Soft delete
         await db.query('UPDATE employes SET statut = ?, date_depart = NOW(), modifie_par = ? WHERE id = ?',
@@ -437,6 +468,80 @@ router.delete('/employes/:id', authenticate, authorize('admin'), async (req, res
 });
 
 /**
+ * POST /api/personnel/employes/:id/toggle-status
+ * Activer/Désactiver un employé avec notification email
+ */
+router.post('/employes/:id/toggle-status', authenticate, authorize('admin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { raison } = req.body; // Optional reason for deactivation
+
+        const results = await db.query('SELECT * FROM employes WHERE id = ?', [id]);
+
+        if (!results || results.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Employé non trouvé.'
+            });
+        }
+
+        const employe = results[0];
+        const currentStatus = employe.statut;
+        const newStatus = currentStatus === 'actif' ? 'inactif' : 'actif';
+
+        // Update employee status
+        await db.query(
+            'UPDATE employes SET statut = ?, modifie_par = ?, date_modification = NOW() WHERE id = ?',
+            [newStatus, req.userId, id]
+        );
+
+        // Send email notification
+        const emailService = require('../emailService');
+        if (newStatus === 'actif') {
+            await emailService.envoyerNotificationActivation(
+                employe.email,
+                employe.nom_complet
+            );
+        } else {
+            await emailService.envoyerNotificationDesactivation(
+                employe.email,
+                employe.nom_complet,
+                raison || 'Non spécifiée'
+            );
+        }
+
+        // Log action in traces
+        await db.query(`
+            INSERT INTO traces (
+                id_utilisateur, module, type_action, action_details,
+                table_affectee, id_enregistrement, niveau
+            ) VALUES (?, 'rh', ?, ?, 'employes', ?, 'info')
+        `, [
+            req.userId,
+            newStatus === 'actif' ? 'activation_employe' : 'desactivation_employe',
+            `Employé ${newStatus === 'actif' ? 'activé' : 'désactivé'}: ${employe.nom_complet}${raison ? ` - Raison: ${raison}` : ''}`,
+            id
+        ]);
+
+        res.status(200).json({
+            success: true,
+            message: `Employé ${newStatus === 'actif' ? 'activé' : 'désactivé'} avec succès.`,
+            data: {
+                id: employe.id,
+                nom_complet: employe.nom_complet,
+                statut: newStatus
+            }
+        });
+    } catch (error) {
+        console.error('Toggle employee status error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors du changement de statut de l\'employé.'
+        });
+    }
+});
+
+/**
  * GET /api/personnel/employes/:id/carte
  * Générer et récupérer la carte digitale d'un employé
  */
@@ -444,7 +549,7 @@ router.get('/employes/:id/carte', authenticate, authorize('admin', 'manager'), a
     try {
         const { id } = req.params;
 
-        const [employe] = await db.query(`
+        const employes = await db.query(`
             SELECT 
                 u.*,
                 d.nom as departement_nom
@@ -453,14 +558,14 @@ router.get('/employes/:id/carte', authenticate, authorize('admin', 'manager'), a
             WHERE u.id = ?
         `, [id]);
 
-        if (!employe || employe.length === 0) {
+        if (!employes || employes.length === 0) {
             return res.status(404).json({
                 success: false,
                 message: 'Employé non trouvé.'
             });
         }
 
-        const employeData = employe[0];
+        const employeData = employes[0];
 
         // Si le QR code n'existe pas, le générer
         if (!employeData.qr_code) {
@@ -517,7 +622,7 @@ router.get('/employes/:id/carte', authenticate, authorize('admin', 'manager'), a
  */
 router.get('/departements', authenticate, authorize('admin', 'manager'), async (req, res) => {
     try {
-        const [departements] = await db.query(`
+        const departements = await db.query(`
             SELECT 
                 d.*,
                 (SELECT COUNT(*) 
@@ -633,12 +738,12 @@ router.delete('/departements/:id', authenticate, authorize('admin'), async (req,
         const { id } = req.params;
 
         // Vérifier s'il y a des employés dans ce département
-        const [count] = await db.query(
+        const results = await db.query(
             'SELECT COUNT(*) as count FROM employes WHERE id_departement = ? AND statut = ?',
             [id, 'actif']
         );
 
-        if (count && count.length > 0 && count[0].count > 0) {
+        if (results && results.length > 0 && results[0].count > 0) {
             return res.status(400).json({
                 success: false,
                 message: 'Impossible de supprimer un département avec des employés actifs.'
@@ -706,7 +811,7 @@ router.get('/presences', authenticate, authorize('admin', 'manager'), async (req
 
         sql += ' ORDER BY p.heure_entree DESC';
 
-        const [presences] = await db.query(sql, params);
+        const presences = await db.query(sql, params);
 
         res.status(200).json({
             success: true,
@@ -803,7 +908,7 @@ router.get('/salaires', authenticate, authorize('admin', 'manager'), async (req,
 
         sql += ' ORDER BY u.nom_complet';
 
-        const [salaires] = await db.query(sql, params);
+        const salaires = await db.query(sql, params);
 
         res.status(200).json({
             success: true,
@@ -835,7 +940,7 @@ router.post('/salaires/calculer', authenticate, authorize('admin', 'manager'), a
         }
 
         // Récupérer tous les employés actifs
-        const [employes] = await connection.query(
+        const employes = await connection.query(
             'SELECT * FROM employes WHERE statut = ?',
             ['actif']
         );
@@ -844,12 +949,12 @@ router.post('/salaires/calculer', authenticate, authorize('admin', 'manager'), a
 
         for (const employe of employes) {
             // Vérifier si salaire déjà calculé
-            const [existing] = await connection.query(`
+            const resultsExisting = await connection.query(`
                 SELECT id FROM salaires 
                 WHERE id_utilisateur = ? AND mois = ? AND annee = ?
             `, [employe.id, mois, annee]);
 
-            if (existing && existing.length > 0) {
+            if (resultsExisting && resultsExisting.length > 0) {
                 continue; // Déjà calculé
             }
 
@@ -857,7 +962,7 @@ router.post('/salaires/calculer', authenticate, authorize('admin', 'manager'), a
             let salaireBase = parseFloat(employe.salaire_base);
 
             // Calcul des jours travaillés
-            const [presences] = await connection.query(`
+            const presencesResults = await connection.query(`
                 SELECT COUNT(*) as jours_travailles
                 FROM presences
                 WHERE id_utilisateur = ?
@@ -866,18 +971,18 @@ router.post('/salaires/calculer', authenticate, authorize('admin', 'manager'), a
                 AND statut = 'present'
             `, [employe.id, mois, annee]);
 
-            const joursTravaill = (presences && presences[0]) ? presences[0].jours_travailles : 0;
+            const joursTravaill = (presencesResults && presencesResults.length > 0) ? presencesResults[0].jours_travailles : 0;
 
             // Calcul des heures supplémentaires
-            const [heuresSupp] = await connection.query(`
-                SELECT COALESCE(SUM(TIME_TO_SEC(heures_supp))/3600, 0) as total_heures_supp
+            const heuresSuppResults = await connection.query(`
+                SELECT COALESCE(SUM(TIME_TO_SEC(heures_supp)) / 3600, 0) as total_heures_supp
                 FROM presences
                 WHERE id_utilisateur = ?
                 AND MONTH(date) = ?
                 AND YEAR(date) = ?
             `, [employe.id, mois, annee]);
 
-            const totalHeuresSupp = (heuresSupp && heuresSupp[0]) ? heuresSupp[0].total_heures_supp : 0;
+            const totalHeuresSupp = (heuresSuppResults && heuresSuppResults.length > 0) ? heuresSuppResults[0].total_heures_supp : 0;
             const tauxHeureSupp = salaireBase / 173.33 * 1.5; // 173.33 = heures mensuelles
             const montantHeuresSupp = totalHeuresSupp * tauxHeureSupp;
 
@@ -906,7 +1011,7 @@ router.post('/salaires/calculer', authenticate, authorize('admin', 'manager'), a
             const montantNet = salaireBase + totalAdditions - totalDeductions;
 
             // Insérer le salaire
-            const [result] = await connection.query(`
+            const resultInsert = await connection.query(`
                 INSERT INTO salaires (
                     id_utilisateur, mois, annee, salaire_brut,
                     heures_travaillees, heures_supp, taux_heure_supp,
@@ -925,7 +1030,7 @@ router.post('/salaires/calculer', authenticate, authorize('admin', 'manager'), a
             ]);
 
             salairesCalcules.push({
-                id: result.insertId,
+                id: resultInsert.insertId,
                 id_utilisateur: employe.id,
                 employe_nom: employe.nom_complet,
                 montant_net: montantNet
@@ -934,10 +1039,10 @@ router.post('/salaires/calculer', authenticate, authorize('admin', 'manager'), a
 
         // Traçabilité
         await connection.query(`
-            INSERT INTO traces (
-                id_utilisateur, module, type_action, action_details,
-                table_affectee, niveau
-            ) VALUES (?, 'rh', 'calcul_salaires', ?, 'salaires', 'info')
+            INSERT INTO traces(
+                            id_utilisateur, module, type_action, action_details,
+                            table_affectee, niveau
+                        ) VALUES(?, 'rh', 'calcul_salaires', ?, 'salaires', 'info')
         `, [
             req.userId,
             `Calcul des salaires ${mois}/${annee} - ${salairesCalcules.length} employés`
@@ -978,18 +1083,18 @@ router.put('/salaires/:id/valider', authenticate, authorize('admin', 'manager'),
         const { id } = req.params;
 
         // Récupérer les détails du salaire
-        const [salaire] = await connection.query(`
+        const resultsSalaire = await connection.query(`
             SELECT s.*, u.nom_complet, u.email, u.matricule
             FROM salaires s
             JOIN utilisateurs u ON s.id_utilisateur = u.id
             WHERE s.id = ?
         `, [id]);
 
-        if (!salaire || salaire.length === 0) {
+        if (!resultsSalaire || resultsSalaire.length === 0) {
             throw new Error('Salaire non trouvé.');
         }
 
-        const salaireData = salaire[0];
+        const salaireData = resultsSalaire[0];
 
         // Mettre à jour le statut
         await connection.query(`
@@ -1084,7 +1189,7 @@ router.get('/conges', authenticate, authorize('admin', 'manager'), async (req, r
 
         sql += ' ORDER BY c.date_creation DESC';
 
-        const [conges] = await db.query(sql, params);
+        const conges = await db.query(sql, params);
 
         res.status(200).json({
             success: true,
@@ -1096,6 +1201,73 @@ router.get('/conges', authenticate, authorize('admin', 'manager'), async (req, r
             success: false,
             message: 'Erreur lors de la récupération des congés.'
         });
+    }
+});
+
+/**
+ * POST /api/personnel/conges
+ * Créer une demande de congé
+ */
+router.post('/conges', authenticate, async (req, res) => {
+    const connection = await db.getConnection();
+
+    try {
+        await connection.beginTransaction();
+
+        const { id_employe, type_conge, date_debut, date_fin, jours_demandes, motif, email } = req.body;
+
+        // Validation de base
+        if (!id_employe || !type_conge || !date_debut || !date_fin || !jours_demandes) {
+            throw new Error('Champs obligatoires manquants.');
+        }
+
+        // Vérifier si l'employé existe
+        const [employe] = await connection.query('SELECT * FROM employes WHERE id = ?', [id_employe]);
+        if (!employe || employe.length === 0) {
+            throw new Error('Employé non trouvé.');
+        }
+
+        // Insérer la demande
+        const [result] = await connection.query(`
+            INSERT INTO conges (
+                id_utilisateur, type_conge, date_debut, date_fin, 
+                jours_demandes, motif, statut, date_demande
+            ) VALUES (?, ?, ?, ?, ?, ?, 'en_attente', NOW())
+        `, [id_employe, type_conge, date_debut, date_fin, jours_demandes, motif]);
+
+        const congeId = result.insertId;
+
+        // Traçabilité
+        await connection.query(`
+            INSERT INTO traces (
+                id_utilisateur, module, type_action, action_details,
+                table_affectee, id_enregistrement, niveau
+            ) VALUES (?, 'rh', 'creation_conge', ?, 'conges', ?, 'info')
+        `, [
+            req.userId || id_employe, // Si c'est l'employé lui-même ou un admin
+            `Demande de congé créée pour ${employe[0].nom_complet}`,
+            congeId
+        ]);
+
+        // Notification (Optionnel: envoyer un email au manager)
+        // await emailService.notifyManagerNewLeaveRequest(...)
+
+        await connection.commit();
+
+        res.status(201).json({
+            success: true,
+            message: 'Demande de congé créée avec succès.',
+            id: congeId
+        });
+    } catch (error) {
+        await connection.rollback();
+        console.error('Create conge error:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Erreur lors de la création de la demande.'
+        });
+    } finally {
+        connection.release();
     }
 });
 
@@ -1112,18 +1284,18 @@ router.put('/conges/:id/approuver', authenticate, authorize('admin', 'manager'),
         const { id } = req.params;
 
         // Récupérer les infos du congé
-        const [conge] = await connection.query(`
+        const resultsConge = await connection.query(`
             SELECT c.*, u.nom_complet, u.email
             FROM conges c
             JOIN utilisateurs u ON c.id_utilisateur = u.id
             WHERE c.id = ?
         `, [id]);
 
-        if (!conge || conge.length === 0) {
+        if (!resultsConge || resultsConge.length === 0) {
             throw new Error('Congé non trouvé.');
         }
 
-        const congeData = conge[0];
+        const congeData = resultsConge[0];
 
         // Mettre à jour le statut
         await connection.query(`
@@ -1135,12 +1307,12 @@ router.put('/conges/:id/approuver', authenticate, authorize('admin', 'manager'),
         `, [req.userId, id]);
 
         // Récupérer le nom du valideur
-        const [valideur] = await connection.query(
+        const resultsValideur = await connection.query(
             'SELECT nom_complet FROM employes WHERE id = ?',
             [req.userId]
         );
 
-        const valideurNom = (valideur && valideur[0]) ? valideur[0].nom_complet : 'Manager';
+        const valideurNom = (resultsValideur && resultsValideur.length > 0) ? resultsValideur[0].nom_complet : 'Manager';
 
         // Traçabilité
         await connection.query(`
@@ -1208,18 +1380,18 @@ router.put('/conges/:id/rejeter', authenticate, authorize('admin', 'manager'), a
         }
 
         // Récupérer les infos du congé
-        const [conge] = await connection.query(`
+        const resultsConge = await connection.query(`
             SELECT c.*, u.nom_complet, u.email
             FROM conges c
             JOIN utilisateurs u ON c.id_utilisateur = u.id
             WHERE c.id = ?
         `, [id]);
 
-        if (!conge || conge.length === 0) {
+        if (!resultsConge || resultsConge.length === 0) {
             throw new Error('Congé non trouvé.');
         }
 
-        const congeData = conge[0];
+        const congeData = resultsConge[0];
 
         // Mettre à jour le statut
         await connection.query(`
@@ -1232,12 +1404,12 @@ router.put('/conges/:id/rejeter', authenticate, authorize('admin', 'manager'), a
         `, [commentaire_validation, req.userId, id]);
 
         // Récupérer le nom du valideur
-        const [valideur] = await connection.query(
+        const resultsValideur = await connection.query(
             'SELECT nom_complet FROM employes WHERE id = ?',
             [req.userId]
         );
 
-        const valideurNom = (valideur && valideur[0]) ? valideur[0].nom_complet : 'Manager';
+        const valideurNom = (resultsValideur && resultsValideur.length > 0) ? resultsValideur[0].nom_complet : 'Manager';
 
         // Traçabilité
         await connection.query(`
@@ -1317,7 +1489,7 @@ router.get('/historique', authenticate, authorize('admin', 'manager'), async (re
 
         sql += ' ORDER BY t.date_action DESC LIMIT 100';
 
-        const [historique] = await db.query(sql, params);
+        const historique = await db.query(sql, params);
 
         res.status(200).json({
             success: true,
@@ -1343,13 +1515,13 @@ router.get('/historique', authenticate, authorize('admin', 'manager'), async (re
 router.get('/statistiques', authenticate, authorize('admin', 'manager'), async (req, res) => {
     try {
         // Total employés
-        const [totalEmployes] = await db.query(
+        const resultsTotal = await db.query(
             'SELECT COUNT(*) as total FROM employes WHERE statut = ?',
             ['actif']
         );
 
         // Par type
-        const [parType] = await db.query(`
+        const parType = await db.query(`
             SELECT type_employe, COUNT(*) as count
             FROM employes
             WHERE statut = 'actif'
@@ -1357,7 +1529,7 @@ router.get('/statistiques', authenticate, authorize('admin', 'manager'), async (
         `);
 
         // Par département
-        const [parDepartement] = await db.query(`
+        const parDepartement = await db.query(`
             SELECT d.nom, COUNT(u.id) as count
             FROM departements d
             LEFT JOIN employes u ON d.id = u.id_departement AND u.statut = 'actif'
@@ -1366,7 +1538,7 @@ router.get('/statistiques', authenticate, authorize('admin', 'manager'), async (
         `);
 
         // Présences du jour
-        const [presencesJour] = await db.query(`
+        const resultsPresences = await db.query(`
             SELECT COUNT(*) as total
             FROM presences
             WHERE DATE(date) = CURDATE()
@@ -1374,14 +1546,14 @@ router.get('/statistiques', authenticate, authorize('admin', 'manager'), async (
         `);
 
         // Congés en attente
-        const [congesEnAttente] = await db.query(`
+        const resultsConges = await db.query(`
             SELECT COUNT(*) as total
             FROM conges
             WHERE statut = 'en_attente'
         `);
 
         // Masse salariale du mois
-        const [masseSalariale] = await db.query(`
+        const resultsMasse = await db.query(`
             SELECT COALESCE(SUM(salaire_net), 0) as total
             FROM salaires
             WHERE mois = MONTH(CURDATE())
@@ -1391,12 +1563,12 @@ router.get('/statistiques', authenticate, authorize('admin', 'manager'), async (
         res.status(200).json({
             success: true,
             data: {
-                total_employes: (totalEmployes && totalEmployes[0]) ? totalEmployes[0].total : 0,
+                total_employes: (resultsTotal && resultsTotal.length > 0) ? resultsTotal[0].total : 0,
                 par_type: parType || [],
                 par_departement: parDepartement || [],
-                presences_jour: (presencesJour && presencesJour[0]) ? presencesJour[0].total : 0,
-                conges_en_attente: (congesEnAttente && congesEnAttente[0]) ? congesEnAttente[0].total : 0,
-                masse_salariale_mois: (masseSalariale && masseSalariale[0]) ? masseSalariale[0].total : 0
+                presences_jour: (resultsPresences && resultsPresences.length > 0) ? resultsPresences[0].total : 0,
+                conges_en_attente: (resultsConges && resultsConges.length > 0) ? resultsConges[0].total : 0,
+                masse_salariale_mois: (resultsMasse && resultsMasse.length > 0) ? resultsMasse[0].total : 0
             }
         });
     } catch (error) {

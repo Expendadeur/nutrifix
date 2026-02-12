@@ -6,9 +6,9 @@ const db = require('../../database/db');
 // Gestion des véhicules
 router.get('/vehicules', authenticate, authorize('admin', 'manager', 'chauffeur'), async (req, res) => {
     try {
-        const { 
-            statut, 
-            type, 
+        const {
+            statut,
+            type,
             departement,
             disponible,
             page = 1,
@@ -59,7 +59,7 @@ router.get('/vehicules', authenticate, authorize('admin', 'manager', 'chauffeur'
         }
 
         sql += ' ORDER BY v.immatriculation ASC';
-        
+
         // Pagination
         const offset = (page - 1) * limit;
         sql += ' LIMIT ? OFFSET ?';
@@ -147,15 +147,15 @@ router.post('/vehicules', authenticate, authorize('admin'), async (req, res) => 
             immatriculation,
             marque,
             modele,
-            annee,
+            parseInt(annee, 10),
             couleur,
             type_vehicule,
-            capacite_carburant,
-            consommation_moyenne,
+            parseFloat(capacite_carburant) || 0,
+            parseFloat(consommation_moyenne) || 0,
             id_departement,
             id_chauffeur_attitre,
-            prix_achat,
-            valeur_actuelle
+            parseFloat(prix_achat) || 0,
+            parseFloat(valeur_actuelle) || 0
         ]);
 
         res.status(201).json({
@@ -195,7 +195,7 @@ router.post('/mouvements/sortie', authenticate, authorize('admin', 'chauffeur'),
         if (req.userRole === 'chauffeur') {
             const checkSql = `SELECT id FROM vehicules WHERE id = ? AND id_chauffeur_attitre = ?`;
             const [vehicle] = await db.query(checkSql, [id_vehicule, req.userId]);
-            
+
             if (!vehicle) {
                 return res.status(403).json({
                     success: false,
@@ -207,7 +207,7 @@ router.post('/mouvements/sortie', authenticate, authorize('admin', 'chauffeur'),
         // Check if vehicle is available
         const vehicleSql = `SELECT disponible FROM vehicules WHERE id = ?`;
         const [vehicle] = await db.query(vehicleSql, [id_vehicule]);
-        
+
         if (!vehicle || !vehicle.disponible) {
             return res.status(400).json({
                 success: false,
@@ -328,7 +328,7 @@ router.post('/mouvements/retour', authenticate, authorize('admin', 'chauffeur'),
             SET kilometrage_actuel = ?,
                 disponible = TRUE
             WHERE id = ?
-        `, [kilometrage_retour, mouvement.id_vehicule]);
+        `, [Math.round(parseFloat(kilometrage_retour) || 0), mouvement.id_vehicule]);
 
         res.status(200).json({
             success: true,
@@ -347,8 +347,8 @@ router.post('/mouvements/retour', authenticate, authorize('admin', 'chauffeur'),
 router.get('/mouvements/:vehiculeId', authenticate, async (req, res) => {
     try {
         const vehiculeId = parseInt(req.params.vehiculeId);
-        const { 
-            startDate, 
+        const {
+            startDate,
             endDate,
             statut,
             page = 1,
@@ -378,7 +378,7 @@ router.get('/mouvements/:vehiculeId', authenticate, async (req, res) => {
         if (req.userRole === 'chauffeur') {
             const assignedSql = `SELECT id FROM vehicules WHERE id = ? AND id_chauffeur_attitre = ?`;
             const [assigned] = await db.query(assignedSql, [vehiculeId, req.userId]);
-            
+
             if (!assigned) {
                 return res.status(403).json({
                     success: false,
@@ -418,7 +418,7 @@ router.get('/mouvements/:vehiculeId', authenticate, async (req, res) => {
         }
 
         sql += ' ORDER BY mv.date_mission DESC, mv.heure_depart DESC';
-        
+
         // Pagination
         const offset = (page - 1) * limit;
         sql += ' LIMIT ? OFFSET ?';
@@ -486,8 +486,9 @@ router.post('/maintenances', authenticate, authorize('admin', 'manager'), async 
         }
 
         // Calculate next maintenance (simplified)
-        const date_prochaine_maintenance = new Date();
-        date_prochaine_maintenance.setDate(date_prochaine_maintenance.getDate() + 90); // 90 days default
+        const nextDate = new Date();
+        nextDate.setDate(nextDate.getDate() + 90);
+        const date_prochaine_maintenance = nextDate.toISOString().split('T')[0];
 
         const sql = `
             INSERT INTO maintenances_vehicules (
@@ -506,7 +507,7 @@ router.post('/maintenances', authenticate, authorize('admin', 'manager'), async 
             numero_facture,
             cout_maintenance,
             kilometrage,
-            date_intervention || new Date(),
+            (date_intervention ? new Date(date_intervention) : new Date()).toISOString().split('T')[0],
             date_prochaine_maintenance,
             garantie_jours || 0,
             photos ? JSON.stringify(photos) : null,
@@ -530,7 +531,7 @@ router.post('/maintenances', authenticate, authorize('admin', 'manager'), async 
 router.get('/maintenances/:vehiculeId', authenticate, async (req, res) => {
     try {
         const vehiculeId = parseInt(req.params.vehiculeId);
-        const { 
+        const {
             type,
             statut,
             startDate,
@@ -573,7 +574,7 @@ router.get('/maintenances/:vehiculeId', authenticate, async (req, res) => {
         }
 
         sql += ' ORDER BY m.date_intervention DESC';
-        
+
         // Pagination
         const offset = (page - 1) * limit;
         sql += ' LIMIT ? OFFSET ?';
@@ -628,7 +629,7 @@ router.post('/assurances', authenticate, authorize('admin'), async (req, res) =>
         } = req.body;
 
         // Validation
-        if (!id_vehicule || !compagnie_assurance || !numero_police || !type_couverture || 
+        if (!id_vehicule || !compagnie_assurance || !numero_police || !type_couverture ||
             !date_debut || !date_expiration || !montant_prime) {
             return res.status(400).json({
                 success: false,
@@ -846,7 +847,7 @@ router.get('/alertes', authenticate, authorize('admin', 'manager', 'chauffeur'),
         assurances.forEach(a => {
             const joursRestants = Math.ceil((new Date(a.date_expiration) - new Date()) / (1000 * 60 * 60 * 24));
             let niveau = 'info';
-            
+
             if (joursRestants <= 7) niveau = 'urgent';
             else if (joursRestants <= 15) niveau = 'high';
             else if (joursRestants <= 30) niveau = 'warning';

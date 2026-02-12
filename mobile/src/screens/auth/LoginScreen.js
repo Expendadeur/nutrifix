@@ -43,7 +43,7 @@ const getApiUrl = () => {
         }
         return 'https://nutrifix-1-twdf.onrender.com/api';
     }
-    return process.env.REACT_APP_API_URL || 'https://nutrifix-1-twdf.onrender.com';
+    return process.env.REACT_APP_API_URL || 'https://nutrifix-1-twdf.onrender.com/api';
 };
 
 const API_URL = getApiUrl();

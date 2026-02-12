@@ -627,7 +627,14 @@ const CommercialScreen = ({ navigation, route }) => {
       }
 
       setLoading(true);
-      const response = await apiCall('/commercial/commandes-vente', 'POST', commandeVenteForm);
+
+      const dataToSend = {
+        ...commandeVenteForm,
+        date_commande: commandeVenteForm.date_commande ? new Date(commandeVenteForm.date_commande).toISOString().split('T')[0] : null,
+        date_livraison_prevue: commandeVenteForm.date_livraison_prevue ? new Date(commandeVenteForm.date_livraison_prevue).toISOString().split('T')[0] : null,
+      };
+
+      const response = await apiCall('/commercial/commandes-vente', 'POST', dataToSend);
 
       if (response.success) {
         showSuccess('Commande créée');
@@ -673,7 +680,14 @@ const CommercialScreen = ({ navigation, route }) => {
       }
 
       setLoading(true);
-      const response = await apiCall('/commercial/commandes-achat', 'POST', commandeAchatForm);
+
+      const dataToSend = {
+        ...commandeAchatForm,
+        date_commande: commandeAchatForm.date_commande ? new Date(commandeAchatForm.date_commande).toISOString().split('T')[0] : null,
+        date_livraison_prevue: commandeAchatForm.date_livraison_prevue ? new Date(commandeAchatForm.date_livraison_prevue).toISOString().split('T')[0] : null,
+      };
+
+      const response = await apiCall('/commercial/commandes-achat', 'POST', dataToSend);
 
       if (response.success) {
         showSuccess('Commande créée');
