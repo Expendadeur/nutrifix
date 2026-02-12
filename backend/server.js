@@ -89,6 +89,7 @@ const commercialRoutes = require('./api/routes/commercialRoutes');
 const rhsRoutes = require('./api/routes/rhRoutes');
 const systemRoutes = require('./api/routes/systemRoutes');
 const uploadRoutes = require('./api/routes/uploadRoutes');
+const articlesRoutes = require('./api/routes/articlesRoutes');
 
 // ============================================
 // INITIALISATION DE L'APPLICATION
@@ -432,6 +433,7 @@ app.use('/api/operations', managerLimiter, OperationsRoutes);
 app.use('/api/personnel', managerLimiter, rhsRoutes);
 app.use('/api/system', managerLimiter, systemRoutes);
 app.use('/api/upload', managerLimiter, uploadRoutes);
+app.use('/api/articles', articlesRoutes);
 
 
 // Route de test basique

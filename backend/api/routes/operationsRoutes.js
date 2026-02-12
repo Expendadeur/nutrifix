@@ -57,6 +57,47 @@ async function enregistrerJournalComptable(data) {
 }
 
 // ============================================
+// NOUVELLE FONCTION - ENREGISTREMENT BUDGET DÉPARTEMENT
+// ============================================
+async function enregistrerDansBudgetDepartement(data) {
+    const {
+        id_departement,
+        type_mouvement, // 'depense' ou 'recette'
+        categorie,
+        description,
+        montant,
+        reference = null,
+        effectue_par
+    } = data;
+
+    // Validation
+    if (!id_departement || !montant || montant <= 0) {
+        console.warn('⚠️ Enregistrement budget ignoré: département ou montant invalide');
+        return;
+    }
+
+    try {
+        if (type_mouvement === 'depense') {
+            await db.query(`
+                INSERT INTO depenses_departement 
+                (id_departement, categorie, description, montant, date_depense, reference, effectue_par, statut)
+                VALUES (?, ?, ?, ?, CURDATE(), ?, ?, 'approuve')
+            `, [id_departement, categorie, description, montant, reference, effectue_par]);
+            console.log(`✅ Dépense de ${montant} BIF enregistrée pour le département ${id_departement}`);
+        } else if (type_mouvement === 'recette') {
+            await db.query(`
+                INSERT INTO revenus_departement 
+                (id_departement, source, description, montant, date_revenu, enregistre_par)
+                VALUES (?, ?, ?, ?, CURDATE(), ?)
+            `, [id_departement, categorie, description, montant, effectue_par]);
+            console.log(`✅ Recette de ${montant} BIF enregistrée pour le département ${id_departement}`);
+        }
+    } catch (error) {
+        console.error('⚠️ Erreur lors de l\'enregistrement dans le budget du département:', error.message);
+    }
+}
+
+// ============================================
 // DONNÉES RÉFÉRENTIELLES
 // ============================================
 
@@ -647,6 +688,17 @@ router.post('/vehicules', authenticate, authorize('admin', 'manager'), async (re
                     type_vehicule,
                     date_achat
                 }
+            });
+
+            // Enregistrer la dépense dans le budget du département
+            await enregistrerDansBudgetDepartement({
+                id_departement: id_departement,
+                type_mouvement: 'depense',
+                categorie: 'achat',
+                description: `Achat véhicule - ${immatriculation}`,
+                montant: prix_achat,
+                reference: immatriculation,
+                effectue_par: req.userId
             });
         }
 
@@ -1411,6 +1463,20 @@ router.post('/parcelles', authenticate, authorize('admin', 'manager'), async (re
             loyerAnnuelValue
         ]);
 
+        // Enregistrement de la dépense de location si applicable
+        if (loyerAnnuelValue && loyerAnnuelValue > 0) {
+            await enregistrerDansBudgetDepartement({
+                id_departement: req.user.id_departement,
+                type_mouvement: 'depense',
+                categorie: 'location_terrain',
+                description: `Location parcelle - ${nom_parcelle} (${reference})`,
+                montant: loyerAnnuelValue,
+                reference: reference,
+                effectue_par: req.userId
+            });
+        }
+
+
         res.status(201).json({
             success: true,
             message: 'Parcelle créée avec succès.',
@@ -1925,6 +1991,17 @@ router.post('/animaux', authenticate, authorize('admin', 'manager', 'veterinaire
                     date_naissance,
                     origine
                 }
+            });
+
+            // Enregistrer la dépense dans le budget du département
+            await enregistrerDansBudgetDepartement({
+                id_departement: req.user.id_departement,
+                type_mouvement: 'depense',
+                categorie: 'achat',
+                description: `Achat animal - ${numero_identification}`,
+                montant: prix_achat,
+                reference: numero_identification,
+                effectue_par: req.userId
             });
         }
 

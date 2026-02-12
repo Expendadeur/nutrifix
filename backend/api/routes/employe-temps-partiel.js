@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../../database/db');
 const { authenticate, authorize } = require('../middleware/auth');
 const QRCode = require('qrcode');
+const emailService = require('../emailService');
 
 // ============================================
 // FONCTIONS UTILITAIRES
@@ -17,14 +18,14 @@ const QRCode = require('qrcode');
  */
 function calculerSalaireJournalier(heuresTravaillees, tauxHoraire, deductions = {}) {
   const salaireBrut = heuresTravaillees * tauxHoraire;
-  
+
   // Déductions minimales pour temps partiel (pas d'INSS)
   const autresDeductions = parseFloat(deductions.autres) || 0;
   const avances = parseFloat(deductions.avances) || 0;
-  
+
   const totalDeductions = autresDeductions + avances;
   const salaireNet = salaireBrut - totalDeductions;
-  
+
   return {
     heures_travaillees: heuresTravaillees,
     taux_horaire: tauxHoraire,
@@ -42,16 +43,16 @@ function calculerSalaireJournalier(heuresTravaillees, tauxHoraire, deductions = 
  */
 function calculerDureeHeures(heureEntree, heureSortie) {
   if (!heureEntree || !heureSortie) return 0;
-  
+
   const [heE, minE] = heureEntree.split(':').map(Number);
   const [heS, minS] = heureSortie.split(':').map(Number);
-  
+
   const totalMinutesEntree = heE * 60 + minE;
   const totalMinutesSortie = heS * 60 + minS;
-  
+
   const dureeMinutes = totalMinutesSortie - totalMinutesEntree;
   const dureeHeures = dureeMinutes / 60;
-  
+
   return Math.round(dureeHeures * 100) / 100; // 2 décimales
 }
 
@@ -67,24 +68,24 @@ function calculerDureeHeures(heureEntree, heureSortie) {
 router.get('/dashboard', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
-    
+
     // Vérifier que c'est bien un employé temps partiel
     const [employe] = await db.query(
       `SELECT nom_complet, matricule, salaire_base, date_embauche, type_employe
        FROM utilisateurs WHERE id = ?`,
       [userId]
     );
-    
+
     if (!employe.length || employe[0].type_employe !== 'temps_partiel') {
       return res.status(403).json({
         success: false,
         message: 'Accès réservé aux employés temps partiel'
       });
     }
-    
+
     const employeData = employe[0];
     const tauxHoraire = parseFloat(employeData.salaire_base);
-    
+
     // 1. Heures du mois en cours
     const [heuresMois] = await db.query(
       `SELECT 
@@ -99,7 +100,7 @@ router.get('/dashboard', authenticate, authorize(['employe']), async (req, res) 
        AND heure_sortie IS NOT NULL`,
       [userId]
     );
-    
+
     // 2. Statistiques des salaires payés
     const [salairesStats] = await db.query(
       `SELECT 
@@ -109,7 +110,7 @@ router.get('/dashboard', authenticate, authorize(['employe']), async (req, res) 
        WHERE id_utilisateur = ?`,
       [userId]
     );
-    
+
     // 3. Jours non payés ce mois
     const [joursNonPayes] = await db.query(
       `SELECT COUNT(*) as jours_non_payes
@@ -128,10 +129,10 @@ router.get('/dashboard', authenticate, authorize(['employe']), async (req, res) 
        )`,
       [userId]
     );
-    
+
     // 4. Salaire estimé non payé
     const salaireEnAttente = parseFloat(heuresMois[0].total_heures) * tauxHoraire;
-    
+
     res.json({
       success: true,
       data: {
@@ -163,7 +164,7 @@ router.get('/dashboard', authenticate, authorize(['employe']), async (req, res) 
 router.get('/carte', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
-    
+
     const [employe] = await db.query(`
       SELECT 
         u.*,
@@ -172,16 +173,16 @@ router.get('/carte', authenticate, authorize(['employe']), async (req, res) => {
       LEFT JOIN departements d ON u.id_departement = d.id
       WHERE u.id = ?
     `, [userId]);
-    
+
     if (!employe.length) {
       return res.status(404).json({
         success: false,
         message: 'Employé non trouvé'
       });
     }
-    
+
     const employeData = employe[0];
-    
+
     // Vérifier que c'est bien un employé temps partiel
     if (employeData.type_employe !== 'temps_partiel') {
       return res.status(403).json({
@@ -189,7 +190,7 @@ router.get('/carte', authenticate, authorize(['employe']), async (req, res) => {
         message: 'Accès réservé aux employés temps partiel'
       });
     }
-    
+
     // Si le QR code n'existe pas, le générer
     if (!employeData.qr_code) {
       const qrData = JSON.stringify({
@@ -204,15 +205,15 @@ router.get('/carte', authenticate, authorize(['employe']), async (req, res) => {
         taux_horaire: parseFloat(employeData.salaire_base),
         timestamp: Date.now()
       });
-      
+
       const qr_code = await QRCode.toDataURL(qrData);
-      
+
       // Mettre à jour dans les deux tables (à cause du trigger)
       await db.query('UPDATE employes SET qr_code = ? WHERE id = ?', [qr_code, userId]);
-      
+
       employeData.qr_code = qr_code;
     }
-    
+
     // Calculer la date de validité (1 an à partir de la date d'embauche ou renouvellement annuel)
     const dateEmbauche = new Date(employeData.date_embauche);
     const aujourdhui = new Date();
@@ -220,7 +221,7 @@ router.get('/carte', authenticate, authorize(['employe']), async (req, res) => {
     const validiteAnnee = dateEmbauche.getFullYear() + anneesCarte + 1;
     const dateValidite = new Date(dateEmbauche);
     dateValidite.setFullYear(validiteAnnee);
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -264,7 +265,7 @@ router.get('/pointage/today', authenticate, authorize(['employe']), async (req, 
   try {
     const userId = req.user.id;
     const dateAujourdhui = new Date().toISOString().split('T')[0];
-    
+
     const [pointage] = await db.query(
       `SELECT 
         date,
@@ -282,7 +283,7 @@ router.get('/pointage/today', authenticate, authorize(['employe']), async (req, 
        WHERE id_utilisateur = ? AND date = ?`,
       [userId, dateAujourdhui]
     );
-    
+
     res.json({
       success: true,
       data: pointage[0] || null
@@ -306,7 +307,7 @@ router.post('/pointage/entree', authenticate, authorize(['employe']), async (req
     const userId = req.user.id;
     const { latitude, longitude } = req.body;
     const dateAujourdhui = new Date().toISOString().split('T')[0];
-    
+
     // Validation de la localisation
     if (!latitude || !longitude) {
       return res.status(400).json({
@@ -314,29 +315,29 @@ router.post('/pointage/entree', authenticate, authorize(['employe']), async (req
         message: 'La localisation GPS est requise pour le pointage'
       });
     }
-    
+
     // Vérifier qu'il n'y a pas déjà un pointage aujourd'hui
     const [existing] = await db.query(
       'SELECT id FROM presences WHERE id_utilisateur = ? AND date = ?',
       [userId, dateAujourdhui]
     );
-    
+
     if (existing.length > 0) {
       return res.status(400).json({
         success: false,
         message: 'Vous avez déjà pointé votre entrée aujourd\'hui'
       });
     }
-    
+
     const localisation = `${latitude},${longitude}`;
-    
+
     await db.query(
       `INSERT INTO presences (
         id_utilisateur, date, heure_entree, localisation_entree, statut
       ) VALUES (?, ?, NOW(), ?, 'present')`,
       [userId, dateAujourdhui, localisation]
     );
-    
+
     res.json({
       success: true,
       message: 'Pointage d\'entrée enregistré avec succès',
@@ -358,19 +359,19 @@ router.post('/pointage/entree', authenticate, authorize(['employe']), async (req
  */
 router.post('/pointage/sortie', authenticate, authorize(['employe']), async (req, res) => {
   const connection = await db.getConnection();
-  
+
   try {
     await connection.beginTransaction();
-    
+
     const userId = req.user.id;
     const { latitude, longitude } = req.body;
     const dateAujourdhui = new Date().toISOString().split('T')[0];
-    
+
     // Validation de la localisation
     if (!latitude || !longitude) {
       throw new Error('La localisation GPS est requise pour le pointage');
     }
-    
+
     // Vérifier qu'il y a un pointage d'entrée
     const [presence] = await connection.query(
       `SELECT id, heure_entree, heure_sortie 
@@ -378,17 +379,17 @@ router.post('/pointage/sortie', authenticate, authorize(['employe']), async (req
        WHERE id_utilisateur = ? AND date = ?`,
       [userId, dateAujourdhui]
     );
-    
+
     if (!presence.length) {
       throw new Error('Vous devez d\'abord pointer votre entrée');
     }
-    
+
     if (presence[0].heure_sortie) {
       throw new Error('Vous avez déjà pointé votre sortie aujourd\'hui');
     }
-    
+
     const localisation = `${latitude},${longitude}`;
-    
+
     // Enregistrer la sortie
     await connection.query(
       `UPDATE presences 
@@ -397,7 +398,7 @@ router.post('/pointage/sortie', authenticate, authorize(['employe']), async (req
        WHERE id = ?`,
       [localisation, presence[0].id]
     );
-    
+
     // Calculer la durée de travail
     const [updated] = await connection.query(
       `SELECT 
@@ -408,23 +409,23 @@ router.post('/pointage/sortie', authenticate, authorize(['employe']), async (req
        WHERE id = ?`,
       [presence[0].id]
     );
-    
+
     // Récupérer le taux horaire
     const [employe] = await connection.query(
       'SELECT salaire_base FROM utilisateurs WHERE id = ?',
       [userId]
     );
-    
+
     const tauxHoraire = parseFloat(employe[0].salaire_base);
     const heuresTravaillees = parseFloat(updated[0].duree_heures);
-    
+
     // Calculer le salaire journalier
     const calcul = calculerSalaireJournalier(heuresTravaillees, tauxHoraire);
-    
+
     // Enregistrer le salaire journalier dans la table salaires
     const moisActuel = new Date().getMonth() + 1;
     const anneeActuelle = new Date().getFullYear();
-    
+
     await connection.query(
       `INSERT INTO salaires (
         id_utilisateur,
@@ -460,9 +461,9 @@ router.post('/pointage/sortie', authenticate, authorize(['employe']), async (req
         userId
       ]
     );
-    
+
     await connection.commit();
-    
+
     res.json({
       success: true,
       message: 'Pointage de sortie enregistré avec succès',
@@ -495,7 +496,7 @@ router.get('/heures', authenticate, authorize(['employe']), async (req, res) => 
   try {
     const userId = req.user.id;
     const { mois, annee } = req.query;
-    
+
     let query = `
       SELECT 
         p.date,
@@ -520,35 +521,35 @@ router.get('/heures', authenticate, authorize(['employe']), async (req, res) => 
       AND p.heure_sortie IS NOT NULL
     `;
     const params = [userId];
-    
+
     if (mois && annee) {
       query += ' AND MONTH(p.date) = ? AND YEAR(p.date) = ?';
       params.push(mois, annee);
     }
-    
+
     query += ' ORDER BY p.date DESC';
-    
+
     const [presences] = await db.query(query, params);
-    
+
     // Récupérer le taux horaire
     const [employe] = await db.query(
       'SELECT salaire_base FROM utilisateurs WHERE id = ?',
       [userId]
     );
-    
+
     const tauxHoraire = parseFloat(employe[0]?.salaire_base) || 0;
-    
+
     // Calculer les statistiques
     const totalHeures = presences.reduce((sum, p) => sum + parseFloat(p.duree_heures || 0), 0);
     const joursTravailles = presences.length;
     const moyenneHeuresJour = joursTravailles > 0 ? totalHeures / joursTravailles : 0;
-    
+
     const totalPaye = presences.reduce((sum, p) => {
       return sum + (p.statut_paiement === 'payé' ? parseFloat(p.salaire_net || 0) : 0);
     }, 0);
-    
+
     const joursNonPayes = presences.filter(p => !p.statut_paiement || p.statut_paiement !== 'payé').length;
-    
+
     res.json({
       success: true,
       data: {
@@ -582,7 +583,7 @@ router.get('/salaires', authenticate, authorize(['employe']), async (req, res) =
   try {
     const userId = req.user.id;
     const { annee, statut } = req.query;
-    
+
     let query = `
       SELECT 
         s.*,
@@ -592,34 +593,34 @@ router.get('/salaires', authenticate, authorize(['employe']), async (req, res) =
       WHERE s.id_utilisateur = ?
     `;
     const params = [userId];
-    
+
     if (annee) {
       query += ' AND s.annee = ?';
       params.push(annee);
     }
-    
+
     if (statut && statut !== 'tous') {
       query += ' AND s.statut_paiement = ?';
       params.push(statut);
     }
-    
+
     query += ' ORDER BY s.date_calcul DESC';
-    
+
     const [salaires] = await db.query(query, params);
-    
+
     // Calculer les statistiques
     const totalPaye = salaires
       .filter(s => s.statut_paiement === 'payé')
       .reduce((sum, s) => sum + parseFloat(s.salaire_net || 0), 0);
-    
+
     const montantEnAttente = salaires
       .filter(s => s.statut_paiement === 'calculé')
       .reduce((sum, s) => sum + parseFloat(s.salaire_net || 0), 0);
-    
+
     const totalHeures = salaires.reduce((sum, s) => sum + parseFloat(s.heures_travaillees || 0), 0);
     const joursPayes = salaires.filter(s => s.statut_paiement === 'payé').length;
     const joursEnAttente = salaires.filter(s => s.statut_paiement === 'calculé').length;
-    
+
     res.json({
       success: true,
       data: {
@@ -651,7 +652,7 @@ router.get('/salaires/:id', authenticate, authorize(['employe']), async (req, re
   try {
     const userId = req.user.id;
     const salaireId = req.params.id;
-    
+
     // Récupérer le salaire
     const [salaire] = await db.query(
       `SELECT s.*, u.nom_complet, u.matricule
@@ -660,16 +661,16 @@ router.get('/salaires/:id', authenticate, authorize(['employe']), async (req, re
        WHERE s.id = ? AND s.id_utilisateur = ?`,
       [salaireId, userId]
     );
-    
+
     if (!salaire.length) {
       return res.status(404).json({
         success: false,
         message: 'Salaire non trouvé'
       });
     }
-    
+
     const salaireData = salaire[0];
-    
+
     // Récupérer la présence associée
     const [presence] = await db.query(
       `SELECT 
@@ -685,7 +686,7 @@ router.get('/salaires/:id', authenticate, authorize(['employe']), async (req, re
        LIMIT 1`,
       [userId, salaireData.date_calcul]
     );
-    
+
     res.json({
       success: true,
       data: {
@@ -711,11 +712,11 @@ router.get('/statistiques', authenticate, authorize(['employe']), async (req, re
   try {
     const userId = req.user.id;
     const { periode } = req.query; // 'mois', 'trimestre', 'annee', 'tout'
-    
+
     let dateFilter = '';
     const params = [userId];
-    
-    switch(periode) {
+
+    switch (periode) {
       case 'mois':
         dateFilter = 'AND MONTH(p.date) = MONTH(CURRENT_DATE()) AND YEAR(p.date) = YEAR(CURRENT_DATE())';
         break;
@@ -728,7 +729,7 @@ router.get('/statistiques', authenticate, authorize(['employe']), async (req, re
       default:
         dateFilter = '';
     }
-    
+
     const [stats] = await db.query(
       `SELECT 
         COUNT(DISTINCT p.date) as jours_travailles,
@@ -743,20 +744,20 @@ router.get('/statistiques', authenticate, authorize(['employe']), async (req, re
        ${dateFilter}`,
       params
     );
-    
+
     // Récupérer le taux horaire
     const [employe] = await db.query(
       'SELECT salaire_base FROM utilisateurs WHERE id = ?',
       [userId]
     );
-    
+
     const tauxHoraire = parseFloat(employe[0]?.salaire_base) || 0;
     const totalHeures = parseFloat(stats[0].total_heures);
     const salaireEstime = Math.round(totalHeures * tauxHoraire);
-    
+
     // Statistiques de paiement pour la période
     let dateSalaireFilter = '';
-    switch(periode) {
+    switch (periode) {
       case 'mois':
         dateSalaireFilter = 'AND MONTH(s.date_calcul) = MONTH(CURRENT_DATE()) AND YEAR(s.date_calcul) = YEAR(CURRENT_DATE())';
         break;
@@ -769,7 +770,7 @@ router.get('/statistiques', authenticate, authorize(['employe']), async (req, re
       default:
         dateSalaireFilter = '';
     }
-    
+
     const [paiementStats] = await db.query(
       `SELECT 
         COALESCE(SUM(CASE WHEN statut_paiement = 'payé' THEN salaire_net ELSE 0 END), 0) as total_paye,
@@ -780,7 +781,7 @@ router.get('/statistiques', authenticate, authorize(['employe']), async (req, re
        ${dateSalaireFilter}`,
       [userId]
     );
-    
+
     res.json({
       success: true,
       data: {
@@ -824,7 +825,7 @@ router.get('/statistiques', authenticate, authorize(['employe']), async (req, re
 router.get('/profil', authenticate, authorize(['employe']), async (req, res) => {
   try {
     const userId = req.user.id;
-    
+
     const [employe] = await db.query(
       `SELECT 
         u.nom_complet,
@@ -839,21 +840,21 @@ router.get('/profil', authenticate, authorize(['employe']), async (req, res) => 
        WHERE u.id = ?`,
       [userId]
     );
-    
+
     if (!employe.length) {
       return res.status(404).json({
         success: false,
         message: 'Informations du profil non trouvées'
       });
     }
-    
+
     const profilData = employe[0];
-    
+
     // Calculer les statistiques globales
     const dateEmbauche = new Date(profilData.date_embauche);
     const aujourdhui = new Date();
     const joursEcoules = Math.ceil((aujourdhui - dateEmbauche) / (1000 * 60 * 60 * 24));
-    
+
     const [stats] = await db.query(
       `SELECT 
         COUNT(DISTINCT p.date) as total_jours_travailles,
@@ -869,7 +870,7 @@ router.get('/profil', authenticate, authorize(['employe']), async (req, res) => 
        AND p.heure_sortie IS NOT NULL`,
       [userId, userId]
     );
-    
+
     res.json({
       success: true,
       data: {
@@ -903,5 +904,131 @@ router.get('/profil', authenticate, authorize(['employe']), async (req, res) => 
     });
   }
 });
+
+/**
+ * @route   POST /api/employe-temps-partiel/salaires/:id/confirmer-reception
+ * @desc    Confirmer la réception du paiement avec code OTP et blocage auto après 2 échecs
+ * @access  Private (Employé Temps Partiel)
+ */
+router.post('/salaires/:id/confirmer-reception', authenticate, authorize(['employe']), async (req, res) => {
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const userId = req.user.id;
+    const salaireId = req.params.id;
+    const { code_verification, mois, annee } = req.body;
+
+    const [salaire] = await connection.query(
+      `SELECT s.*, u.nom_complet, u.email 
+       FROM salaires s
+       JOIN utilisateurs u ON s.id_utilisateur = u.id
+       WHERE s.id = ? AND s.id_utilisateur = ?`,
+      [salaireId, userId]
+    );
+
+    if (!salaire.length) throw new Error('Salaire non trouvé');
+    const salaireData = salaire[0];
+
+    if (salaireData.statut_paiement !== 'payé') throw new Error('Ce salaire n\'a pas encore été payé');
+    if (salaireData.confirme_reception) throw new Error('La réception a déjà été confirmée');
+
+    const [codeExistant] = await connection.query(
+      `SELECT code_verification, date_expiration, tentatives_echouees 
+       FROM codes_verification_salaire 
+       WHERE id_salaire = ? AND id_utilisateur = ?
+       ORDER BY date_creation DESC LIMIT 1`,
+      [salaireId, userId]
+    );
+
+    if (!codeExistant.length) throw new Error('Veuillez demander un code de vérification');
+
+    const codeData = codeExistant[0];
+    if (new Date() > new Date(codeData.date_expiration)) throw new Error('Code expiré. Veuillez en redemander un.');
+
+    if (code_verification !== codeData.code_verification) {
+      const nouvellesTentatives = codeData.tentatives_echouees + 1;
+      await connection.query(
+        `UPDATE codes_verification_salaire SET tentatives_echouees = ? WHERE id_salaire = ? AND id_utilisateur = ? AND code_verification = ?`,
+        [nouvellesTentatives, salaireId, userId, codeData.code_verification]
+      );
+
+      if (nouvellesTentatives >= 2) {
+        await connection.query("UPDATE utilisateurs SET statut = 'bloqué' WHERE id = ?", [userId]);
+        await connection.commit();
+        return res.status(403).json({
+          success: false,
+          message: 'Votre compte a été bloqué après 2 tentatives infructueuses. Veuillez contacter l\'administrateur.'
+        });
+      }
+
+      const restantes = 2 - nouvellesTentatives;
+      await connection.commit();
+      return res.status(400).json({
+        success: false,
+        message: `Code incorrect. Il vous reste ${restantes} tentative(s) avant blocage.`
+      });
+    }
+
+    // Succès
+    await connection.query(
+      `INSERT INTO confirmations_reception_salaire (id_salaire, id_utilisateur, mois, annee, montant, code_verification_utilise, confirme, date_confirmation)
+       VALUES (?, ?, ?, ?, ?, ?, 1, NOW())`,
+      [salaireId, userId, mois, annee, salaireData.salaire_net, code_verification]
+    );
+
+    await connection.query(`UPDATE salaires SET confirme_reception = 1, date_confirmation_reception = NOW() WHERE id = ?`, [salaireId]);
+    await connection.query(`UPDATE codes_verification_salaire SET utilise = 1 WHERE id_salaire = ? AND code_verification = ?`, [salaireId, code_verification]);
+
+    await connection.commit();
+    res.json({ success: true, message: 'Réception confirmée avec succès' });
+
+  } catch (error) {
+    if (connection) await connection.rollback();
+    res.status(400).json({ success: false, message: error.message });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+/**
+ * @route   POST /api/employe-temps-partiel/salaires/:id/demander-code
+ * @desc    Générer et envoyer un code OTP par email
+ */
+router.post('/salaires/:id/demander-code', authenticate, authorize(['employe']), async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const salaireId = req.params.id;
+
+    const [salaire] = await db.query(
+      `SELECT s.*, u.nom_complet, u.email FROM salaires s JOIN utilisateurs u ON s.id_utilisateur = u.id WHERE s.id = ? AND s.id_utilisateur = ?`,
+      [salaireId, userId]
+    );
+
+    if (!salaire.length) throw new Error('Salaire non trouvé');
+    const salaireData = salaire[0];
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = new Date();
+    expires.setHours(expires.getHours() + 24);
+
+    await db.query(
+      `INSERT INTO codes_verification_salaire (id_salaire, id_utilisateur, code_verification, date_expiration) VALUES (?, ?, ?, ?)`,
+      [salaireId, userId, code, expires]
+    );
+
+    if (salaireData.email) {
+      await emailService.envoyerCodeVerification(salaireData.email, code, salaireData.nom_complet, salaireData.mois || new Date(salaireData.date_calcul).getMonth() + 1, salaireData.annee || new Date(salaireData.date_calcul).getFullYear());
+    }
+
+    res.json({ success: true, message: 'Code envoyé par email', code: process.env.NODE_ENV === 'development' ? code : undefined });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+function getMoisNom(mois) {
+  const moisNoms = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+  return moisNoms[mois - 1] || '';
+}
 
 module.exports = router;

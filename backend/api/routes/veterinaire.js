@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { authenticate, authorize } = require('../middleware/auth');
 const db = require('../../database/db');
+const emailService = require('../emailService');
 
 // ==================== DASHBOARD VÉTÉRINAIRE ====================
 router.get('/dashboard', authenticate, authorize('veterinaire'), async (req, res) => {
@@ -1360,9 +1361,29 @@ router.post('/salaires/:id/confirmer-reception', authenticate, authorize('veteri
                     [salaireId, userId]
                 );
 
+                // Vérifier le nombre de tentatives
+                const [tentatives] = await db.query(
+                    `SELECT tentatives_echouees FROM codes_verification_salaire 
+                     WHERE id_salaire = ? AND id_utilisateur = ?`,
+                    [salaireId, userId]
+                );
+
+                if (tentatives && tentatives.length > 0 && tentatives[0].tentatives_echouees >= 2) {
+                    // Bloquer le compte de l'utilisateur
+                    await db.execute(
+                        "UPDATE utilisateurs SET statut = 'bloqué' WHERE id = ?",
+                        [userId]
+                    );
+                    return res.status(403).json({
+                        success: false,
+                        message: 'Votre compte a été bloqué après 2 tentatives infructueuses. Veuillez contacter l\'administrateur.'
+                    });
+                }
+
+                const restantes = 2 - (tentatives[0].tentatives_echouees || 0);
                 return res.status(400).json({
                     success: false,
-                    message: 'Code de vérification invalide ou expiré.'
+                    message: `Code de vérification invalide ou expiré. Il vous reste ${restantes} tentative(s) avant blocage du compte.`
                 });
             }
 
@@ -1419,6 +1440,71 @@ router.post('/salaires/:id/confirmer-reception', authenticate, authorize('veteri
         });
     }
 });
+
+// Demander un code de vérification pour le salaire
+router.post(
+    '/salaires/:id/demander-code',
+    authenticate,
+    authorize('veterinaire'),
+    async (req, res) => {
+        try {
+            const userId = req.userId;
+            const salaireId = req.params.id;
+
+            // Vérifier que le salaire appartient à l'utilisateur
+            const [salaire] = await db.query(
+                `SELECT s.id, u.email, u.nom_complet, s.mois, s.annee 
+         FROM salaires s
+         JOIN utilisateurs u ON s.id_utilisateur = u.id
+         WHERE s.id = ? AND s.id_utilisateur = ?`,
+                [salaireId, userId]
+            );
+
+            if (!salaire || salaire.length === 0) {
+                return res.status(404).json({ success: false, message: 'Salaire non trouvé' });
+            }
+
+            const salaireData = salaire[0];
+
+            // Générer code
+            const code = Math.floor(100000 + Math.random() * 900000).toString();
+            const dateExpiration = new Date();
+            dateExpiration.setHours(dateExpiration.getHours() + 24);
+
+            // Sauvegarder en base
+            await db.execute(
+                `INSERT INTO codes_verification_salaire (
+          id_salaire, id_utilisateur, code_verification, date_expiration
+        ) VALUES (?, ?, ?, ?)`,
+                [salaireId, userId, code, dateExpiration]
+            );
+
+            // Envoyer email
+            if (salaireData.email) {
+                try {
+                    await emailService.envoyerCodeVerification(
+                        salaireData.email,
+                        code,
+                        salaireData.nom_complet,
+                        salaireData.mois,
+                        salaireData.annee
+                    );
+                } catch (emailError) {
+                    console.error('Erreur envoi email OTP:', emailError);
+                }
+            }
+
+            res.json({
+                success: true,
+                message: 'Un code de vérification a été envoyé à votre email.',
+                code: process.env.NODE_ENV === 'development' ? code : undefined
+            });
+        } catch (error) {
+            console.error('Erreur demander-code:', error);
+            res.status(500).json({ success: false, message: 'Erreur serveur' });
+        }
+    }
+);
 
 // Obtenir la liste des paiements reçus
 router.get('/paiements/recus', authenticate, authorize('veterinaire'), async (req, res) => {

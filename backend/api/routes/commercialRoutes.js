@@ -654,7 +654,7 @@ router.post('/commandes-vente', authenticate, authorize('admin', 'manager', 'emp
     let connection;
 
     try {
-        connection = await db.getConnection();
+        connection = await db.pool.getConnection();
         await connection.beginTransaction();
 
         const {
@@ -672,12 +672,35 @@ router.post('/commandes-vente', authenticate, authorize('admin', 'manager', 'emp
             });
         }
 
+        // NOUVEAU : Vérifier les stocks avant de créer la commande
+        for (const ligne of lignes) {
+            if (ligne.article_source === 'stock') {
+                const stockResult = await connection.query(`
+                    SELECT quantite_disponible 
+                    FROM stocks 
+                    WHERE type_article = ? AND id_article = ?
+                `, [ligne.type_article, ligne.id_article]);
+
+                const stock = Array.isArray(stockResult) ? stockResult[0] : stockResult;
+
+                if (!stock || stock.quantite_disponible < parseFloat(ligne.quantite_commandee)) {
+                    await connection.rollback();
+                    return res.status(400).json({
+                        success: false,
+                        message: `Stock insuffisant pour: ${ligne.designation}`
+                    });
+                }
+            }
+        }
+
         // Générer numéro de commande
         const lastCommandeResult = await connection.query(
             'SELECT numero_commande FROM commandes_vente ORDER BY id DESC LIMIT 1'
         );
         const lastCommande = Array.isArray(lastCommandeResult) ? lastCommandeResult[0] : null;
-        const lastNum = lastCommande ? parseInt(lastCommande.numero_commande.split('-')[1]) : 0;
+        const lastNum = lastCommande && lastCommande.numero_commande
+            ? parseInt(lastCommande.numero_commande.split('-')[1])
+            : 0;
         const numero_commande = `CV-${String(lastNum + 1).padStart(6, '0')}`;
 
         // Calculer montants
@@ -711,7 +734,7 @@ router.post('/commandes-vente', authenticate, authorize('admin', 'manager', 'emp
         const commandeId = Array.isArray(commandeResult) ?
             (commandeResult[0]?.insertId || commandeResult.insertId) : commandeResult.insertId;
 
-        // Insérer lignes
+        // Insérer lignes ET réserver le stock
         for (const ligne of lignes) {
             const montant_ligne_ht = ligne.quantite_commandee * ligne.prix_unitaire_ht *
                 (1 - (ligne.remise_pourcent || 0) / 100);
@@ -731,6 +754,15 @@ router.post('/commandes-vente', authenticate, authorize('admin', 'manager', 'emp
                 ligne.tva_pourcent || 0, montant_ligne_ht, montant_ligne_tva,
                 montant_ligne_ttc
             ]);
+
+            // NOUVEAU : Réserver le stock si c'est un article en stock
+            if (ligne.article_source === 'stock') {
+                await connection.query(`
+                    UPDATE stocks 
+                    SET quantite_reservee = quantite_reservee + ?
+                    WHERE type_article = ? AND id_article = ?
+                `, [ligne.quantite_commandee, ligne.type_article, ligne.id_article]);
+            }
         }
 
         // Traçabilité
@@ -765,8 +797,76 @@ router.post('/commandes-vente', authenticate, authorize('admin', 'manager', 'emp
     }
 });
 
-router.put('/commandes-vente/:id/statut', authenticate, authorize('admin', 'manager'), async (req, res) => {
+// À ajouter dans commercialRoutes.js
+router.put('/commandes-vente/:id/annuler', authenticate, authorize('admin', 'manager'), async (req, res) => {
+    let connection;
+
     try {
+        connection = await db.pool.getConnection();
+        await connection.beginTransaction();
+
+        const { id } = req.params;
+
+        // Récupérer les lignes de commande
+        const lignesResult = await connection.query(`
+            SELECT lcv.*, cv.statut 
+            FROM lignes_commande_vente lcv
+            JOIN commandes_vente cv ON lcv.id_commande_vente = cv.id
+            WHERE lcv.id_commande_vente = ?
+        `, [id]);
+
+        const lignes = Array.isArray(lignesResult) ? lignesResult : [];
+
+        if (lignes.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({
+                success: false,
+                message: 'Commande non trouvée.'
+            });
+        }
+
+        // Libérer les stocks réservés
+        for (const ligne of lignes) {
+            await connection.query(`
+                UPDATE stocks 
+                SET quantite_reservee = GREATEST(0, quantite_reservee - ?)
+                WHERE type_article = ? AND id_article = ?
+            `, [ligne.quantite_commandee, ligne.type_produit, ligne.id_produit]);
+        }
+
+        // Marquer la commande comme annulée
+        await connection.query(`
+            UPDATE commandes_vente 
+            SET statut = 'annulee'
+            WHERE id = ?
+        `, [id]);
+
+        await connection.commit();
+
+        res.status(200).json({
+            success: true,
+            message: 'Commande annulée et stocks libérés.'
+        });
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error('❌ Cancel commande error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors de l\'annulation de la commande.',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+router.put('/commandes-vente/:id/statut', authenticate, authorize('admin', 'manager'), async (req, res) => {
+    let connection;
+
+    try {
+        connection = await db.pool.getConnection();
+        await connection.beginTransaction();
+
         const { id } = req.params;
         const { statut } = req.body;
 
@@ -774,32 +874,84 @@ router.put('/commandes-vente/:id/statut', authenticate, authorize('admin', 'mana
             'livree_complete', 'facturee', 'payee', 'annulee'];
 
         if (!statutsValides.includes(statut)) {
+            await connection.rollback();
             return res.status(400).json({
                 success: false,
                 message: 'Statut invalide.'
             });
         }
 
-        // Récupérer la commande
-        const commandeResult = await db.query('SELECT * FROM commandes_vente WHERE id = ?', [id]);
+        // Récupérer la commande et ses lignes
+        const commandeResult = await connection.query('SELECT * FROM commandes_vente WHERE id = ?', [id]);
         const commande = Array.isArray(commandeResult) ? commandeResult[0] : null;
 
         if (!commande) {
+            await connection.rollback();
             return res.status(404).json({
                 success: false,
                 message: 'Commande non trouvée.'
             });
         }
 
-        await db.query(`
+        const lignesResult = await connection.query(
+            'SELECT * FROM lignes_commande_vente WHERE id_commande_vente = ?',
+            [id]
+        );
+        const lignes = Array.isArray(lignesResult) ? lignesResult : [];
+
+        // NOUVEAU : Si livraison complète, déduire du stock
+        if (statut === 'livree_complete' && commande.statut !== 'livree_complete') {
+            for (const ligne of lignes) {
+                // Déduire du stock disponible
+                await connection.query(`
+                    UPDATE stocks 
+                    SET 
+                        quantite_disponible = GREATEST(0, quantite_disponible - ?),
+                        quantite_reservee = GREATEST(0, quantite_reservee - ?)
+                    WHERE type_article = ? AND id_article = ?
+                `, [
+                    ligne.quantite_commandee,
+                    ligne.quantite_commandee,
+                    ligne.type_produit,
+                    ligne.id_produit
+                ]);
+
+                // Créer un mouvement de stock
+                await connection.query(`
+                    INSERT INTO mouvements_stock (
+                        id_stock, type_mouvement, quantite, unite_mesure,
+                        type_reference, id_reference, raison, commentaire,
+                        effectue_par, date_mouvement
+                    )
+                    SELECT 
+                        s.id, 'sortie', ?, ?, 'commande_vente', ?, 'vente',
+                        CONCAT('Vente - Commande ', ?),
+                        ?, CURDATE()
+                    FROM stocks s
+                    WHERE s.type_article = ? AND s.id_article = ?
+                    LIMIT 1
+                `, [
+                    ligne.quantite_commandee,
+                    ligne.unite,
+                    id,
+                    commande.numero_commande,
+                    req.user?.id || req.userId,
+                    ligne.type_produit,
+                    ligne.id_produit
+                ]);
+            }
+        }
+
+        // Mettre à jour le statut
+        await connection.query(`
             UPDATE commandes_vente 
             SET statut = ?, valide_par = ?, date_validation = NOW()
             WHERE id = ?
         `, [statut, req.user?.id || req.userId, id]);
 
-        // Si confirmée, créer facture automatiquement
+        // Créer facture si confirmée
         if (statut === 'confirmee' && commande.statut === 'brouillon') {
-            const lastFactureResult = await db.query(
+            const lastFactureResult = await connection.query(
                 'SELECT numero_facture FROM factures ORDER BY id DESC LIMIT 1'
             );
             const lastFacture = Array.isArray(lastFactureResult) ? lastFactureResult[0] : null;
@@ -809,7 +961,7 @@ router.put('/commandes-vente/:id/statut', authenticate, authorize('admin', 'mana
             const dateEcheance = new Date();
             dateEcheance.setDate(dateEcheance.getDate() + 30);
 
-            await db.query(`
+            await connection.query(`
                 INSERT INTO factures (
                     numero_facture, type_facture, id_commande, id_client,
                     date_facture, date_echeance, montant_ht, montant_tva,
@@ -822,25 +974,22 @@ router.put('/commandes-vente/:id/statut', authenticate, authorize('admin', 'mana
             ]);
         }
 
-        // Traçabilité
-        await db.query(`
-            INSERT INTO traces (
-                id_utilisateur, module, type_action, action_details,
-                table_affectee, id_enregistrement
-            ) VALUES (?, 'commercial', 'changement_statut_commande', ?, 'commandes_vente', ?)
-        `, [req.user?.id || req.userId, `Statut changé: ${commande.statut} → ${statut}`, id]);
+        await connection.commit();
 
         res.status(200).json({
             success: true,
             message: 'Statut mis à jour avec succès.'
         });
     } catch (error) {
+        if (connection) await connection.rollback();
         console.error('❌ Update statut commande error:', error);
         res.status(500).json({
             success: false,
             message: 'Erreur lors de la mise à jour du statut.',
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
@@ -926,7 +1075,7 @@ router.post('/commandes-achat', authenticate, authorize('admin', 'manager'), asy
     let connection;
 
     try {
-        connection = await db.getConnection();
+        connection = await db.pool.getConnection();
         await connection.beginTransaction();
 
         const {
@@ -948,7 +1097,9 @@ router.post('/commandes-achat', authenticate, authorize('admin', 'manager'), asy
             'SELECT numero_commande FROM commandes_achat ORDER BY id DESC LIMIT 1'
         );
         const lastCommande = Array.isArray(lastCommandeResult) ? lastCommandeResult[0] : null;
-        const lastNum = lastCommande ? parseInt(lastCommande.numero_commande.split('-')[1]) : 0;
+        const lastNum = lastCommande && lastCommande.numero_commande
+            ? parseInt(lastCommande.numero_commande.split('-')[1])
+            : 0;
         const numero_commande = `CA-${String(lastNum + 1).padStart(6, '0')}`;
 
         // Calculer montants

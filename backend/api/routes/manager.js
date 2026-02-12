@@ -1,7 +1,8 @@
 // backend/api/routes/manager.js - Routes API Manager Complètes (VERSION CORRIGÉE)
 const express = require('express');
 const router = express.Router();
-const pool = require('../../database/db');
+const db = require('../../database/db');
+const { enregistrerDansBudgetDepartement } = require('./operationsRoutes');
 const {
   authenticate,
   authorize,
@@ -27,7 +28,7 @@ router.get('/dashboard', authorize('manager', 'admin'), async (req, res) => {
     console.log('📊 Dashboard Manager - Dept:', id_departement, 'Type:', departement_type);
 
     // ✅ KPIs de base
-    const employeesResult = await pool.query(
+    const employeesResult = await db.query(
       `SELECT COUNT(*) as total_employes,
               SUM(CASE WHEN statut = 'actif' THEN 1 ELSE 0 END) as employes_actifs
        FROM utilisateurs 
@@ -37,7 +38,7 @@ router.get('/dashboard', authorize('manager', 'admin'), async (req, res) => {
     const employees = Array.isArray(employeesResult) ? employeesResult[0] : employeesResult;
 
     // ✅ Présences aujourd'hui
-    const presencesResult = await pool.query(
+    const presencesResult = await db.query(
       `SELECT COUNT(*) as presences_aujourdhui
        FROM presences p
        JOIN utilisateurs u ON p.id_utilisateur = u.id
@@ -49,7 +50,7 @@ router.get('/dashboard', authorize('manager', 'admin'), async (req, res) => {
     const presences = Array.isArray(presencesResult) ? presencesResult[0] : presencesResult;
 
     // ✅ Demandes en attente
-    const demandesResult = await pool.query(
+    const demandesResult = await db.query(
       `SELECT 
         (SELECT COUNT(*) FROM conges 
          WHERE id_utilisateur IN (SELECT id FROM utilisateurs WHERE id_departement = ?)
@@ -61,7 +62,7 @@ router.get('/dashboard', authorize('manager', 'admin'), async (req, res) => {
     const demandes = Array.isArray(demandesResult) ? demandesResult[0] : demandesResult;
 
     // ✅ Budget utilisé
-    const budgetResult = await pool.query(
+    const budgetResult = await db.query(
       `SELECT 
         COALESCE(budget_alloue, 0) as budget_alloue,
         (SELECT COALESCE(SUM(montant), 0) 
@@ -85,7 +86,7 @@ router.get('/dashboard', authorize('manager', 'admin'), async (req, res) => {
 
     // ✅ KPIs spécifiques au département
     if (departement_type === 'agriculture') {
-      const agriKPIsResult = await pool.query(
+      const agriKPIsResult = await db.query(
         `SELECT 
           (SELECT COUNT(*) FROM parcelles WHERE statut = 'en_culture') as parcelles_en_culture,
           (SELECT COALESCE(SUM(rendement_obtenu_kg), 0) 
@@ -99,7 +100,7 @@ router.get('/dashboard', authorize('manager', 'admin'), async (req, res) => {
       kpiData = { ...kpiData, ...agriKPIs };
 
     } else if (departement_type === 'elevage') {
-      const elevageKPIsResult = await pool.query(
+      const elevageKPIsResult = await db.query(
         `SELECT 
           (SELECT COUNT(*) FROM animaux WHERE statut = 'vivant') as animaux_vivants,
           (SELECT COALESCE(SUM(quantite_litres), 0)
@@ -111,7 +112,7 @@ router.get('/dashboard', authorize('manager', 'admin'), async (req, res) => {
       kpiData = { ...kpiData, ...elevageKPIs };
 
     } else if (departement_type === 'flotte') {
-      const flotteKPIsResult = await pool.query(
+      const flotteKPIsResult = await db.query(
         `SELECT 
           (SELECT COUNT(*) FROM vehicules WHERE id_departement = ? AND statut = 'actif') as vehicules_actifs,
           (SELECT COUNT(*) FROM mouvements_vehicules 
@@ -123,7 +124,7 @@ router.get('/dashboard', authorize('manager', 'admin'), async (req, res) => {
       kpiData = { ...kpiData, ...flotteKPIs };
 
     } else if (departement_type === 'commercial') {
-      const commercialKPIsResult = await pool.query(
+      const commercialKPIsResult = await db.query(
         `SELECT 
           (SELECT COUNT(*) FROM commandes_vente 
            WHERE MONTH(date_commande) = MONTH(CURDATE())
@@ -146,7 +147,7 @@ router.get('/dashboard', authorize('manager', 'admin'), async (req, res) => {
       periodQuery = 'AND YEAR(p.date) = YEAR(CURDATE())';
     }
 
-    const performanceResult = await pool.query(
+    const performanceResult = await db.query(
       `SELECT 
         DATE(date) as date,
         COUNT(*) as total_presences,
@@ -163,7 +164,7 @@ router.get('/dashboard', authorize('manager', 'admin'), async (req, res) => {
     const performance = Array.isArray(performanceResult) ? performanceResult : [];
 
     // ✅ Team Stats
-    const teamStatsResult = await pool.query(
+    const teamStatsResult = await db.query(
       `SELECT 
         COALESCE(AVG(taux_presence), 0) as taux_presence_moyen,
         COALESCE(AVG(heures_moyennes), 0) as heures_moyennes,
@@ -192,7 +193,7 @@ router.get('/dashboard', authorize('manager', 'admin'), async (req, res) => {
     const teamStats = Array.isArray(teamStatsResult) ? teamStatsResult[0] : teamStatsResult;
 
     // ✅ Top Performers
-    const topPerformersResult = await pool.query(
+    const topPerformersResult = await db.query(
       `SELECT 
         u.id,
         u.nom_complet,
@@ -213,7 +214,7 @@ router.get('/dashboard', authorize('manager', 'admin'), async (req, res) => {
     const topPerformers = Array.isArray(topPerformersResult) ? topPerformersResult : [];
 
     // ✅ Alertes
-    const alertesResult = await pool.query(
+    const alertesResult = await db.query(
       `SELECT 
         'conge' as type,
         c.id,
@@ -242,7 +243,7 @@ router.get('/dashboard', authorize('manager', 'admin'), async (req, res) => {
     const alertes = Array.isArray(alertesResult) ? alertesResult : [];
 
     // ✅ Demandes d'approbation
-    const approbationsResult = await pool.query(
+    const approbationsResult = await db.query(
       `SELECT 
         'conge' as type,
         c.id,
@@ -338,12 +339,12 @@ router.get('/employees', authorize('manager', 'admin'), async (req, res) => {
 
     query += ' ORDER BY u.nom_complet ASC';
 
-    const employeesResult = await pool.query(query, params);
+    const employeesResult = await db.query(query, params);
     const employees = Array.isArray(employeesResult) ? employeesResult : [];
 
     // Ajouter solde congés
     for (let emp of employees) {
-      const leaveBalanceResult = await pool.query(
+      const leaveBalanceResult = await db.query(
         `SELECT 
           jours_conges_annuels as total,
           (SELECT COALESCE(SUM(jours_demandes), 0) 
@@ -385,7 +386,7 @@ router.post('/employees/:id/notify', authorize('manager', 'admin'), async (req, 
     }
 
     // Vérifier que l'employé appartient au département
-    const [employee] = await pool.query(
+    const [employee] = await db.query(
       'SELECT nom_complet, email FROM utilisateurs WHERE id = ? AND id_departement = ?',
       [employeeId, id_departement]
     );
@@ -403,7 +404,7 @@ router.post('/employees/:id/notify', authorize('manager', 'admin'), async (req, 
 
     if (result.success) {
       // Trace
-      await pool.query(
+      await db.query(
         'INSERT INTO traces (id_utilisateur, module, type_action, action_details) VALUES (?, ?, ?, ?)',
         [managerId, 'rh', 'notification_email', `Email envoyé à ${employee[0].nom_complet}: ${sujet}`]
       );
@@ -425,7 +426,7 @@ router.post('/employees/:id/toggle-status', authorize('manager', 'admin'), async
     const { id: managerId, id_departement } = req.user;
     const { id: employeeId } = req.params;
 
-    connection = await pool.getConnection();
+    connection = await db.pool.getConnection();
     await connection.beginTransaction();
 
     // Vérifier que l'employé appartient au département
@@ -486,7 +487,7 @@ router.post('/employees/:id/mark-presence', authorize('manager', 'admin'), async
     const targetDate = date || new Date().toISOString().split('T')[0];
 
     // Vérifier que l'employé appartient au département
-    const [employee] = await pool.query(
+    const [employee] = await db.query(
       'SELECT nom_complet FROM utilisateurs WHERE id = ? AND id_departement = ?',
       [employeeId, id_departement]
     );
@@ -496,13 +497,13 @@ router.post('/employees/:id/mark-presence', authorize('manager', 'admin'), async
     }
 
     // Vérifier si une présence existe déjà pour cette date
-    const [existing] = await pool.query(
+    const [existing] = await db.query(
       'SELECT id FROM presences WHERE id_utilisateur = ? AND DATE(date) = ?',
       [employeeId, targetDate]
     );
 
     if (existing && existing.length > 0) {
-      await pool.query(
+      await db.query(
         `UPDATE presences SET 
           statut = ?, 
           heure_entree = ?, 
@@ -513,7 +514,7 @@ router.post('/employees/:id/mark-presence', authorize('manager', 'admin'), async
         [statut, statut === 'present' ? '08:00:00' : null, managerId, existing[0].id]
       );
     } else {
-      await pool.query(
+      await db.query(
         `INSERT INTO presences 
           (id_utilisateur, date, statut, heure_entree, statut_validation, valide_par, date_validation) 
          VALUES (?, ?, ?, ?, 'valide', ?, NOW())`,
@@ -522,7 +523,7 @@ router.post('/employees/:id/mark-presence', authorize('manager', 'admin'), async
     }
 
     // Trace
-    await pool.query(
+    await db.query(
       'INSERT INTO traces (id_utilisateur, module, type_action, action_details) VALUES (?, ?, ?, ?)',
       [managerId, 'rh', 'marquage_presence', `Présence de ${employee[0].nom_complet} marquée comme ${statut} pour le ${targetDate}`]
     );
@@ -542,7 +543,7 @@ router.get('/presences', authorize('manager', 'admin'), async (req, res) => {
 
     const targetDate = date || new Date().toISOString().split('T')[0];
 
-    const presencesResult = await pool.query(
+    const presencesResult = await db.query(
       `SELECT 
         p.*,
         u.nom_complet as employee_name,
@@ -577,7 +578,7 @@ router.post('/presences/validate', authorize('manager', 'admin'), async (req, re
       return res.status(400).json({ error: 'IDs de présences invalides' });
     }
 
-    connection = await pool.getConnection();
+    connection = await db.pool.getConnection();
     await connection.beginTransaction();
 
     // Vérifier que toutes les présences appartiennent au département
@@ -638,7 +639,7 @@ router.get('/leave-requests', authorize('manager', 'admin'), async (req, res) =>
     else if (filter === 'approved') statusCondition = "AND c.statut = 'approuve'";
     else if (filter === 'rejected') statusCondition = "AND c.statut = 'rejete'";
 
-    const requestsResult = await pool.query(
+    const requestsResult = await db.query(
       `SELECT 
         c.*,
         u.nom_complet as employee_name,
@@ -674,7 +675,7 @@ router.post('/leave-requests/:id/process', authorize('manager', 'admin'), async 
       return res.status(400).json({ error: 'Action invalide' });
     }
 
-    connection = await pool.getConnection();
+    connection = await db.pool.getConnection();
     await connection.beginTransaction();
 
     // Vérifier que le congé appartient au département
@@ -741,7 +742,7 @@ router.get('/salaries', authorize('manager', 'admin'), async (req, res) => {
     const targetMonth = month || new Date().getMonth() + 1;
     const targetYear = year || new Date().getFullYear();
 
-    const salariesResult = await pool.query(
+    const salariesResult = await db.query(
       `SELECT 
         s.*,
         u.nom_complet as employee_name,
@@ -772,17 +773,16 @@ router.post('/salaries/:id/mark-paid', authorize('manager', 'admin'), async (req
     const { id: managerId, id_departement } = req.user;
     const { id: salaryId } = req.params;
 
-    connection = await pool.getConnection();
+    connection = await db.pool.getConnection();
     await connection.beginTransaction();
 
     // Vérifier que le salaire appartient au département
-    const salaryResult = await connection.query(
+    const [salary] = await connection.query(
       `SELECT s.* FROM salaires s
        JOIN utilisateurs u ON s.id_utilisateur = u.id
        WHERE s.id = ? AND u.id_departement = ?`,
       [salaryId, id_departement]
     );
-    const salary = Array.isArray(salaryResult) ? salaryResult : [];
 
     if (salary.length === 0) {
       await connection.rollback();
@@ -804,6 +804,17 @@ router.post('/salaries/:id/mark-paid', authorize('manager', 'admin'), async (req
       [managerId, `Paiement salaire ID ${salaryId}`]
     );
 
+    // Enregistrer la dépense dans le budget du département
+    await enregistrerDansBudgetDepartement({
+      id_departement: id_departement,
+      type_mouvement: 'depense',
+      categorie: 'salaire',
+      description: `Paiement salaire ${salary[0].mois}/${salary[0].annee}`,
+      montant: salary[0].salaire_net,
+      reference: `SAL-${salaryId}`,
+      effectue_par: managerId
+    });
+
     await connection.commit();
 
     res.json({ success: true, message: 'Salaire marqué comme payé' });
@@ -822,7 +833,7 @@ router.get('/performance', authorize('manager', 'admin'), async (req, res) => {
   try {
     const { id_departement } = req.user;
 
-    const performanceResult = await pool.query(
+    const performanceResult = await db.query(
       `SELECT 
         u.id,
         u.nom_complet,
@@ -865,7 +876,7 @@ router.get('/department-info', async (req, res) => {
 
     console.log('🔍 ID recherché:', id_departement);
 
-    const result = await pool.query(
+    const result = await db.query(
       'SELECT id, nom, type FROM departements WHERE id = ?',
       [id_departement]
     );
@@ -877,6 +888,7 @@ router.get('/department-info', async (req, res) => {
     console.log('✅ dept final:', dept);
 
     if (!dept) {
+      console.log('❌ Département non trouvé pour ID:', id_departement);
       return res.status(404).json({ error: 'Département non trouvé' });
     }
 
@@ -893,7 +905,7 @@ router.get('/department-info', async (req, res) => {
 // GET /api/manager/parcelles
 router.get('/parcelles', authorize('manager', 'admin'), async (req, res) => {
   try {
-    const parcellesResult = await pool.query(
+    const parcellesResult = await db.query(
       `SELECT 
         p.*,
         tc.nom_culture as culture_actuelle_nom
@@ -915,7 +927,7 @@ router.get('/parcelles', authorize('manager', 'admin'), async (req, res) => {
 // GET /api/manager/cultures
 router.get('/cultures', authorize('manager', 'admin'), async (req, res) => {
   try {
-    const culturesResult = await pool.query(
+    const culturesResult = await db.query(
       `SELECT 
         c.*,
         p.nom_parcelle as parcelle_nom,
@@ -938,7 +950,7 @@ router.get('/cultures', authorize('manager', 'admin'), async (req, res) => {
 // GET /api/manager/intrants
 router.get('/intrants', authorize('manager', 'admin'), async (req, res) => {
   try {
-    const intrantsResult = await pool.query(
+    const intrantsResult = await db.query(
       `SELECT * FROM intrants_agricoles 
        ORDER BY nom_intrant ASC`
     );
@@ -955,7 +967,7 @@ router.get('/intrants', authorize('manager', 'admin'), async (req, res) => {
 // GET /api/manager/recoltes
 router.get('/recoltes', authorize('manager', 'admin'), async (req, res) => {
   try {
-    const recoltesResult = await pool.query(
+    const recoltesResult = await db.query(
       `SELECT 
         r.*,
         tc.nom_culture,
@@ -981,7 +993,7 @@ router.get('/recoltes', authorize('manager', 'admin'), async (req, res) => {
 // GET /api/manager/animaux
 router.get('/animaux', authorize('manager', 'admin'), async (req, res) => {
   try {
-    const animauxResult = await pool.query(
+    const animauxResult = await db.query(
       `SELECT 
         a.*,
         (SELECT date_intervention FROM suivis_sanitaires 
@@ -1004,7 +1016,7 @@ router.get('/animaux', authorize('manager', 'admin'), async (req, res) => {
 // GET /api/manager/production-lait
 router.get('/production-lait', authorize('manager', 'admin'), async (req, res) => {
   try {
-    const productionResult = await pool.query(
+    const productionResult = await db.query(
       `SELECT 
         pl.*,
         a.numero_identification as animal_numero,
@@ -1026,7 +1038,7 @@ router.get('/production-lait', authorize('manager', 'admin'), async (req, res) =
 // GET /api/manager/production-oeufs
 router.get('/production-oeufs', authorize('manager', 'admin'), async (req, res) => {
   try {
-    const productionResult = await pool.query(
+    const productionResult = await db.query(
       `SELECT 
         po.*,
         'oeufs' as type
@@ -1046,7 +1058,7 @@ router.get('/production-oeufs', authorize('manager', 'admin'), async (req, res) 
 // GET /api/manager/aliments-betail
 router.get('/aliments-betail', authorize('manager', 'admin'), async (req, res) => {
   try {
-    const alimentsResult = await pool.query(
+    const alimentsResult = await db.query(
       `SELECT * FROM aliments_betail 
        ORDER BY nom_aliment ASC`
     );
@@ -1067,7 +1079,7 @@ router.get('/vehicules-department', authorize('manager', 'admin'), async (req, r
   try {
     const { id_departement } = req.user;
 
-    const vehiculesResult = await pool.query(
+    const vehiculesResult = await db.query(
       `SELECT 
         v.*,
         u.nom_complet as chauffeur_nom,
@@ -1098,7 +1110,7 @@ router.get('/missions-department', authorize('manager', 'admin'), async (req, re
   try {
     const { id_departement } = req.user;
 
-    const missionsResult = await pool.query(
+    const missionsResult = await db.query(
       `SELECT 
         m.*,
         v.immatriculation as vehicule_immatriculation,
@@ -1127,7 +1139,7 @@ router.get('/maintenances-department', authorize('manager', 'admin'), async (req
   try {
     const { id_departement } = req.user;
 
-    const maintenancesResult = await pool.query(
+    const maintenancesResult = await db.query(
       `SELECT 
         m.*,
         v.immatriculation as vehicule_immatriculation
@@ -1152,7 +1164,7 @@ router.get('/frais-department', authorize('manager', 'admin'), async (req, res) 
   try {
     const { id_departement } = req.user;
 
-    const fraisResult = await pool.query(
+    const fraisResult = await db.query(
       `SELECT 
         f.*,
         v.immatriculation as vehicule_immatriculation,
@@ -1183,7 +1195,7 @@ router.post('/frais/:id/validate', authorize('manager', 'admin'), async (req, re
     const { id: managerId, id_departement } = req.user;
     const { id: fraisId } = req.params;
 
-    connection = await pool.getConnection();
+    connection = await db.pool.getConnection();
     await connection.beginTransaction();
 
     // Vérifier que le frais appartient au département
@@ -1235,7 +1247,7 @@ router.post('/frais/:id/validate', authorize('manager', 'admin'), async (req, re
 // GET /api/manager/commandes-department
 router.get('/commandes-department', authorize('manager', 'admin'), async (req, res) => {
   try {
-    const commandesVenteResult = await pool.query(
+    const commandesVenteResult = await db.query(
       `SELECT 
         cv.*,
         'vente' as type,
@@ -1247,7 +1259,7 @@ router.get('/commandes-department', authorize('manager', 'admin'), async (req, r
     );
     const commandesVente = Array.isArray(commandesVenteResult) ? commandesVenteResult : [];
 
-    const commandesAchatResult = await pool.query(
+    const commandesAchatResult = await db.query(
       `SELECT 
         ca.*,
         'achat' as type,
@@ -1270,7 +1282,7 @@ router.get('/commandes-department', authorize('manager', 'admin'), async (req, r
 // GET /api/manager/clients-department
 router.get('/clients-department', authorize('manager', 'admin'), async (req, res) => {
   try {
-    const clientsResult = await pool.query(
+    const clientsResult = await db.query(
       `SELECT 
         c.*,
         (SELECT COUNT(*) FROM commandes_vente WHERE id_client = c.id) as nombre_achats,
@@ -1292,7 +1304,7 @@ router.get('/clients-department', authorize('manager', 'admin'), async (req, res
 // GET /api/manager/fournisseurs-department
 router.get('/fournisseurs-department', authorize('manager', 'admin'), async (req, res) => {
   try {
-    const fournisseursResult = await pool.query(
+    const fournisseursResult = await db.query(
       `SELECT 
         f.*,
         (SELECT COUNT(*) FROM commandes_achat WHERE id_fournisseur = f.id) as nombre_achats,
@@ -1313,7 +1325,7 @@ router.get('/fournisseurs-department', authorize('manager', 'admin'), async (req
 // GET /api/manager/stocks-department
 router.get('/stocks-department', authorize('manager', 'admin'), async (req, res) => {
   try {
-    const stocksResult = await pool.query(
+    const stocksResult = await db.query(
       `SELECT 
         s.*,
         (quantite_disponible - quantite_reservee) * cout_unitaire as valeur_stock
@@ -1337,7 +1349,7 @@ router.get('/budget-overview', authorize('manager', 'admin'), async (req, res) =
   try {
     const { id_departement } = req.user;
 
-    const budgetResult = await pool.query(
+    const budgetResult = await db.query(
       `SELECT 
         COALESCE(bd.budget_alloue, 0) as budget_alloue,
         (SELECT COALESCE(SUM(montant), 0) 
@@ -1392,7 +1404,7 @@ router.get('/monthly-financial-trend', authorize('manager', 'admin'), async (req
     console.log('📊 Récupération tendance financière pour département:', id_departement, 'mois:', months);
 
     // ✅ REQUÊTE 1: Dépenses
-    const depensesResult = await pool.query(
+    const depensesResult = await db.query(
       `SELECT 
         DATE_FORMAT(date_depense, '%Y-%m') as mois,
         COALESCE(SUM(montant), 0) as depenses
@@ -1406,7 +1418,7 @@ router.get('/monthly-financial-trend', authorize('manager', 'admin'), async (req
     const depenses = Array.isArray(depensesResult) ? depensesResult : [];
 
     // ✅ REQUÊTE 2: Revenus
-    const revenusResult = await pool.query(
+    const revenusResult = await db.query(
       `SELECT 
         DATE_FORMAT(date_revenu, '%Y-%m') as mois,
         COALESCE(SUM(montant), 0) as revenus
@@ -1460,7 +1472,7 @@ router.get('/budget-details', authorize('manager', 'admin'), async (req, res) =>
   try {
     const { id_departement } = req.user;
 
-    const budgetResult = await pool.query(
+    const budgetResult = await db.query(
       `SELECT * FROM budgets_departements
        WHERE id_departement = ?
        AND annee = YEAR(CURDATE())`,
@@ -1473,7 +1485,7 @@ router.get('/budget-details', authorize('manager', 'admin'), async (req, res) =>
     }
 
     // Récupération de la répartition par catégorie
-    const categoriesResult = await pool.query(
+    const categoriesResult = await db.query(
       `SELECT 
         categorie as nom,
         COALESCE(SUM(montant), 0) as montant_utilise,
@@ -1509,7 +1521,7 @@ router.get('/budget-requests', authorize('manager', 'admin'), async (req, res) =
   try {
     const { id_departement } = req.user;
 
-    const requestsResult = await pool.query(
+    const requestsResult = await db.query(
       `SELECT * FROM demandes_budget
        WHERE id_departement = ?
        ORDER BY 
@@ -1543,7 +1555,7 @@ router.post('/budget-requests', authorize('manager', 'admin'), async (req, res) 
       return res.status(400).json({ error: 'Champs requis manquants' });
     }
 
-    connection = await pool.getConnection();
+    connection = await db.pool.getConnection();
     await connection.beginTransaction();
 
     const resultInsert = await connection.query(
@@ -1613,7 +1625,7 @@ router.get('/department-expenses', authorize('manager', 'admin'), async (req, re
     const targetMonth = month || new Date().getMonth() + 1;
     const targetYear = year || new Date().getFullYear();
 
-    const expensesResult = await pool.query(
+    const expensesResult = await db.query(
       `SELECT * FROM depenses_departement
        WHERE id_departement = ?
        AND MONTH(date_depense) = ?
@@ -1642,7 +1654,7 @@ router.get('/expenses-by-category', authorize('manager', 'admin'), async (req, r
 
     console.log('📊 Dépenses par catégorie - Dept:', id_departement, `${targetMonth}/${targetYear}`);
 
-    const categoriesResult = await pool.query(
+    const categoriesResult = await db.query(
       `SELECT 
         categorie,
         COALESCE(SUM(montant), 0) as total,
@@ -1675,7 +1687,7 @@ router.get('/department-revenues', authorize('manager', 'admin'), async (req, re
     const targetMonth = month || new Date().getMonth() + 1;
     const targetYear = year || new Date().getFullYear();
 
-    const revenuesResult = await pool.query(
+    const revenuesResult = await db.query(
       `SELECT * FROM revenus_departement
        WHERE id_departement = ?
        AND MONTH(date_revenu) = ?
@@ -1693,6 +1705,181 @@ router.get('/department-revenues', authorize('manager', 'admin'), async (req, re
   }
 });
 
+// POST /api/manager/department-revenues
+router.post('/department-revenues', authorize('manager', 'admin'), async (req, res) => {
+  const connection = await db.pool.getConnection();
+  try {
+    const { id: managerId, id_departement } = req.user;
+    const {
+      source,
+      description,
+      montant,
+      date_revenu,
+      id_client,
+      reference,
+      mode_paiement,
+      categorie_mouvement,
+      id_source,
+      quantite
+    } = req.body;
+
+    // Validate required fields
+    if (!montant || parseFloat(montant) <= 0) {
+      return res.status(400).json({ error: 'Le montant est requis et doit être supérieur à 0' });
+    }
+
+    // Validate quantity for milk/egg sales
+    if (['vente_lait', 'vente_oeufs'].includes(categorie_mouvement)) {
+      if (!quantite || parseFloat(quantite) <= 0) {
+        return res.status(400).json({ error: 'La quantité est requise pour les ventes de lait et d\'œufs' });
+      }
+    }
+
+    await connection.beginTransaction();
+
+    // 1. Check stock availability from production tables for milk/eggs
+    if (['vente_lait', 'vente_oeufs'].includes(categorie_mouvement) && quantite > 0) {
+      const type = categorie_mouvement === 'vente_lait' ? 'lait' : 'oeufs';
+
+      let available = 0;
+      if (type === 'lait') {
+        const [production] = await connection.query(`
+          SELECT COALESCE(SUM(quantite_litres), 0) as produit
+          FROM productions_lait
+          WHERE destination = 'vente' 
+            AND date_production >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+        `);
+        const [sold] = await connection.query(`
+          SELECT COALESCE(SUM(quantite), 0) as vendu
+          FROM revenus_departement
+          WHERE categorie_mouvement = 'vente_lait'
+            AND date_revenu >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+        `);
+        available = production[0].produit - sold[0].vendu;
+      } else {
+        const [production] = await connection.query(`
+          SELECT COALESCE(SUM(nombre_oeufs - oeufs_casses - oeufs_sales), 0) as produit
+          FROM productions_oeufs
+          WHERE destination = 'vente'
+            AND date_recolte >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+        `);
+        const [sold] = await connection.query(`
+          SELECT COALESCE(SUM(quantite), 0) as vendu
+          FROM revenus_departement
+          WHERE categorie_mouvement = 'vente_oeufs'
+            AND date_revenu >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+        `);
+        available = production[0].produit - sold[0].vendu;
+      }
+
+      if (quantite > available) {
+        return res.status(400).json({
+          error: `Stock insuffisant. Disponible: ${Math.max(0, available)} ${type === 'lait' ? 'litres' : 'unités'}`
+        });
+      }
+    }
+
+    // 2. Insérer dans revenus_departement
+    const [result] = await connection.query(
+      `INSERT INTO revenus_departement 
+        (id_departement, source, description, montant, date_revenu, id_client, reference, enregistre_par, statut, categorie_mouvement, id_source, quantite)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'approuve', ?, ?, ?)`,
+      [id_departement, source, description, montant, date_revenu || new Date(), id_client, reference, managerId, categorie_mouvement, id_source, quantite]
+    );
+
+    const revenueId = result.insertId;
+
+    // 3. Log the transaction (stock management now via production tables)
+    // No stock table updates needed - stock is calculated dynamically from production records
+
+    // 3. Trace
+    await connection.query(
+      `INSERT INTO traces (id_utilisateur, module, type_action, action_details, table_affectee, id_enregistrement) 
+       VALUES (?, 'finance', 'AJOUT_REVENU', ?, 'revenus_departement', ?)`,
+      [managerId, `Ajout revenu: ${source} - ${montant} BIF`, revenueId]
+    );
+
+    await connection.commit();
+    res.json({ success: true, id: revenueId, message: 'Revenu enregistré avec succès' });
+
+  } catch (error) {
+    if (connection) await connection.rollback();
+    console.error('❌ Error creating revenue:', error);
+    res.status(500).json({ error: error.message || 'Erreur serveur' });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+// POST /api/manager/department-expenses
+router.post('/department-expenses', authorize('manager', 'admin'), async (req, res) => {
+  const connection = await db.pool.getConnection();
+  try {
+    const { id: managerId, id_departement } = req.user;
+    const {
+      categorie,
+      description,
+      montant,
+      date_depense,
+      reference,
+      mode_paiement,
+      piece_justificative
+    } = req.body;
+
+    // Validate required fields
+    if (!montant || parseFloat(montant) <= 0) {
+      return res.status(400).json({ error: 'Le montant est requis et doit être supérieur à 0' });
+    }
+
+    await connection.beginTransaction();
+
+    // 1. Valider le budget (optionnel mais recommandé)
+    const [budgetRows] = await connection.query(
+      'SELECT budget_annuel FROM departements WHERE id = ?',
+      [id_departement]
+    );
+
+    if (budgetRows && budgetRows.length > 0) {
+      const budget = budgetRows[0].budget_annuel;
+      const [spentRows] = await connection.query(
+        'SELECT SUM(montant) as total FROM depenses_departement WHERE id_departement = ? AND statut != "rejete"',
+        [id_departement]
+      );
+      const spent = spentRows[0].total || 0;
+
+      // On peut ajouter une alerte si le budget est dépassé
+      console.log(`Budget info - Total: ${budget}, Dépensé: ${spent}, Nouveau: ${montant}`);
+    }
+
+    // 2. Insérer dans depenses_departement
+    const [result] = await connection.query(
+      `INSERT INTO depenses_departement 
+        (id_departement, categorie, description, montant, date_depense, reference, piece_justificative, effectue_par, statut)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'approuve')`,
+      [id_departement, categorie, description, montant, date_depense || new Date(), reference, piece_justificative, managerId]
+    );
+
+    const expenseId = result.insertId;
+
+    // 3. Trace
+    await connection.query(
+      `INSERT INTO traces (id_utilisateur, module, type_action, action_details, table_affectee, id_enregistrement) 
+       VALUES (?, 'finance', 'AJOUT_DEPENSE', ?, 'depenses_departement', ?)`,
+      [managerId, `Ajout dépense: ${categorie} - ${montant} BIF`, expenseId]
+    );
+
+    await connection.commit();
+    res.json({ success: true, id: expenseId, message: 'Dépense enregistrée avec succès' });
+
+  } catch (error) {
+    if (connection) await connection.rollback();
+    console.error('❌ Error creating expense:', error);
+    res.status(500).json({ error: error.message || 'Erreur serveur' });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
 // GET /api/manager/revenues-by-source - VERSION CORRIGÉE
 router.get('/revenues-by-source', authorize('manager', 'admin'), async (req, res) => {
   try {
@@ -1704,7 +1891,7 @@ router.get('/revenues-by-source', authorize('manager', 'admin'), async (req, res
 
     console.log('📊 Revenus par source - Dept:', id_departement, `${targetMonth}/${targetYear}`);
 
-    const sourcesResult = await pool.query(
+    const sourcesResult = await db.query(
       `SELECT 
         source,
         COALESCE(SUM(montant), 0) as total,
@@ -1728,6 +1915,73 @@ router.get('/revenues-by-source', authorize('manager', 'admin'), async (req, res
   }
 });
 
+// GET /api/manager/stock-info - Récupérer les informations de stock pour un type
+router.get('/stock-info', authorize('manager', 'admin'), async (req, res) => {
+  try {
+    const { type } = req.query;
+    if (!type) return res.status(400).json({ error: 'Type de stock requis' });
+
+    let quantite_disponible = 0;
+    let unite_mesure = '';
+    let emplacement = '';
+
+    if (type === 'lait') {
+      // Calculate milk production for vente in last 7 days
+      const [production] = await db.query(`
+        SELECT COALESCE(SUM(quantite_litres), 0) as produit
+        FROM productions_lait
+        WHERE destination = 'vente' 
+          AND date_production >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+      `);
+
+      // Calculate sold milk in last 7 days
+      const [sold] = await db.query(`
+        SELECT COALESCE(SUM(quantite), 0) as vendu
+        FROM revenus_departement
+        WHERE categorie_mouvement = 'vente_lait'
+          AND date_revenu >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+      `);
+
+      quantite_disponible = production[0].produit - sold[0].vendu;
+      unite_mesure = 'litre';
+      emplacement = 'Réservoir principal';
+
+    } else if (type === 'oeufs') {
+      // Calculate net eggs for vente in last 7 days
+      const [production] = await db.query(`
+        SELECT COALESCE(SUM(nombre_oeufs - oeufs_casses - oeufs_sales), 0) as produit
+        FROM productions_oeufs
+        WHERE destination = 'vente'
+          AND date_recolte >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+      `);
+
+      // Calculate sold eggs in last 7 days
+      const [sold] = await db.query(`
+        SELECT COALESCE(SUM(quantite), 0) as vendu
+        FROM revenus_departement
+        WHERE categorie_mouvement = 'vente_oeufs'
+          AND date_revenu >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+      `);
+
+      quantite_disponible = production[0].produit - sold[0].vendu;
+      unite_mesure = 'unite';
+      emplacement = 'Entrepôt';
+
+    } else {
+      return res.status(400).json({ error: 'Type de stock non pris en charge' });
+    }
+
+    res.json({
+      quantite_disponible: Math.max(0, quantite_disponible), // Ensure non-negative
+      unite_mesure,
+      emplacement
+    });
+  } catch (error) {
+    console.error('❌ Error fetching stock info:', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 // POST /api/manager/payment-requests/:id/send-verification-code - Envoyer code de vérification pour paiement
 router.post('/payment-requests/:id/send-verification-code', authorize('manager', 'admin'), async (req, res) => {
   try {
@@ -1735,7 +1989,7 @@ router.post('/payment-requests/:id/send-verification-code', authorize('manager',
     const { id: requestId } = req.params;
 
     // Récupérer les infos de la demande et de l'employé
-    const [request] = await pool.query(
+    const [request] = await db.query(
       `SELECT r.*, u.nom_complet, u.email 
        FROM demandes_paiement_salaire r
        JOIN utilisateurs u ON r.id_employe = u.id
@@ -1751,7 +2005,7 @@ router.post('/payment-requests/:id/send-verification-code', authorize('manager',
     const code = Math.floor(100000 + Math.random() * 900000).toString();
 
     // Mettre à jour la demande avec le code
-    await pool.query(
+    await db.query(
       'UPDATE demandes_paiement_salaire SET code_verification = ?, date_envoi_code = NOW() WHERE id = ?',
       [code, requestId]
     );
@@ -1768,7 +2022,7 @@ router.post('/payment-requests/:id/send-verification-code', authorize('manager',
 
     if (result.success) {
       // Trace
-      await pool.query(
+      await db.query(
         'INSERT INTO traces (id_utilisateur, module, type_action, action_details) VALUES (?, ?, ?, ?)',
         [managerId, 'rh', 'envoi_code_verification', `Code envoyé à ${request[0].nom_complet} pour demande ID ${requestId}`]
       );
@@ -1814,22 +2068,22 @@ router.post('/generate-financial-report', authorize('manager', 'admin'), async (
     }
 
     // Récupérer les données
-    const deptResult = await pool.query('SELECT * FROM departements WHERE id = ?', [id_departement]);
+    const deptResult = await db.query('SELECT * FROM departements WHERE id = ?', [id_departement]);
     const dept = Array.isArray(deptResult) ? deptResult : [];
 
-    const budgetResult = await pool.query(
+    const budgetResult = await db.query(
       'SELECT * FROM budgets_departements WHERE id_departement = ? AND annee = YEAR(CURDATE())',
       [id_departement]
     );
     const budget = Array.isArray(budgetResult) ? budgetResult : [];
 
-    const depensesResult = await pool.query(
+    const depensesResult = await db.query(
       `SELECT * FROM depenses_departement WHERE id_departement = ? ${dateCondition} ORDER BY date_depense DESC`,
       [id_departement]
     );
     const depenses = Array.isArray(depensesResult) ? depensesResult : [];
 
-    const revenusResult = await pool.query(
+    const revenusResult = await db.query(
       `SELECT * FROM revenus_departement WHERE id_departement = ? ${dateCondition.replace(/date_depense/g, 'date_revenu')} ORDER BY date_revenu DESC`,
       [id_departement]
     );
@@ -2021,7 +2275,7 @@ router.get('/salaries-overview', authorize('manager', 'admin'), async (req, res)
     console.log('📊 Salaires aperçu - Dept:', id_departement, `${targetMonth}/${targetYear}`);
 
     // ✅ Statistiques globales
-    const [stats] = await pool.query(
+    const [stats] = await db.query(
       `SELECT 
         COUNT(DISTINCT s.id_utilisateur) as total_employes,
         COUNT(CASE WHEN s.statut_paiement = 'payé' THEN 1 END) as employes_payes,
@@ -2041,7 +2295,7 @@ router.get('/salaries-overview', authorize('manager', 'admin'), async (req, res)
     );
 
     // ✅ Répartition par type d'employé
-    const [repartition] = await pool.query(
+    const repartition = await db.query(
       `SELECT 
         u.type_employe,
         COUNT(*) as nombre,
@@ -2057,7 +2311,7 @@ router.get('/salaries-overview', authorize('manager', 'admin'), async (req, res)
     );
 
     // ✅ Demandes de paiement en attente
-    const [demandesEnAttente] = await pool.query(
+    const [demandesEnAttente] = await db.query(
       `SELECT COUNT(*) as total
        FROM demandes_paiement_salaire dps
        JOIN utilisateurs u ON dps.id_employe = u.id
@@ -2169,7 +2423,7 @@ router.get('/salaries-detailed', authorize('manager', 'admin'), async (req, res)
 
     query += ' ORDER BY u.nom_complet ASC';
 
-    const [salaries] = await pool.query(query, params);
+    const salaries = await db.query(query, params);
 
     res.json(salaries);
 
@@ -2188,7 +2442,7 @@ router.get('/salaries-not-paid', authorize('manager', 'admin'), async (req, res)
     const targetMonth = month || new Date().getMonth() + 1;
     const targetYear = year || new Date().getFullYear();
 
-    const [notPaid] = await pool.query(
+    const notPaid = await db.query(
       `SELECT 
         s.*,
         u.nom_complet as employee_name,
@@ -2230,7 +2484,7 @@ router.get('/salaries-paid', authorize('manager', 'admin'), async (req, res) => 
     const targetMonth = month || new Date().getMonth() + 1;
     const targetYear = year || new Date().getFullYear();
 
-    const [paid] = await pool.query(
+    const paid = await db.query(
       `SELECT 
         s.*,
         u.nom_complet as employee_name,
@@ -2275,7 +2529,7 @@ router.get('/salaries-with-reception-confirmation', authorize('manager', 'admin'
     const targetMonth = month || new Date().getMonth() + 1;
     const targetYear = year || new Date().getFullYear();
 
-    const [confirmed] = await pool.query(
+    const confirmed = await db.query(
       `SELECT 
         s.*,
         u.nom_complet as employee_name,
@@ -2313,7 +2567,7 @@ router.get('/salaries-without-confirmation', authorize('manager', 'admin'), asyn
     const targetMonth = month || new Date().getMonth() + 1;
     const targetYear = year || new Date().getFullYear();
 
-    const [notConfirmed] = await pool.query(
+    const notConfirmed = await db.query(
       `SELECT 
         s.*,
         u.nom_complet as employee_name,
@@ -2382,7 +2636,7 @@ router.get('/payment-requests', authorize('manager', 'admin'), async (req, res) 
 
     query += ' ORDER BY dps.date_demande DESC';
 
-    const [requests] = await pool.query(query, params);
+    const requests = await db.query(query, params);
 
     res.json(requests);
 
@@ -2394,7 +2648,7 @@ router.get('/payment-requests', authorize('manager', 'admin'), async (req, res) 
 
 // POST /api/manager/salaries/:id/pay - Payer un salaire
 router.post('/salaries/:id/pay', authorize('manager', 'admin'), async (req, res) => {
-  const connection = await pool.getConnection();
+  const connection = await db.pool.getConnection();
 
   try {
     const { id: managerId, id_departement } = req.user;
@@ -2501,7 +2755,7 @@ router.post('/salaries/:id/pay', authorize('manager', 'admin'), async (req, res)
 
 // POST /api/manager/salaries/:id/mark-unpaid-debt - Marquer un salaire comme dette impayée (Temps Partiel)
 router.post('/salaries/:id/mark-unpaid-debt', authorize('manager', 'admin'), async (req, res) => {
-  const connection = await pool.getConnection();
+  const connection = await db.pool.getConnection();
 
   try {
     const { id: managerId, id_departement } = req.user;
@@ -2607,7 +2861,7 @@ router.post('/salaries/:id/mark-unpaid-debt', authorize('manager', 'admin'), asy
 
 // POST /api/manager/salaries/pay-multiple - Payer plusieurs salaires
 router.post('/salaries/pay-multiple', authorize('manager', 'admin'), async (req, res) => {
-  const connection = await pool.getConnection();
+  const connection = await db.pool.getConnection();
 
   try {
     const { id: managerId, id_departement } = req.user;
@@ -2737,7 +2991,7 @@ router.post('/salaries/pay-multiple', authorize('manager', 'admin'), async (req,
 
 // POST /api/manager/payment-requests/:id/process - Traiter une demande de paiement
 router.post('/payment-requests/:id/process', authorize('manager', 'admin'), async (req, res) => {
-  const connection = await pool.getConnection();
+  const connection = await db.pool.getConnection();
 
   try {
     const { id: managerId, id_departement } = req.user;
@@ -2865,7 +3119,7 @@ router.post('/payment-requests/:id/process', authorize('manager', 'admin'), asyn
 
 // POST /api/manager/salaries/:id/send-reminder - Envoyer un rappel de confirmation
 router.post('/salaries/:id/send-reminder', authorize('manager', 'admin'), async (req, res) => {
-  const connection = await pool.getConnection();
+  const connection = await db.pool.getConnection();
 
   try {
     const { id: managerId, id_departement } = req.user;
@@ -2943,7 +3197,7 @@ router.get('/salary-statistics', authorize('manager', 'admin'), async (req, res)
     console.log('📊 Statistiques salaires - Dept:', id_departement, 'Année:', targetYear);
 
     // ✅ Évolution mensuelle
-    const [monthlyEvolution] = await pool.query(
+    const monthlyEvolution = await db.query(
       `SELECT 
         s.mois,
         COUNT(*) as nombre_employes,
@@ -2964,7 +3218,7 @@ router.get('/salary-statistics', authorize('manager', 'admin'), async (req, res)
     );
 
     // ✅ Comparaison par type d'employé
-    const [byType] = await pool.query(
+    const byType = await db.query(
       `SELECT 
         u.type_employe,
         COUNT(DISTINCT s.id_utilisateur) as nombre_employes,
@@ -2980,7 +3234,7 @@ router.get('/salary-statistics', authorize('manager', 'admin'), async (req, res)
     );
 
     // ✅ Taux de confirmation
-    const [confirmationRate] = await pool.query(
+    const [confirmationRate] = await db.query(
       `SELECT 
         COUNT(*) as total_salaires_payes,
         COUNT(CASE WHEN s.confirme_reception = 1 THEN 1 END) as total_confirmes,
@@ -3021,9 +3275,9 @@ router.post('/generate-salary-report', authorize('manager', 'admin'), async (req
     const targetYear = year || new Date().getFullYear();
 
     // Récupérer les données
-    const [dept] = await pool.query('SELECT * FROM departements WHERE id = ?', [id_departement]);
+    const [dept] = await db.query('SELECT * FROM departements WHERE id = ?', [id_departement]);
 
-    const [salaries] = await pool.query(
+    const salaries = await db.query(
       `SELECT 
         s.*,
         u.nom_complet,

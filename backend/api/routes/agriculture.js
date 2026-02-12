@@ -57,6 +57,11 @@ router.get('/parcelles', authenticate, authorize('admin', 'manager', 'agriculteu
 
         // Pagination
         const offset = (page - 1) * limit;
+
+        // Count query
+        const countSql = 'SELECT COUNT(*) as total FROM parcelles p WHERE' + sql.split('WHERE')[1].split('ORDER BY')[0];
+        const countParams = params.slice(); // Copy params before adding LIMIT/OFFSET
+
         sql += ' LIMIT ? OFFSET ?';
         params.push(parseInt(limit), offset);
 
@@ -443,6 +448,11 @@ router.get('/intrants', authenticate, authorize('admin', 'manager', 'agriculteur
 
         // Pagination
         const offset = (page - 1) * limit;
+
+        // Count query - need to handle GROUP BY correctly
+        const countSql = 'SELECT COUNT(DISTINCT ia.id) as total FROM intrants_agricoles ia LEFT JOIN stocks s ON s.type_article = "intrant" AND s.id_article = ia.id WHERE' + sql.split('WHERE')[1].split('GROUP BY')[0];
+        const countParams = params.slice(); // Copy params before adding LIMIT/OFFSET
+
         sql += ' LIMIT ? OFFSET ?';
         params.push(parseInt(limit), offset);
 

@@ -1432,7 +1432,32 @@ router.post('/salaires/:id/confirmer-reception',
       }
 
       if (code_verification !== codeAttendu) {
-        throw new Error('Code de vérification incorrect');
+        // Incrémenter les tentatives échouées
+        await connection.query(
+          `UPDATE codes_verification_salaire 
+           SET tentatives_echouees = tentatives_echouees + 1
+           WHERE id_salaire = ? AND id_utilisateur = ? AND code_verification = ?`,
+          [salaireId, userId, codeAttendu]
+        );
+
+        // Vérifier le nombre de tentatives
+        const [tentatives] = await connection.query(
+          `SELECT tentatives_echouees FROM codes_verification_salaire 
+           WHERE id_salaire = ? AND id_utilisateur = ? AND code_verification = ?`,
+          [salaireId, userId, codeAttendu]
+        );
+
+        if (tentatives && tentatives[0].tentatives_echouees >= 2) {
+          // Bloquer le compte de l'utilisateur
+          await connection.query(
+            "UPDATE utilisateurs SET statut = 'bloqué' WHERE id = ?",
+            [userId]
+          );
+          throw new Error('Votre compte a été bloqué après 2 tentatives infructueuses. Veuillez contacter l\'administrateur.');
+        }
+
+        const restantes = 2 - (tentatives[0].tentatives_echouees || 0);
+        throw new Error(`Code de vérification incorrect. Il vous reste ${restantes} tentative(s) avant blocage du compte.`);
       }
 
       await connection.query(
@@ -1604,9 +1629,9 @@ router.get("/carte", authenticate, authorize(["employe"]), async (req, res) => {
     // Vérification si l'employé existe
     if (!rows || rows.length === 0) {
       console.warn(`⚠️ Employé non trouvé pour userId: ${userId}`);
-      return res.status(404).json({ 
-        success: false, 
-        message: "Employé introuvable" 
+      return res.status(404).json({
+        success: false,
+        message: "Employé introuvable"
       });
     }
 
@@ -1620,11 +1645,11 @@ router.get("/carte", authenticate, authorize(["employe"]), async (req, res) => {
     // Si le QR code n'existe pas ou n'est pas une Data URL valide
     if (!qrCodeDataUrl || !qrCodeDataUrl.startsWith('data:image')) {
       console.log('🔄 Génération du QR Code...');
-      
+
       // Données à encoder dans le QR code
-      const payload = JSON.stringify({ 
-        id: employe.id, 
-        matricule: employe.matricule, 
+      const payload = JSON.stringify({
+        id: employe.id,
+        matricule: employe.matricule,
         nom: employe.nom_complet,
         type: employe.type_employe || 'INSS',
         timestamp: Date.now()
@@ -1650,7 +1675,7 @@ router.get("/carte", authenticate, authorize(["employe"]), async (req, res) => {
           "UPDATE employes SET qr_code = ? WHERE id = ?",
           [qrCodeDataUrl, userId]
         );
-        
+
         console.log('💾 QR Code sauvegardé dans la base de données');
       } catch (qrError) {
         console.error('❌ Erreur génération QR Code:', qrError);
@@ -1695,9 +1720,9 @@ router.get("/carte", authenticate, authorize(["employe"]), async (req, res) => {
   } catch (error) {
     console.error("❌ Erreur génération carte:", error);
     console.error("Stack:", error.stack);
-    
-    return res.status(500).json({ 
-      success: false, 
+
+    return res.status(500).json({
+      success: false,
       message: "Erreur serveur lors de la génération de la carte",
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });

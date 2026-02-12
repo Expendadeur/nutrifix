@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../../database/db');
 const { authenticate, authorize } = require('../middleware/auth');
+const emailService = require('../emailService');
 const multer = require('multer');
 const path = require('path');
 
@@ -1813,6 +1814,39 @@ router.post('/salary/confirm-reception', authenticate, authorize(['chauffeur']),
             `, [salaryId, userId, code_verification]);
 
             if (codeCheck.length === 0) {
+                // Incrémenter les tentatives échouées (si le code est faux, on peut essayer de le trouver dans la table sans le filtre code_verification pour compter)
+                // Ici, on va simplement chercher le dernier code généré pour cet utilisateur et ce salaire
+                const [lastCode] = await connection.query(`
+                    SELECT id, tentatives_echouees FROM codes_verification_salaire
+                    WHERE id_salaire = ? AND id_utilisateur = ?
+                    ORDER BY date_creation DESC LIMIT 1
+                `, [salaryId, userId]);
+
+                if (lastCode.length > 0) {
+                    const newTentatives = lastCode[0].tentatives_echouees + 1;
+                    await connection.query(`
+                        UPDATE codes_verification_salaire 
+                        SET tentatives_echouees = ?
+                        WHERE id = ?
+                    `, [newTentatives, lastCode[0].id]);
+
+                    if (newTentatives >= 2) {
+                        await connection.query("UPDATE utilisateurs SET statut = 'bloqué' WHERE id = ?", [userId]);
+                        await connection.commit();
+                        return res.status(403).json({
+                            success: false,
+                            message: 'Votre compte a été bloqué après 2 tentatives infructueuses. Veuillez contacter l\'administrateur.'
+                        });
+                    }
+
+                    const restantes = 2 - newTentatives;
+                    await connection.commit();
+                    return res.status(400).json({
+                        success: false,
+                        message: `Code de vérification incorrect. Il vous reste ${restantes} tentative(s) avant blocage du compte.`
+                    });
+                }
+
                 await connection.rollback();
                 return res.status(400).json({
                     success: false,
@@ -1941,6 +1975,74 @@ router.post('/salary/confirm-reception', authenticate, authorize(['chauffeur']),
         });
     } finally {
         connection.release();
+    }
+});
+
+// Demander un code de vérification pour le salaire (Chauffeur)
+router.post('/salary/request-code', authenticate, authorize(['chauffeur']), async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const currentMonth = new Date().getMonth() + 1;
+        const currentYear = new Date().getFullYear();
+
+        // Trouver le salaire payé du mois en cours
+        const [salary] = await db.query(`
+            SELECT s.id, u.email, u.nom_complet
+            FROM salaires s
+            JOIN utilisateurs u ON s.id_utilisateur = u.id
+            WHERE s.id_utilisateur = ? 
+            AND s.mois = ? 
+            AND s.annee = ?
+            AND s.statut_paiement = 'payé'
+            LIMIT 1
+        `, [userId, currentMonth, currentYear]);
+
+        if (salary.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Aucun salaire payé trouvé pour ce mois.'
+            });
+        }
+
+        const salaireData = salary[0];
+        const salaryId = salaireData.id;
+
+        // Générer code
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        const dateExpiration = new Date();
+        dateExpiration.setHours(dateExpiration.getHours() + 24);
+
+        // Sauvegarder en base
+        await db.query(`
+            INSERT INTO codes_verification_salaire (
+                id_salaire, id_utilisateur, code_verification, date_expiration
+            ) VALUES (?, ?, ?, ?)
+        `, [salaryId, userId, code, dateExpiration]);
+
+        // Envoyer email
+        if (salaireData.email) {
+            try {
+                await emailService.envoyerCodeVerification(
+                    salaireData.email,
+                    code,
+                    salaireData.nom_complet,
+                    currentMonth,
+                    currentYear
+                );
+            } catch (emailError) {
+                console.error('Erreur envoi email OTP Chauffeur:', emailError);
+            }
+        }
+
+        res.json({
+            success: true,
+            message: 'Un code de vérification a été envoyé à votre email.',
+            code: process.env.NODE_ENV === 'development' ? code : undefined
+        });
+
+    } catch (error) {
+        console.error('Request salary code error:', error);
+        res.status(500).json({ success: false, message: 'Erreur serveur' });
     }
 });
 // ============================================
