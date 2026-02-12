@@ -2499,6 +2499,112 @@ router.post('/salaries/:id/pay', authorize('manager', 'admin'), async (req, res)
   }
 });
 
+// POST /api/manager/salaries/:id/mark-unpaid-debt - Marquer un salaire comme dette impayée (Temps Partiel)
+router.post('/salaries/:id/mark-unpaid-debt', authorize('manager', 'admin'), async (req, res) => {
+  const connection = await pool.getConnection();
+
+  try {
+    const { id: managerId, id_departement } = req.user;
+    const { id: salaryId } = req.params;
+    const { notes } = req.body;
+
+    await connection.beginTransaction();
+
+    // 1. Récupérer les infos du salaire et de l'employé
+    const [salary] = await connection.query(
+      `SELECT s.*, u.nom_complet, u.email, u.telephone, u.type_employe
+       FROM salaires s
+       JOIN utilisateurs u ON s.id_utilisateur = u.id
+       WHERE s.id = ? AND u.id_departement = ?`,
+      [salaryId, id_departement]
+    );
+
+    if (salary.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'Salaire non trouvé' });
+    }
+
+    if (salary[0].statut_paiement === 'payé') {
+      await connection.rollback();
+      return res.status(400).json({ error: 'Ce salaire a déjà été payé' });
+    }
+
+    // 2. Mettre à jour le salaire avec un marqueur de dette
+    const unpaidNote = `[DETTE] Impayé lors de l'encaissement le ${new Date().toLocaleDateString()}. ${notes || ''}`;
+
+    await connection.query(
+      `UPDATE salaires 
+       SET statut_paiement = 'calculé',
+           notes = ?,
+           valide_par = ?,
+           date_validation = NOW()
+       WHERE id = ?`,
+      [unpaidNote, managerId, salaryId]
+    );
+
+    // 3. Notification système pour l'employé
+    const notificationMessage = `Votre séance du ${new Date(salary[0].date_calcul).toLocaleDateString()} (${salary[0].salaire_net} BIF) est validée mais le paiement est différé. Ce montant est ajouté à votre solde "À récupérer".`;
+
+    await connection.query(
+      `INSERT INTO notifications 
+       (id_utilisateur, titre, message, type_notification, priorite, date_creation)
+       VALUES (?, ?, ?, 'paiement', 'haute', NOW())`,
+      [
+        salary[0].id_utilisateur,
+        'Paiement différé (À récupérer)',
+        notificationMessage
+      ]
+    );
+
+    // 4. Envoi Email via EmailService
+    const EmailService = require('../emailService');
+    const emailService = new EmailService();
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@nutrifix.bi';
+
+    try {
+      await emailService.envoyerNotificationImpayeJournalier(
+        salary[0].email,
+        adminEmail,
+        salary[0].nom_complet,
+        salary[0].salaire_net,
+        salary[0].date_calcul
+      );
+    } catch (emailErr) {
+      console.error('❌ Erreur envoi email impayé:', emailErr);
+    }
+
+    // 5. Trace d'audit
+    await connection.query(
+      `INSERT INTO traces (id_utilisateur, module, type_action, action_details, table_affectee, id_enregistrement)
+       VALUES (?, 'rh', 'marquage_dette_salaire', ?, 'salaires', ?)`,
+      [
+        managerId,
+        `Marquage comme dette : salaire ${salary[0].nom_complet} du ${new Date(salary[0].date_calcul).toLocaleDateString()} - ${salary[0].salaire_net} BIF`,
+        salaryId
+      ]
+    );
+
+    await connection.commit();
+
+    res.json({
+      success: true,
+      message: 'Salaire marqué comme dette avec succès',
+      data: {
+        id: salaryId,
+        montant: salary[0].salaire_net,
+        employe: salary[0].nom_complet
+      }
+    });
+
+  } catch (error) {
+    await connection.rollback();
+    console.error('Error marking salary as debt:', error);
+    res.status(500).json({ error: 'Erreur serveur', details: error.message });
+  } finally {
+    connection.release();
+  }
+});
+
 // POST /api/manager/salaries/pay-multiple - Payer plusieurs salaires
 router.post('/salaries/pay-multiple', authorize('manager', 'admin'), async (req, res) => {
   const connection = await pool.getConnection();

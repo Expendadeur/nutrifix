@@ -107,6 +107,82 @@ class EmailService {
   }
 
   /**
+   * Envoyer une notification d'impayé journalier (Temps Partiel)
+   */
+  async envoyerNotificationImpayeJournalier(destinataire, adminEmail, nomEmploye, montant, dateTravail) {
+    try {
+      const mailOptions = {
+        from: {
+          name: 'NUTRIFIX - Finance/RH',
+          address: process.env.EMAIL_USER
+        },
+        to: destinataire,
+        cc: adminEmail,
+        subject: `Notification de paiement différé - Séance du ${this.formatDate(dateTravail)}`,
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <style>
+              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              .header { background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+              .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
+              .info-box { background: white; border-left: 4px solid #F59E0B; padding: 15px; margin: 20px 0; border-radius: 4px; }
+              .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #E5E7EB; color: #6B7280; font-size: 12px; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>Paiement en attente</h1>
+                <p>Notification importante concernant votre encaissement</p>
+              </div>
+              
+              <div class="content">
+                <p>Bonjour <strong>${nomEmploye}</strong>,</p>
+                
+                <p>Noux vous informons que votre séance de travail du ${this.formatDate(dateTravail)} a été enregistrée avec succès, mais le paiement n'a pas pu être effectué lors du pointage de sortie.</p>
+                
+                <div class="info-box">
+                  <p><strong>Date :</strong> ${this.formatDate(dateTravail)}</p>
+                  <p><strong>Montant à récupérer :</strong> ${montant} BIF</p>
+                  <p><strong>Statut :</strong> Dette d'encaissement (Validé)</p>
+                </div>
+                
+                <p>Ce montant a été ajouté à votre solde "À récupérer" dans l'application NUTRIFIX. Vous pourrez le percevoir lors de votre prochaine séance ou en contactant le bureau administratif.</p>
+                
+                <p>Une copie de cette notification a été envoyée à l'administration pour le suivi comptable.</p>
+                
+                <div style="text-align: center; margin-top: 20px;">
+                  <p style="color: #6B7280; font-size: 14px;">
+                    Pour toute question, contactez le bureau RH au :<br>
+                    📧 rh@nutrifix.bi | 📞 +257 22 XX XX XX
+                  </p>
+                </div>
+              </div>
+              
+              <div class="footer">
+                <p><strong>NUTRIFIX</strong> - Système de Gestion des Ressources Humaines</p>
+                <p>&copy; ${new Date().getFullYear()} NUTRIFIX. Tous droits réservés.</p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `
+      };
+
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log('Email d\'impayé envoyé:', info.messageId);
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      console.error('Erreur envoi email impayé:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Envoyer une notification de demande de congé aux managers
    */
   async envoyerNotificationConge(destinataire, nomEmploye, typeConge, dateDebut, dateFin, jours) {

@@ -340,12 +340,12 @@ const DashboardTempsPartiel = ({ navigation }) => {
 
         <View style={styles.statCard}>
           <View style={[styles.statIcon, { backgroundColor: '#F39C12' }]}>
-            <MaterialIcons name="schedule" size={24} color="#FFF" />
+            <MaterialIcons name="money-off" size={24} color="#FFF" />
           </View>
           <Text style={styles.statValue}>{formatCurrency(dashboardData.montant_en_attente)}</Text>
-          <Text style={styles.statLabel}>En attente</Text>
+          <Text style={styles.statLabel}>À récupérer</Text>
           <Text style={styles.statSubtext}>
-            {dashboardData.paiements_en_attente || 0} paiement{dashboardData.paiements_en_attente > 1 ? 's' : ''}
+            {dashboardData.paiements_en_attente || 0} jour{dashboardData.paiements_en_attente > 1 ? 's' : ''} dû{dashboardData.paiements_en_attente > 1 ? 's' : ''}
           </Text>
         </View>
 
@@ -946,6 +946,24 @@ const HeuresPointageScreen = () => {
                 <Text style={styles.presenceDuration}>
                   {(presence.duree_heures || 0).toFixed(1)}h
                 </Text>
+                <View style={styles.paymentStatusRow}>
+                  <MaterialIcons
+                    name={presence.statut_paiement === 'payé' ? 'check-circle' : 'pending-actions'}
+                    size={14}
+                    color={presence.statut_paiement === 'payé' ? '#2ECC71' : '#F39C12'}
+                  />
+                  <Text style={[
+                    styles.paymentStatusText,
+                    { color: presence.statut_paiement === 'payé' ? '#2ECC71' : '#F39C12' }
+                  ]}>
+                    {presence.statut_paiement === 'payé' ? 'Payé' : 'À récupérer'}
+                  </Text>
+                </View>
+                {presence.salaire_net > 0 && (
+                  <Text style={styles.presenceAmount}>
+                    {formatCurrency(presence.salaire_net)}
+                  </Text>
+                )}
                 {presence.retard && (
                   <Chip
                     style={styles.retardChip}
@@ -1020,14 +1038,34 @@ const HeuresPointageScreen = () => {
 
               {selectedPresence.retard && (
                 <View style={styles.modalRow}>
-                  <Text style={styles.modalLabel}>Statut</Text>
+                  <Text style={styles.modalLabel}>Retard</Text>
                   <Chip
                     icon="warning"
                     style={styles.modalRetardChip}
                     textStyle={{ color: '#FFF' }}
                   >
-                    Retard
+                    Retardé
                   </Chip>
+                </View>
+              )}
+
+              <View style={styles.modalRow}>
+                <Text style={styles.modalLabel}>Statut de paiement</Text>
+                <Chip
+                  icon={selectedPresence.statut_paiement === 'payé' ? 'check-circle' : 'alert-circle'}
+                  style={{ backgroundColor: selectedPresence.statut_paiement === 'payé' ? '#2ECC71' : '#F39C12' }}
+                  textStyle={{ color: '#FFF' }}
+                >
+                  {selectedPresence.statut_paiement === 'payé' ? 'Récupéré' : 'À récupérer'}
+                </Chip>
+              </View>
+
+              {selectedPresence.salaire_net > 0 && (
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>Montant</Text>
+                  <Text style={[styles.modalValueHighlight, { color: selectedPresence.statut_paiement === 'payé' ? '#27AE60' : '#F39C12' }]}>
+                    {formatCurrency(selectedPresence.salaire_net)}
+                  </Text>
                 </View>
               )}
 
@@ -1068,7 +1106,7 @@ const HeuresPointageScreen = () => {
             </Button>
           </View>
         </View>
-      </Modal>
+      </Modal >
     );
   };
 
@@ -2113,6 +2151,22 @@ const styles = StyleSheet.create({
   retardChipText: {
     color: '#FFF',
     fontSize: 10,
+  },
+  paymentStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  paymentStatusText: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  presenceAmount: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#2C3E50',
+    marginTop: 2,
   },
 
   // Modal styles

@@ -1414,10 +1414,21 @@ const EquipeRHScreen = () => {
               mode="contained"
               onPress={() => handlePaySingleSalary(item.id)}
               icon="check-circle"
-              style={styles.paySalaryButton}
+              style={[styles.paySalaryButton, { flex: 1, marginRight: 8 }]}
               compact={isMobile}
             >
               {isMobile ? 'Payer' : 'Marquer comme payé'}
+            </Button>
+
+            <Button
+              mode="outlined"
+              onPress={() => handleMarkAsUnpaidDebt(item.id)}
+              icon="alert-circle-outline"
+              style={[styles.paySalaryButton, { flex: 1, borderColor: '#F39C12' }]}
+              textColor="#F39C12"
+              compact={isMobile}
+            >
+              Dette
             </Button>
           </View>
         )}
@@ -1480,6 +1491,35 @@ const EquipeRHScreen = () => {
               loadSalaries();
             } catch (error) {
               Alert.alert('Erreur', error.response?.data?.error || 'Impossible de payer le salaire');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // NOUVELLE FONCTIONNALITÉ : Marquer comme dette impayée
+  const handleMarkAsUnpaidDebt = async (salaryId) => {
+    Alert.alert(
+      'Confirmer la dette',
+      'Marquer ce jour comme "Impayé lors de l\'encaissement" ? Cela notifiera l\'employé et l\'admin.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Confirmer',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await apiClient.post(`/manager/salaries/${salaryId}/mark-unpaid-debt`, {
+                notes: 'Impayé à la sortie'
+              });
+              Alert.alert('Succès', 'Marqué comme dette et notifications envoyées');
+              loadSalaries();
+            } catch (error) {
+              Alert.alert('Erreur', error.response?.data?.error || 'Impossible de marquer comme dette');
+            } finally {
+              setLoading(true); // Rechargement
+              loadSalaries();
             }
           }
         }
