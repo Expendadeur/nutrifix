@@ -5030,62 +5030,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  // ============================================
-  // RESPONSIVE BREAKPOINTS
-  // ============================================
-
   // Mobile (< 768px) - Styles par défaut ci-dessus
-
-  // Tablet (768px - 1024px)
-  '@media (min-width: 768px) and (max-width: 1024px)': {
-    container: {
-      backgroundColor: '#F8F9FA',
-    },
-    itemCard: {
-      width: '48%',
-      marginHorizontal: 6,
-    },
-    statsContainer: {
-      gap: 12,
-    },
-    modalContainer: {
-      marginHorizontal: '15%',
-    },
-  },
-
-  // Desktop (> 1024px)
-  '@media (min-width: 1025px)': {
-    container: {
-      backgroundColor: '#F1F3F5',
-    },
-    itemCard: {
-      width: '48%',
-      maxWidth: 500,
-      marginHorizontal: 8,
-    },
-    statsContainer: {
-      gap: 16,
-      paddingHorizontal: 32,
-    },
-    modalContainer: {
-      marginHorizontal: '30%',
-      maxWidth: 700,
-    },
-    searchBar: {
-      maxWidth: 600,
-    },
-  },
-
-  // Large Desktop (> 1600px)
-  '@media (min-width: 1601px)': {
-    itemCard: {
-      width: '31%',
-      maxWidth: 450,
-    },
-    modalContainer: {
-      maxWidth: 800,
-    },
-  },
   listItemCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,

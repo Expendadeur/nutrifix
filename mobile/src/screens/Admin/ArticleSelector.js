@@ -277,15 +277,20 @@ const ArticleSelector = ({
     const isAvailable = article.statut === 'disponible';
     const hasStock = article.quantite_disponible === null || article.quantite_disponible > 0;
 
+    // For purchases (achat), allow selection regardless of status or stock
+    const isDisabled = typeCommande === 'achat'
+      ? false
+      : (!isAvailable || !hasStock);
+
     return (
       <TouchableOpacity
         key={`${article.source}-${article.id}`}
         style={[
           styles.articleCard,
-          !isAvailable && styles.articleCardDisabled
+          !isAvailable && typeCommande === 'vente' && styles.articleCardDisabled
         ]}
         onPress={() => handleSelectArticle(article)}
-        disabled={!isAvailable || !hasStock}
+        disabled={isDisabled}
       >
         <View style={styles.articleCardHeader}>
           <View style={{ flex: 1 }}>
@@ -536,6 +541,16 @@ const ArticleSelector = ({
                   <View style={styles.emptyContainer}>
                     <MaterialIcons name="inbox" size={60} color="#BDC3C7" />
                     <Text style={styles.emptyText}>Aucun article disponible</Text>
+                    {typeCommande === 'achat' && (
+                      <Button
+                        mode="contained"
+                        onPress={() => handleSelectArticle({ source: 'autre', type_article: selectedCategory !== 'tous' ? selectedCategory : 'autre', designation: searchQuery })}
+                        style={{ marginTop: 20 }}
+                        buttonColor="#2E86C1"
+                      >
+                        Ajouter un nouvel article
+                      </Button>
+                    )}
                   </View>
                 )}
               </ScrollView>
