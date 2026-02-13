@@ -39,7 +39,7 @@ import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 
-const API_URL = 'http://localhost:5000/api';
+const API_URL = 'https://nutrifix-1-twdf.onrender.com/api';
 
 const ProfilScreen = ({ navigation, route, onLogout }) => {
   const windowDimensions = useWindowDimensions();

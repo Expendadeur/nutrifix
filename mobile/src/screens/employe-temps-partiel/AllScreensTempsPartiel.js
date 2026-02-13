@@ -1146,6 +1146,13 @@ const PaiementsScreen = () => {
   const [selectedStatut, setSelectedStatut] = useState('tous');
   const [statistics, setStatistics] = useState(null);
 
+  // États pour la confirmation OTP
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [selectedPaiement, setSelectedPaiement] = useState(null);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [tentativesRestantes, setTentativesRestantes] = useState(2);
+
   useEffect(() => {
     loadPaiements();
   }, [selectedYear, selectedStatut]);
@@ -1173,6 +1180,64 @@ const PaiementsScreen = () => {
   const onRefresh = () => {
     setRefreshing(true);
     loadPaiements();
+  };
+
+  const handleRequestCode = async (paiement) => {
+    try {
+      setOtpLoading(true);
+      setSelectedPaiement(paiement);
+      await tempsPartielService.requestCode(paiement.id);
+      setShowOtpModal(true);
+      Alert.alert('Succès', 'Un code de vérification a été envoyé à votre adresse email.');
+    } catch (error) {
+      Alert.alert('Erreur', error.message || 'Impossible d\'envoyer le code');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    if (otpCode.length !== 6) {
+      Alert.alert('Erreur', 'Le code doit contenir 6 chiffres');
+      return;
+    }
+
+    try {
+      setOtpLoading(true);
+      const data = {
+        code_verification: otpCode,
+        mois: new Date(selectedPaiement.periode_debut).getMonth() + 1,
+        annee: new Date(selectedPaiement.periode_debut).getFullYear()
+      };
+
+      await tempsPartielService.confirmReception(selectedPaiement.id, data);
+
+      setShowOtpModal(false);
+      setOtpCode('');
+      Alert.alert('Félicitations', 'Votre réception de salaire a été confirmée avec succès.');
+      loadPaiements();
+    } catch (error) {
+      if (error.message.includes('bloqué')) {
+        Alert.alert('Compte Bloqué', error.message, [
+          {
+            text: 'OK', onPress: () => {
+              // Ici il faudrait idéalement appeler une fonction de déconnexion globale
+              // Pour l'instant on ferme juste le modal
+              setShowOtpModal(false);
+            }
+          }
+        ]);
+      } else {
+        Alert.alert('Erreur', error.message);
+        // Si le message d'erreur contient les tentatives restantes, on peut essayer de les extraire
+        const match = error.message.match(/(\d+) tentative/);
+        if (match) {
+          setTentativesRestantes(parseInt(match[1]));
+        }
+      }
+    } finally {
+      setOtpLoading(false);
+    }
   };
 
   const formatCurrency = (amount) => {
@@ -1364,11 +1429,29 @@ const PaiementsScreen = () => {
 
           <View style={styles.paiementFooter}>
             {isPaye ? (
-              <View style={styles.paymentInfo}>
-                <MaterialIcons name="check-circle" size={18} color="#2ECC71" />
-                <Text style={styles.paymentDate}>
-                  Payé le {formatDate(paiement.date_paiement)}
-                </Text>
+              <View style={styles.paymentInfoContainer}>
+                <View style={styles.paymentInfo}>
+                  <MaterialIcons name="check-circle" size={18} color="#2ECC71" />
+                  <Text style={styles.paymentDate}>
+                    Payé le {formatDate(paiement.date_paiement)}
+                  </Text>
+                </View>
+                {!paiement.confirme_reception && (
+                  <Button
+                    mode="contained"
+                    onPress={() => handleRequestCode(paiement)}
+                    style={styles.confirmButton}
+                    labelStyle={styles.confirmButtonLabel}
+                  >
+                    Confirmer réception
+                  </Button>
+                )}
+                {paiement.confirme_reception && (
+                  <View style={styles.confirmedBadge}>
+                    <MaterialIcons name="verified" size={14} color="#FFF" />
+                    <Text style={styles.confirmedBadgeText}>Confirmé</Text>
+                  </View>
+                )}
               </View>
             ) : (
               <View style={styles.waitingInfo}>
@@ -1391,6 +1474,76 @@ const PaiementsScreen = () => {
     );
   };
 
+  const renderOtpModal = () => (
+    <Modal
+      visible={showOtpModal}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => !otpLoading && setShowOtpModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.otpModalContainer}>
+          <View style={styles.otpHeader}>
+            <MaterialIcons name="security" size={40} color="#9B59B6" />
+            <Text style={styles.otpTitle}>Confirmation Sécurisée</Text>
+            <Text style={styles.otpSubtitle}>
+              Veuillez saisir le code de 6 chiffres envoyé à votre adresse email pour confirmer la réception de votre salaire.
+            </Text>
+          </View>
+
+          <View style={styles.otpInputContainer}>
+            <TextInput
+              label="Code OTP"
+              value={otpCode}
+              onChangeText={setOtpCode}
+              keyboardType="number-pad"
+              maxLength={6}
+              style={styles.otpInput}
+              disabled={otpLoading}
+              mode="outlined"
+              outlineColor="#9B59B6"
+              activeOutlineColor="#8E44AD"
+            />
+            {tentativesRestantes < 2 && (
+              <Text style={styles.tentativesWarning}>
+                Attention : Plus que {tentativesRestantes} tentative(s) avant blocage du compte.
+              </Text>
+            )}
+          </View>
+
+          <View style={styles.otpActions}>
+            <Button
+              mode="outlined"
+              onPress={() => setShowOtpModal(false)}
+              disabled={otpLoading}
+              style={styles.otpCancelButton}
+              color="#E74C3C"
+            >
+              Annuler
+            </Button>
+            <Button
+              mode="contained"
+              onPress={handleVerifyCode}
+              loading={otpLoading}
+              disabled={otpLoading || otpCode.length !== 6}
+              style={styles.otpConfirmButton}
+            >
+              Vérifier
+            </Button>
+          </View>
+
+          <TouchableOpacity
+            onPress={() => handleRequestCode(selectedPaiement)}
+            disabled={otpLoading}
+            style={styles.resendContainer}
+          >
+            <Text style={styles.resendText}>Vous n'avez pas reçu le code ? <Text style={styles.resendLink}>Renvoyer</Text></Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
   if (loading && !refreshing) {
     return (
       <View style={styles.loadingContainer}>
@@ -1410,22 +1563,17 @@ const PaiementsScreen = () => {
       {renderYearSelector()}
       {renderFilters()}
       {renderStatistics()}
-
-      <View style={styles.paiementsContainer}>
+      <View style={styles.paiementsList}>
         {paiements.length > 0 ? (
           paiements.map((paiement, index) => renderPaiementCard(paiement, index))
         ) : (
-          <Card style={styles.emptyCard}>
-            <Card.Content style={styles.emptyContent}>
-              <MaterialIcons name="money-off" size={64} color="#BDC3C7" />
-              <Text style={styles.emptyTitle}>Aucun paiement</Text>
-              <Text style={styles.emptyText}>
-                Aucun paiement trouvé pour les critères sélectionnés
-              </Text>
-            </Card.Content>
-          </Card>
+          <View style={styles.emptyContainer}>
+            <MaterialIcons name="money-off" size={60} color="#BDC3C7" />
+            <Text style={styles.emptyText}>Aucun paiement trouvé</Text>
+          </View>
         )}
       </View>
+      {renderOtpModal()}
     </ScrollView>
   );
 };
@@ -2167,6 +2315,106 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#2C3E50',
     marginTop: 2,
+  },
+  paymentInfoContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  confirmButton: {
+    backgroundColor: '#9B59B6',
+    borderRadius: 8,
+    height: 38,
+    justifyContent: 'center',
+  },
+  confirmButtonLabel: {
+    fontSize: 11,
+    color: '#FFF',
+  },
+  confirmedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2ECC71',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  confirmedBadgeText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: 'bold',
+    marginLeft: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  otpModalContainer: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+  },
+  otpHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  otpTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2C3E50',
+    marginTop: 12,
+  },
+  otpSubtitle: {
+    fontSize: 14,
+    color: '#7F8C8D',
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 20,
+  },
+  otpInputContainer: {
+    marginBottom: 24,
+  },
+  otpInput: {
+    backgroundColor: '#F8F9F9',
+  },
+  tentativesWarning: {
+    color: '#E74C3C',
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: 'center',
+    fontWeight: 'bold',
+  },
+  otpActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  otpCancelButton: {
+    flex: 1,
+    borderColor: '#E74C3C',
+  },
+  otpConfirmButton: {
+    flex: 1,
+    backgroundColor: '#9B59B6',
+  },
+  resendContainer: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  resendText: {
+    fontSize: 13,
+    color: '#7F8C8D',
+  },
+  resendLink: {
+    color: '#9B59B6',
+    fontWeight: 'bold',
+    textDecorationLine: 'underline',
   },
 
   // Modal styles

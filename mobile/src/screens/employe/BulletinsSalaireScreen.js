@@ -20,8 +20,9 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { TextInput, Button, Portal, Chip } from 'react-native-paper';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_URL = process.env.REACT_APP_API_URL || 'https://nutrifix-1-twdf.onrender.com/api';
 
 const BulletinsSalaireScreen = ({ navigation }) => {
   const windowDimensions = useWindowDimensions();
@@ -32,6 +33,13 @@ const BulletinsSalaireScreen = ({ navigation }) => {
   const [selectedBulletin, setSelectedBulletin] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [statistics, setStatistics] = useState(null);
+
+  // États OTP
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [confirmingOtp, setConfirmingOtp] = useState(false);
+  const [requestingCode, setRequestingCode] = useState(false);
+  const [currentSalaryId, setCurrentSalaryId] = useState(null);
 
   // Responsive
   const isSmallDevice = windowDimensions.width < 768;
@@ -62,7 +70,7 @@ const BulletinsSalaireScreen = ({ navigation }) => {
     try {
       setLoading(true);
       const headers = await getAuthHeaders();
-      
+
       const response = await fetch(
         `${API_URL}/employe-inss/salaires?annee=${selectedYear}`,
         { headers }
@@ -95,7 +103,7 @@ const BulletinsSalaireScreen = ({ navigation }) => {
   const viewBulletinDetail = async (bulletin) => {
     try {
       const headers = await getAuthHeaders();
-      
+
       const response = await fetch(
         `${API_URL}/employe-inss/salaires/${bulletin.id}`,
         { headers }
@@ -111,6 +119,74 @@ const BulletinsSalaireScreen = ({ navigation }) => {
     } catch (error) {
       console.error('Erreur chargement détails:', error);
       Alert.alert('Erreur', 'Impossible de charger les détails du bulletin');
+    }
+  };
+
+  const handleRequestCode = async (salaireId) => {
+    try {
+      setRequestingCode(true);
+      setCurrentSalaryId(salaireId);
+      const headers = await getAuthHeaders();
+
+      const response = await fetch(
+        `${API_URL}/employe-inss/salaires/${salaireId}/demander-code`,
+        { method: 'POST', headers }
+      );
+
+      const result = await response.json();
+      if (response.ok && result.success) {
+        setShowOtpModal(true);
+        Alert.alert('Succès', 'Un code de vérification a été envoyé à votre email.');
+      } else {
+        Alert.alert('Erreur', result.message || 'Impossible d\'envoyer le code');
+      }
+    } catch (error) {
+      console.error('Erreur demande code:', error);
+      Alert.alert('Erreur', 'Une erreur est survenue');
+    } finally {
+      setRequestingCode(false);
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    if (!otpCode || otpCode.length < 4) {
+      Alert.alert('Erreur', 'Veuillez entrer un code valide');
+      return;
+    }
+
+    try {
+      setConfirmingOtp(true);
+      const headers = await getAuthHeaders();
+
+      const response = await fetch(
+        `${API_URL}/employe-inss/salaires/${currentSalaryId}/confirmer-reception`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ code_verification: otpCode })
+        }
+      );
+
+      const result = await response.json();
+      if (response.ok && result.success) {
+        setShowOtpModal(false);
+        setOtpCode('');
+        Alert.alert('Succès', 'Réception confirmée avec succès');
+        loadBulletins();
+      } else {
+        if (result.message && result.message.includes('bloqué')) {
+          Alert.alert('Compte Bloqué', result.message, [
+            { text: 'OK', onPress: () => navigation.replace('Login') }
+          ]);
+        } else {
+          Alert.alert('Erreur', result.message || 'Code incorrect');
+        }
+      }
+    } catch (error) {
+      console.error('Erreur vérification code:', error);
+      Alert.alert('Erreur', 'Une erreur est survenue');
+    } finally {
+      setConfirmingOtp(false);
     }
   };
 
@@ -138,7 +214,7 @@ const BulletinsSalaireScreen = ({ navigation }) => {
   };
 
   const getStatusColor = (statut) => {
-    switch(statut) {
+    switch (statut) {
       case 'paye': return '#10B981';
       case 'en_attente': return '#F59E0B';
       case 'en_cours': return '#3B82F6';
@@ -147,7 +223,7 @@ const BulletinsSalaireScreen = ({ navigation }) => {
   };
 
   const getStatusLabel = (statut) => {
-    switch(statut) {
+    switch (statut) {
       case 'paye': return 'Payé';
       case 'en_attente': return 'En attente';
       case 'en_cours': return 'En cours';
@@ -342,6 +418,26 @@ const BulletinsSalaireScreen = ({ navigation }) => {
                 </Text>
               </TouchableOpacity>
             </View>
+
+            {isPaid && !bulletin.confirme_reception && (
+              <Button
+                mode="contained"
+                onPress={() => handleRequestCode(bulletin.id)}
+                loading={requestingCode && currentSalaryId === bulletin.id}
+                disabled={requestingCode}
+                style={styles.confirmButton}
+                labelStyle={styles.confirmButtonLabel}
+              >
+                Confirmer réception
+              </Button>
+            )}
+
+            {bulletin.confirme_reception && (
+              <View style={styles.confirmedBadge}>
+                <MaterialIcons name="verified" size={16} color="#10B981" />
+                <Text style={styles.confirmedText}>Réception confirmée</Text>
+              </View>
+            )}
           </View>
         </Card>
       </TouchableOpacity>
@@ -426,7 +522,7 @@ const BulletinsSalaireScreen = ({ navigation }) => {
               {/* Rémunération brute */}
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Rémunération brute</Text>
-                
+
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Salaire de base</Text>
                   <Text style={styles.detailValue}>
@@ -591,8 +687,8 @@ const BulletinsSalaireScreen = ({ navigation }) => {
     <View style={styles.container}>
       <ScrollView
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
+          <RefreshControl
+            refreshing={refreshing}
             onRefresh={onRefresh}
             colors={['#2563EB']}
             tintColor="#2563EB"
@@ -631,6 +727,54 @@ const BulletinsSalaireScreen = ({ navigation }) => {
       </ScrollView>
 
       {renderDetailModal()}
+
+      <Portal>
+        <Modal
+          visible={showOtpModal}
+          onDismiss={() => !confirmingOtp && setShowOtpModal(false)}
+          contentContainerStyle={styles.otpModalContainer}
+        >
+          <View style={styles.otpContent}>
+            <MaterialIcons name="security" size={48} color="#2563EB" style={styles.otpIcon} />
+            <Text style={styles.otpTitle}>Vérification sécurisée</Text>
+            <Text style={styles.otpDescription}>
+              Veuillez saisir le code de vérification à 6 chiffres envoyé à votre adresse email pour confirmer la réception de votre salaire.
+            </Text>
+
+            <TextInput
+              mode="outlined"
+              label="Code OTP"
+              value={otpCode}
+              onChangeText={setOtpCode}
+              keyboardType="number-pad"
+              maxLength={6}
+              style={styles.otpInput}
+              outlineColor="#D1D5DB"
+              activeOutlineColor="#2563EB"
+            />
+
+            <View style={styles.otpActions}>
+              <Button
+                mode="text"
+                onPress={() => setShowOtpModal(false)}
+                disabled={confirmingOtp}
+                style={styles.otpCancelBtn}
+              >
+                Annuler
+              </Button>
+              <Button
+                mode="contained"
+                onPress={handleVerifyCode}
+                loading={confirmingOtp}
+                disabled={confirmingOtp || otpCode.length < 4}
+                style={styles.otpConfirmBtn}
+              >
+                Vérifier
+              </Button>
+            </View>
+          </View>
+        </Modal>
+      </Portal>
     </View>
   );
 };
@@ -1086,13 +1230,81 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   disclaimer: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#9CA3AF',
     textAlign: 'center',
+    marginTop: 20,
     fontStyle: 'italic',
+  },
+  confirmButton: {
+    marginTop: 12,
+    backgroundColor: '#10B981',
+    borderRadius: 8,
+  },
+  confirmButtonLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  confirmedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    backgroundColor: '#ECFDF5',
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+  },
+  confirmedText: {
+    marginLeft: 6,
+    color: '#10B981',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  otpModalContainer: {
+    backgroundColor: 'white',
     padding: 20,
-    paddingTop: 0,
-    fontWeight: '500',
+    margin: 20,
+    borderRadius: 15,
+    elevation: 5,
+  },
+  otpContent: {
+    alignItems: 'center',
+  },
+  otpIcon: {
+    marginBottom: 15,
+  },
+  otpTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 10,
+  },
+  otpDescription: {
+    fontSize: 14,
+    color: '#4B5563',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  otpInput: {
+    width: '100%',
+    marginBottom: 20,
+    backgroundColor: '#F9FAFB',
+  },
+  otpActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    width: '100%',
+  },
+  otpCancelBtn: {
+    marginRight: 10,
+  },
+  otpConfirmBtn: {
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 10,
   },
 });
 

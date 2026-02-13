@@ -1,4 +1,5 @@
 // frontend/src/screens/manager/DashboardManagerScreen.js
+// VERSION COMPLÈTE AVEC TOUTES LES FONCTIONNALITÉS IMPLÉMENTÉES
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -10,7 +11,8 @@ import {
   RefreshControl,
   Dimensions,
   Platform,
-  Image
+  Image,
+  StatusBar
 } from 'react-native';
 import {
   Card,
@@ -26,7 +28,13 @@ import {
   Chip,
   DataTable,
   ProgressBar,
-  TextInput
+  TextInput,
+  Avatar,
+  Divider,
+  Surface,
+  Menu,
+  RadioButton,
+  Checkbox
 } from 'react-native-paper';
 import { MaterialIcons, FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { LineChart, BarChart, PieChart } from 'react-native-chart-kit';
@@ -35,74 +43,182 @@ import axios from 'axios';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 const isWeb = Platform.OS === 'web';
 const isTablet = screenWidth >= 768;
 const isDesktop = screenWidth >= 1024;
 
-const API_URL = 'http://localhost:5000/api/manager';
+// Facteur de scale pour adapter les tailles
+const scale = screenWidth / 375; // Base iPhone 11 (375px)
+const moderateScale = (size, factor = 0.5) => size + (scale - 1) * size * factor;
+
+const API_URL = 'https://nutrifix-1-twdf.onrender.com/api/manager';
+const COLORS = {
+  // Couleurs principales - Bleu professionnel
+  primary: '#2563EB',
+  primaryDark: '#1E40AF',
+  primaryLight: '#3B82F6',
+
+  // Couleurs neutres - Base grise
+  background: '#F8FAFC',
+  surface: '#FFFFFF',
+  surfaceAlt: '#F1F5F9',
+
+  // Textes
+  text: '#0F172A',
+  textSecondary: '#64748B',
+  textLight: '#94A3B8',
+
+  // Bordures et séparateurs
+  border: '#E2E8F0',
+  divider: '#F1F5F9',
+
+  // États
+  success: '#10B981',
+  warning: '#F59E0B',
+  error: '#EF4444',
+  info: '#3B82F6',
+
+  // Statuts de paiement
+  statusPaid: '#10B981',
+  statusPending: '#F59E0B',
+
+  // Couleurs pour graphiques
+  chart1: '#2563EB',
+  chart2: '#10B981',
+  chart3: '#F59E0B',
+  chart4: '#EF4444',
+  chart5: '#8B5CF6',
+  chart6: '#EC4899',
+
+  // Ombres
+  shadow: 'rgba(0, 0, 0, 0.08)',
+  shadowDark: 'rgba(0, 0, 0, 0.15)',
+
+  // Gradients
+  gradientStart: '#2563EB',
+  gradientEnd: '#1E40AF',
+};
+
+// ==================== CALCULS RESPONSIFS ====================
+// Fonction pour calculer la largeur des cartes en fonction de l'écran
+const getCardWidth = () => {
+  if (screenWidth >= 1200) {
+    // Desktop large - 4 cartes
+    return (screenWidth - 80) / 4; // 80 = padding + gaps
+  } else if (screenWidth >= 768) {
+    // Tablet - 3 cartes
+    return (screenWidth - 68) / 3; // 68 = padding + gaps
+  } else if (screenWidth >= 480) {
+    // Mobile large - 2 cartes
+    return (screenWidth - 56) / 2; // 56 = padding + gaps
+  } else {
+    // Mobile small - 1.5 cartes (pour indiquer le scroll)
+    return (screenWidth - 40) / 1.5; // 40 = padding
+  }
+};
+
+const getStatCardWidth = () => {
+  if (screenWidth >= 1200) {
+    return (screenWidth - 100) / 5; // 5 cartes sur desktop
+  } else if (screenWidth >= 768) {
+    return (screenWidth - 80) / 4; // 4 cartes sur tablet
+  } else if (screenWidth >= 480) {
+    return (screenWidth - 60) / 3; // 3 cartes sur mobile large
+  } else {
+    return (screenWidth - 50) / 2.5; // 2.5 cartes sur mobile
+  }
+};
+
+const getMonthlyStatCardWidth = () => {
+  if (screenWidth >= 1200) {
+    return (screenWidth - 100) / 4; // 4 cartes
+  } else if (screenWidth >= 768) {
+    return (screenWidth - 80) / 3; // 3 cartes
+  } else if (screenWidth >= 480) {
+    return (screenWidth - 60) / 2.5; // 2.5 cartes
+  } else {
+    return (screenWidth - 50) / 2; // 2 cartes
+  }
+};
 
 const DashboardManagerScreen = () => {
   const navigation = useNavigation();
 
-  // États principaux
+  // ==================== ÉTATS ====================
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
   const [selectedPeriod, setSelectedPeriod] = useState('month');
-  const [showPeriodModal, setShowPeriodModal] = useState(false);
+  const [showPeriodMenu, setShowPeriodMenu] = useState(false);
 
-  // États pour les salaires
   const [salariesData, setSalariesData] = useState({
     overview: null,
     detailed: [],
     notPaid: [],
     paid: [],
+    withoutConfirmation: [],
     statistics: null,
     paymentRequests: []
   });
 
-  // États pour les filtres
   const [filters, setFilters] = useState({
     search: '',
     type_employe: 'all',
     statut_paiement: 'all',
-    confirme_reception: 'all',
-    demande_paiement: 'all'
   });
 
-  // États pour les modales
-  const [showFiltersModal, setShowFiltersModal] = useState(false);
-  const [showSalaryDetailsModal, setShowSalaryDetailsModal] = useState(false);
-  const [selectedSalary, setSelectedSalary] = useState(null);
-  const [showReportModal, setShowReportModal] = useState(false);
-
-  // États pour la sélection multiple
+  const [activeTab, setActiveTab] = useState('overview');
+  const [activeSalaryTab, setActiveSalaryTab] = useState('all');
   const [selectedSalaries, setSelectedSalaries] = useState([]);
   const [selectionMode, setSelectionMode] = useState(false);
 
-  // États pour les onglets
-  const [activeTab, setActiveTab] = useState('overview'); // overview, salaries, analytics, reports
-  const [activeSalaryTab, setActiveSalaryTab] = useState('all'); // all, paid, notPaid, requests
+  const [showFiltersModal, setShowFiltersModal] = useState(false);
+  const [showSalaryDetailsModal, setShowSalaryDetailsModal] = useState(false);
+  const [selectedSalary, setSelectedSalary] = useState(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportType, setReportType] = useState('complete');
+  const [reportFormat, setReportFormat] = useState('excel');
+  const [generatingReport, setGeneratingReport] = useState(false);
 
-  // États pour la communication
+  const [paymentData, setPaymentData] = useState({
+    mode_paiement: 'virement',
+    date_paiement: new Date().toISOString().split('T')[0],
+    notes: ''
+  });
+
   const [communicationModalVisible, setCommunicationModalVisible] = useState(false);
   const [messageSubject, setMessageSubject] = useState('');
   const [messageBody, setMessageBody] = useState('');
   const [isSending, setIsSending] = useState(false);
 
+  const [financialTrend, setFinancialTrend] = useState([]);
+  const [expensesByCategory, setExpensesByCategory] = useState([]);
+  const [revenuesBySource, setRevenuesBySource] = useState([]);
+
+  // ==================== FUNCTIONS ====================
+
+  const getAuthToken = useCallback(async () => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      return token;
+    } catch (error) {
+      console.error('Erreur récupération token:', error);
+      return null;
+    }
+  }, []);
+
   useEffect(() => {
     loadAllData();
-
     const interval = setInterval(() => {
-      loadAllData(true); // Silent refresh
-    }, 30000);
-
+      loadAllData(true);
+    }, 60000);
     return () => clearInterval(interval);
   }, [selectedPeriod, filters]);
 
-  // Chargement de toutes les données
   const loadAllData = async (silent = false) => {
     try {
       if (!silent) setLoading(true);
@@ -111,7 +227,8 @@ const DashboardManagerScreen = () => {
         loadDashboardData(),
         loadSalariesOverview(),
         loadSalariesDetailed(),
-        loadSalaryStatistics()
+        loadSalaryStatistics(),
+        loadFinancialData()
       ]);
 
     } catch (error) {
@@ -125,12 +242,14 @@ const DashboardManagerScreen = () => {
     }
   };
 
-  // Charger les données du dashboard
   const loadDashboardData = async () => {
     try {
-      const token = await getAuthToken(); // À implémenter
+      const token = await getAuthToken();
       const response = await axios.get(`${API_URL}/dashboard`, {
-        params: { period: selectedPeriod },
+        params: {
+          period: selectedPeriod,
+          _t: Date.now()
+        },
         headers: { Authorization: `Bearer ${token}` }
       });
       setDashboardData(response.data);
@@ -140,7 +259,6 @@ const DashboardManagerScreen = () => {
     }
   };
 
-  // Charger vue d'ensemble des salaires
   const loadSalariesOverview = async () => {
     try {
       const token = await getAuthToken();
@@ -148,7 +266,8 @@ const DashboardManagerScreen = () => {
       const response = await axios.get(`${API_URL}/salaries-overview`, {
         params: {
           month: currentDate.getMonth() + 1,
-          year: currentDate.getFullYear()
+          year: currentDate.getFullYear(),
+          _t: Date.now()
         },
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -158,92 +277,78 @@ const DashboardManagerScreen = () => {
     }
   };
 
-  // Charger liste détaillée des salaires
   const loadSalariesDetailed = async () => {
     try {
       const token = await getAuthToken();
       const currentDate = new Date();
-      const response = await axios.get(`${API_URL}/salaries-detailed`, {
-        params: {
-          month: currentDate.getMonth() + 1,
-          year: currentDate.getFullYear(),
-          ...filters
-        },
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setSalariesData(prev => ({ ...prev, detailed: response.data }));
 
-      // Charger aussi les listes spécifiques
-      await loadNotPaidSalaries();
-      await loadPaidSalaries();
-      await loadPaymentRequests();
+      const [detailedRes, notPaidRes, paidRes, requestsRes, withoutConfRes] = await Promise.all([
+        axios.get(`${API_URL}/salaries-detailed`, {
+          params: {
+            month: currentDate.getMonth() + 1,
+            year: currentDate.getFullYear(),
+            ...filters,
+            _t: Date.now()
+          },
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get(`${API_URL}/salaries-not-paid`, {
+          params: {
+            month: currentDate.getMonth() + 1,
+            year: currentDate.getFullYear(),
+            _t: Date.now()
+          },
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get(`${API_URL}/salaries-paid`, {
+          params: {
+            month: currentDate.getMonth() + 1,
+            year: currentDate.getFullYear(),
+            _t: Date.now()
+          },
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get(`${API_URL}/payment-requests`, {
+          params: {
+            month: currentDate.getMonth() + 1,
+            year: currentDate.getFullYear(),
+            statut: 'en_attente',
+            _t: Date.now()
+          },
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get(`${API_URL}/salaries-without-confirmation`, {
+          params: {
+            month: currentDate.getMonth() + 1,
+            year: currentDate.getFullYear(),
+            _t: Date.now()
+          },
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      ]);
+
+      setSalariesData(prev => ({
+        ...prev,
+        detailed: detailedRes.data,
+        notPaid: notPaidRes.data,
+        paid: paidRes.data,
+        paymentRequests: requestsRes.data,
+        withoutConfirmation: withoutConfRes.data
+      }));
     } catch (error) {
       console.error('Error loading detailed salaries:', error);
     }
   };
 
-  // Charger salaires non payés
-  const loadNotPaidSalaries = async () => {
-    try {
-      const token = await getAuthToken();
-      const currentDate = new Date();
-      const response = await axios.get(`${API_URL}/salaries-not-paid`, {
-        params: {
-          month: currentDate.getMonth() + 1,
-          year: currentDate.getFullYear()
-        },
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setSalariesData(prev => ({ ...prev, notPaid: response.data }));
-    } catch (error) {
-      console.error('Error loading unpaid salaries:', error);
-    }
-  };
-
-  // Charger salaires payés
-  const loadPaidSalaries = async () => {
-    try {
-      const token = await getAuthToken();
-      const currentDate = new Date();
-      const response = await axios.get(`${API_URL}/salaries-paid`, {
-        params: {
-          month: currentDate.getMonth() + 1,
-          year: currentDate.getFullYear()
-        },
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setSalariesData(prev => ({ ...prev, paid: response.data }));
-    } catch (error) {
-      console.error('Error loading paid salaries:', error);
-    }
-  };
-
-  // Charger demandes de paiement
-  const loadPaymentRequests = async () => {
-    try {
-      const token = await getAuthToken();
-      const currentDate = new Date();
-      const response = await axios.get(`${API_URL}/payment-requests`, {
-        params: {
-          month: currentDate.getMonth() + 1,
-          year: currentDate.getFullYear(),
-          statut: 'en_attente'
-        },
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setSalariesData(prev => ({ ...prev, paymentRequests: response.data }));
-    } catch (error) {
-      console.error('Error loading payment requests:', error);
-    }
-  };
-
-  // Charger statistiques des salaires
   const loadSalaryStatistics = async () => {
     try {
       const token = await getAuthToken();
       const currentDate = new Date();
       const response = await axios.get(`${API_URL}/salary-statistics`, {
-        params: { year: currentDate.getFullYear() },
+        params: {
+          year: currentDate.getFullYear(),
+          _t: Date.now()
+        },
         headers: { Authorization: `Bearer ${token}` }
       });
       setSalariesData(prev => ({ ...prev, statistics: response.data }));
@@ -252,18 +357,55 @@ const DashboardManagerScreen = () => {
     }
   };
 
-  // Payer un salaire
-  const handlePaySalary = async (salaryId, paymentData) => {
+  const loadFinancialData = async () => {
+    try {
+      const token = await getAuthToken();
+      const currentDate = new Date();
+
+      const [trendRes, expensesRes, revenuesRes] = await Promise.all([
+        axios.get(`${API_URL}/monthly-financial-trend`, {
+          params: { months: 6, _t: Date.now() },
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get(`${API_URL}/expenses-by-category`, {
+          params: {
+            month: currentDate.getMonth() + 1,
+            year: currentDate.getFullYear(),
+            _t: Date.now()
+          },
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get(`${API_URL}/revenues-by-source`, {
+          params: {
+            month: currentDate.getMonth() + 1,
+            year: currentDate.getFullYear(),
+            _t: Date.now()
+          },
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      ]);
+
+      setFinancialTrend(trendRes.data);
+      setExpensesByCategory(expensesRes.data);
+      setRevenuesBySource(revenuesRes.data);
+    } catch (error) {
+      console.error('Error loading financial data:', error);
+    }
+  };
+
+  const handlePaySalary = async (salaryId, data) => {
     try {
       const token = await getAuthToken();
       const response = await axios.post(
         `${API_URL}/salaries/${salaryId}/pay`,
-        paymentData,
+        data,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
       if (response.data.success) {
         Alert.alert('Succès', 'Salaire payé avec succès');
+        setShowPaymentModal(false);
+        setSelectedSalary(null);
         loadAllData(true);
       }
     } catch (error) {
@@ -271,8 +413,7 @@ const DashboardManagerScreen = () => {
     }
   };
 
-  // Payer plusieurs salaires
-  const handlePayMultipleSalaries = async (paymentData) => {
+  const handlePayMultipleSalaries = async () => {
     try {
       const token = await getAuthToken();
       const response = await axios.post(
@@ -288,6 +429,7 @@ const DashboardManagerScreen = () => {
         Alert.alert('Succès', `${selectedSalaries.length} salaire(s) payé(s)`);
         setSelectedSalaries([]);
         setSelectionMode(false);
+        setShowPaymentModal(false);
         loadAllData(true);
       }
     } catch (error) {
@@ -295,10 +437,53 @@ const DashboardManagerScreen = () => {
     }
   };
 
-  // Générer un rapport
-  const handleGenerateReport = async (reportType, format) => {
+  const handleMarkAsDebt = async (salaryId) => {
+    Alert.alert(
+      'Marquer comme dette',
+      'Voulez-vous marquer ce salaire comme dette non payée (Temps Partiel)?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Confirmer',
+          onPress: async () => {
+            try {
+              const token = await getAuthToken();
+              const response = await axios.post(
+                `${API_URL}/salaries/${salaryId}/mark-unpaid-debt`,
+                { notes: 'Marqué comme dette impayée' },
+                { headers: { Authorization: `Bearer ${token}` } }
+              );
+
+              if (response.data.success) {
+                Alert.alert('Succès', 'Salaire marqué comme dette');
+                loadAllData(true);
+              }
+            } catch (error) {
+              Alert.alert('Erreur', 'Impossible de marquer comme dette');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleSendReminder = async (salaryId) => {
     try {
-      setLoading(true);
+      const token = await getAuthToken();
+      await axios.post(
+        `${API_URL}/salaries/${salaryId}/send-reminder`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      Alert.alert('Succès', 'Rappel envoyé');
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible d\'envoyer le rappel');
+    }
+  };
+
+  const handleGenerateReport = async () => {
+    try {
+      setGeneratingReport(true);
       const token = await getAuthToken();
       const currentDate = new Date();
 
@@ -308,18 +493,21 @@ const DashboardManagerScreen = () => {
           month: currentDate.getMonth() + 1,
           year: currentDate.getFullYear(),
           type: reportType,
-          format: format
+          format: reportFormat
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
       if (response.data.success) {
-        // Télécharger le fichier
         const { fileName, data } = response.data;
 
         if (isWeb) {
-          // Web - télécharger via blob
-          const blob = base64ToBlob(data, format === 'excel' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/pdf');
+          const blob = base64ToBlob(
+            data,
+            reportFormat === 'excel'
+              ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+              : 'application/pdf'
+          );
           const url = window.URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.href = url;
@@ -327,7 +515,6 @@ const DashboardManagerScreen = () => {
           link.click();
           window.URL.revokeObjectURL(url);
         } else {
-          // Mobile - sauvegarder et partager
           const fileUri = `${FileSystem.documentDirectory}${fileName}`;
           await FileSystem.writeAsStringAsync(fileUri, data, {
             encoding: FileSystem.EncodingType.Base64
@@ -336,17 +523,15 @@ const DashboardManagerScreen = () => {
         }
 
         Alert.alert('Succès', 'Rapport généré avec succès');
+        setShowReportModal(false);
       }
     } catch (error) {
       Alert.alert('Erreur', 'Erreur lors de la génération du rapport');
-      console.error('Error generating report:', error);
     } finally {
-      setLoading(false);
-      setShowReportModal(false);
+      setGeneratingReport(false);
     }
   };
 
-  // Fonction utilitaire pour convertir base64 en blob
   const base64ToBlob = (base64, mimeType) => {
     const byteCharacters = atob(base64);
     const byteNumbers = new Array(byteCharacters.length);
@@ -357,1043 +542,35 @@ const DashboardManagerScreen = () => {
     return new Blob([byteArray], { type: mimeType });
   };
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadAllData();
-  }, [selectedPeriod, filters]);
+  const handleSendMessage = async () => {
+    if (!messageSubject.trim() || !messageBody.trim()) {
+      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
+      return;
+    }
 
-  // Fonction pour obtenir le token (à implémenter selon votre système d'auth)
-  const getAuthToken = async () => {
-    // ✅ CORRECTION: Récupérer le token depuis AsyncStorage
     try {
-      const token = await AsyncStorage.getItem('userToken');
-      if (!token) {
-        console.warn('⚠️ Aucun token d\'authentification trouvé');
-        return null;
-      }
-      return token;
-    } catch (error) {
-      console.error('❌ Erreur récupération token:', error);
-      return null;
-    }
-  };
-
-  // ==================== COMPOSANTS DE RENDU ====================
-
-  // En-tête avec navigation par onglets
-  const renderHeader = () => (
-    <View style={[styles.header, isWeb && styles.headerWeb]}>
-      <View style={styles.headerContent}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>
-            Dashboard - {dashboardData?.department_name || 'Département'}
-          </Text>
-          <Text style={styles.headerSubtitle}>
-            {new Date().toLocaleDateString('fr-FR', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric'
-            })}
-          </Text>
-        </View>
-        <View style={styles.headerActions}>
-          <IconButton
-            icon="filter-variant"
-            size={24}
-            onPress={() => setShowFiltersModal(true)}
-            color="#FFF"
-          />
-          <IconButton
-            icon="refresh"
-            size={24}
-            onPress={() => loadAllData()}
-            color="#FFF"
-          />
-          <IconButton
-            icon="bell"
-            size={24}
-            onPress={() => navigation.navigate('Notifications')}
-            iconColor="#FFF"
-          />
-          <IconButton
-            icon="message-draw"
-            size={24}
-            onPress={() => setCommunicationModalVisible(true)}
-            iconColor="#FFF"
-          />
-        </View>
-      </View>
-
-      {/* Onglets de navigation */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.tabsContainer}
-      >
-        {[
-          { key: 'overview', label: 'Vue d\'ensemble', icon: 'dashboard' },
-          { key: 'salaries', label: 'Salaires', icon: 'payments' },
-          { key: 'analytics', label: 'Analytiques', icon: 'analytics' },
-          { key: 'reports', label: 'Rapports', icon: 'description' }
-        ].map(tab => (
-          <TouchableOpacity
-            key={tab.key}
-            style={[
-              styles.tab,
-              activeTab === tab.key && styles.tabActive
-            ]}
-            onPress={() => setActiveTab(tab.key)}
-          >
-            <MaterialIcons
-              name={tab.icon}
-              size={20}
-              color={activeTab === tab.key ? '#FFF' : 'rgba(255,255,255,0.7)'}
-            />
-            <Text style={[
-              styles.tabLabel,
-              activeTab === tab.key && styles.tabLabelActive
-            ]}>
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-    </View>
-  );
-
-  // Vue d'ensemble des KPIs
-  const renderKPICards = () => {
-    if (!dashboardData) return null;
-
-    const kpis = [
-      {
-        title: 'Employés Actifs',
-        value: dashboardData.kpis.active_employees || 0,
-        total: dashboardData.kpis.total_employees || 0,
-        icon: 'people',
-        color: '#2ECC71',
-        trend: dashboardData.kpis.employee_trend,
-        onPress: () => navigation.navigate('EquipeRH')
-      },
-      {
-        title: 'Présences Aujourd\'hui',
-        value: dashboardData.kpis.present_today || 0,
-        total: dashboardData.kpis.total_employees || 0,
-        icon: 'check-circle',
-        color: '#3498DB',
-        trend: dashboardData.kpis.presence_trend,
-        percentage: dashboardData.kpis.total_employees > 0
-          ? Math.round((dashboardData.kpis.present_today / dashboardData.kpis.total_employees) * 100)
-          : 0,
-        onPress: () => navigation.navigate('EquipeRH', { tab: 'presences' })
-      },
-      {
-        title: 'Demandes en Attente',
-        value: dashboardData.kpis.pending_requests || 0,
-        icon: 'pending-actions',
-        color: '#F39C12',
-        badge: dashboardData.kpis.urgent_requests > 0 ? dashboardData.kpis.urgent_requests : null,
-        onPress: () => navigation.navigate('Notifications', { filter: 'pending' })
-      },
-      {
-        title: 'Budget Utilisé',
-        value: `${dashboardData.kpis.budget_used_percent || 0}%`,
-        subtitle: `${formatCurrency(dashboardData.kpis.budget_used || 0)} / ${formatCurrency(dashboardData.kpis.budget_total || 0)}`,
-        icon: 'account-balance-wallet',
-        color: (dashboardData.kpis.budget_used_percent || 0) > 90 ? '#E74C3C' : '#9B59B6',
-        progress: dashboardData.kpis.budget_used_percent || 0,
-        onPress: () => navigation.navigate('FinancierDept')
-      }
-    ];
-
-    // Ajouter KPIs spécifiques au département
-    if (dashboardData.department_type === 'agriculture') {
-      kpis.push(
+      setIsSending(true);
+      const token = await getAuthToken();
+      const response = await axios.post(
+        `${API_URL.replace('/manager', '')}/notifications/contact-admin`,
         {
-          title: 'Parcelles en Culture',
-          value: dashboardData.kpis.parcelles_active || 0,
-          total: dashboardData.kpis.parcelles_total || 0,
-          icon: 'grass',
-          color: '#27AE60',
-          onPress: () => navigation.navigate('ModulesOp', { section: 'parcelles' })
+          sujet: messageSubject,
+          message: messageBody
         },
-        {
-          title: 'Production ce Mois',
-          value: `${dashboardData.kpis.production_month || 0} kg`,
-          icon: 'agriculture',
-          color: '#16A085',
-          trend: dashboardData.kpis.production_trend,
-          onPress: () => navigation.navigate('ModulesOp', { section: 'production' })
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
+
+      if (response.data.success) {
+        Alert.alert('Succès', 'Message envoyé à l\'administration');
+        setCommunicationModalVisible(false);
+        setMessageSubject('');
+        setMessageBody('');
+      }
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible d\'envoyer le message');
+    } finally {
+      setIsSending(false);
     }
-
-    const columns = getGridColumns();
-    const cardWidth = isWeb
-      ? `${(100 / columns) - 2}%`
-      : (screenWidth / columns) - 20;
-
-    return (
-      <View style={[styles.kpiContainer, isWeb && styles.kpiContainerWeb]}>
-        {kpis.map((kpi, index) => (
-          <TouchableOpacity
-            key={index}
-            style={[
-              styles.kpiCard,
-              isWeb ? { width: cardWidth } : { width: cardWidth },
-              { backgroundColor: kpi.color }
-            ]}
-            onPress={kpi.onPress}
-          >
-            <View style={styles.kpiHeader}>
-              <MaterialIcons name={kpi.icon} size={30} color="#FFF" />
-              {kpi.badge && (
-                <Badge style={styles.kpiBadge}>{kpi.badge}</Badge>
-              )}
-            </View>
-            <View style={styles.kpiContent}>
-              <Text style={styles.kpiValue}>
-                {kpi.value}
-                {kpi.total && <Text style={styles.kpiTotal}>/{kpi.total}</Text>}
-              </Text>
-              <Text style={styles.kpiTitle}>{kpi.title}</Text>
-              {kpi.subtitle && (
-                <Text style={styles.kpiSubtitle}>{kpi.subtitle}</Text>
-              )}
-              {kpi.percentage !== undefined && (
-                <View style={styles.kpiPercentage}>
-                  <Text style={styles.kpiPercentageText}>{kpi.percentage}%</Text>
-                </View>
-              )}
-              {kpi.trend !== undefined && (
-                <View style={styles.kpiTrend}>
-                  <MaterialIcons
-                    name={kpi.trend >= 0 ? 'trending-up' : 'trending-down'}
-                    size={16}
-                    color="#FFF"
-                  />
-                  <Text style={styles.kpiTrendText}>
-                    {Math.abs(kpi.trend)}%
-                  </Text>
-                </View>
-              )}
-              {kpi.progress !== undefined && (
-                <View style={styles.progressBar}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      { width: `${kpi.progress}%` }
-                    ]}
-                  />
-                </View>
-              )}
-            </View>
-          </TouchableOpacity>
-        ))}
-      </View>
-    );
-  };
-
-  // Vue d'ensemble des salaires
-  const renderSalariesOverview = () => {
-    if (!salariesData.overview) return null;
-
-    const { stats, repartition, demandes_en_attente } = salariesData.overview;
-
-    return (
-      <Card style={[styles.card, isWeb && styles.cardWeb]}>
-        <Card.Content>
-          <View style={styles.cardHeader}>
-            <Title style={styles.cardTitle}>Vue d'ensemble Salaires</Title>
-            <Chip
-              icon="calendar"
-              mode="outlined"
-              style={styles.periodChip}
-            >
-              {new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
-            </Chip>
-          </View>
-
-          {/* Statistiques globales */}
-          <View style={[styles.statsGrid, isWeb && styles.statsGridWeb]}>
-            <View style={[styles.statCard, { backgroundColor: '#E8F5E9' }]}>
-              <MaterialIcons name="people" size={32} color="#27AE60" />
-              <Text style={styles.statValue}>{stats.total_employes || 0}</Text>
-              <Text style={styles.statLabel}>Total Employés</Text>
-            </View>
-
-            <View style={[styles.statCard, { backgroundColor: '#E3F2FD' }]}>
-              <MaterialIcons name="check-circle" size={32} color="#2196F3" />
-              <Text style={styles.statValue}>{stats.employes_payes || 0}</Text>
-              <Text style={styles.statLabel}>Payés</Text>
-            </View>
-
-            <View style={[styles.statCard, { backgroundColor: '#FFF3E0' }]}>
-              <MaterialIcons name="pending" size={32} color="#FF9800" />
-              <Text style={styles.statValue}>{stats.employes_non_payes || 0}</Text>
-              <Text style={styles.statLabel}>En Attente</Text>
-            </View>
-
-            <View style={[styles.statCard, { backgroundColor: '#FCE4EC' }]}>
-              <MaterialIcons name="notification-important" size={32} color="#E91E63" />
-              <Text style={styles.statValue}>{demandes_en_attente || 0}</Text>
-              <Text style={styles.statLabel}>Demandes</Text>
-            </View>
-          </View>
-
-          {/* Montants */}
-          <View style={styles.amountsContainer}>
-            <View style={styles.amountRow}>
-              <Text style={styles.amountLabel}>Total Brut:</Text>
-              <Text style={[styles.amountValue, { color: '#5E35B1' }]}>
-                {formatCurrency(stats.total_brut || 0)}
-              </Text>
-            </View>
-            <View style={styles.amountRow}>
-              <Text style={styles.amountLabel}>Total Net:</Text>
-              <Text style={[styles.amountValue, { color: '#27AE60' }]}>
-                {formatCurrency(stats.total_net || 0)}
-              </Text>
-            </View>
-            <View style={styles.amountRow}>
-              <Text style={styles.amountLabel}>INSS:</Text>
-              <Text style={[styles.amountValue, { color: '#E74C3C' }]}>
-                {formatCurrency(stats.total_inss || 0)}
-              </Text>
-            </View>
-            <View style={styles.amountRow}>
-              <Text style={styles.amountLabel}>Montant Payé:</Text>
-              <Text style={[styles.amountValue, { color: '#2ECC71', fontWeight: 'bold' }]}>
-                {formatCurrency(stats.montant_paye || 0)}
-              </Text>
-            </View>
-            <View style={styles.amountRow}>
-              <Text style={styles.amountLabel}>Montant Restant:</Text>
-              <Text style={[styles.amountValue, { color: '#F39C12', fontWeight: 'bold' }]}>
-                {formatCurrency(stats.montant_restant || 0)}
-              </Text>
-            </View>
-          </View>
-
-          {/* Barre de progression */}
-          <View style={styles.progressSection}>
-            <Text style={styles.progressLabel}>
-              Progression des paiements ({stats.total_employes > 0
-                ? Math.round((stats.employes_payes / stats.total_employes) * 100)
-                : 0}%)
-            </Text>
-            <ProgressBar
-              progress={stats.total_employes > 0 ? stats.employes_payes / stats.total_employes : 0}
-              color="#2ECC71"
-              style={styles.progressBarLarge}
-            />
-          </View>
-
-          {/* Répartition par type */}
-          {repartition && repartition.length > 0 && (
-            <View style={styles.repartitionSection}>
-              <Text style={styles.sectionSubtitle}>Répartition par Type d'Employé</Text>
-              {repartition.map((item, index) => (
-                <View key={index} style={styles.repartitionItem}>
-                  <View style={styles.repartitionLeft}>
-                    <Text style={styles.repartitionType}>{item.type_employe}</Text>
-                    <Text style={styles.repartitionCount}>
-                      {item.nombre} employé{item.nombre > 1 ? 's' : ''} •
-                      Payés: {item.payes} • En attente: {item.non_payes}
-                    </Text>
-                  </View>
-                  <Text style={styles.repartitionAmount}>
-                    {formatCurrency(item.total_net || 0)}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </Card.Content>
-      </Card>
-    );
-  };
-
-  // Onglets pour les salaires
-  const renderSalaryTabs = () => (
-    <View style={styles.subTabsContainer}>
-      {[
-        { key: 'all', label: 'Tous', count: salariesData.detailed.length },
-        { key: 'notPaid', label: 'Non Payés', count: salariesData.notPaid.length },
-        { key: 'paid', label: 'Payés', count: salariesData.paid.length },
-        { key: 'requests', label: 'Demandes', count: salariesData.paymentRequests.length }
-      ].map(tab => (
-        <TouchableOpacity
-          key={tab.key}
-          style={[
-            styles.subTab,
-            activeSalaryTab === tab.key && styles.subTabActive
-          ]}
-          onPress={() => setActiveSalaryTab(tab.key)}
-        >
-          <Text style={[
-            styles.subTabLabel,
-            activeSalaryTab === tab.key && styles.subTabLabelActive
-          ]}>
-            {tab.label}
-          </Text>
-          {tab.count > 0 && (
-            <Badge style={[
-              styles.subTabBadge,
-              activeSalaryTab === tab.key && styles.subTabBadgeActive
-            ]}>
-              {tab.count}
-            </Badge>
-          )}
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
-
-  // Liste des salaires (responsive)
-  const renderSalariesList = () => {
-    let dataToDisplay = [];
-
-    switch (activeSalaryTab) {
-      case 'all':
-        dataToDisplay = salariesData.detailed;
-        break;
-      case 'notPaid':
-        dataToDisplay = salariesData.notPaid;
-        break;
-      case 'paid':
-        dataToDisplay = salariesData.paid;
-        break;
-      case 'requests':
-        return renderPaymentRequests();
-      default:
-        dataToDisplay = salariesData.detailed;
-    }
-
-    if (dataToDisplay.length === 0) {
-      return (
-        <View style={styles.emptyState}>
-          <MaterialIcons name="inbox" size={64} color="#BDC3C7" />
-          <Text style={styles.emptyStateText}>Aucun salaire à afficher</Text>
-        </View>
-      );
-    }
-
-    // Affichage tableau pour web/desktop
-    if (isWeb || isDesktop) {
-      return renderSalariesTable(dataToDisplay);
-    }
-
-    // Affichage cartes pour mobile/tablette
-    return renderSalariesCards(dataToDisplay);
-  };
-
-  // Tableau des salaires (web/desktop)
-  const renderSalariesTable = (data) => (
-    <Card style={[styles.card, styles.tableCard]}>
-      <Card.Content>
-        <View style={styles.tableHeader}>
-          <Text style={styles.tableTitle}>
-            Liste des Salaires ({data.length})
-          </Text>
-          <View style={styles.tableActions}>
-            {selectionMode && selectedSalaries.length > 0 && (
-              <>
-                <Button
-                  mode="contained"
-                  icon="cash-multiple"
-                  onPress={() => handleBatchPayment()}
-                  style={styles.batchButton}
-                >
-                  Payer ({selectedSalaries.length})
-                </Button>
-                <Button
-                  mode="outlined"
-                  onPress={() => {
-                    setSelectionMode(false);
-                    setSelectedSalaries([]);
-                  }}
-                >
-                  Annuler
-                </Button>
-              </>
-            )}
-            {!selectionMode && activeSalaryTab === 'notPaid' && (
-              <Button
-                mode="outlined"
-                icon="checkbox-marked"
-                onPress={() => setSelectionMode(true)}
-              >
-                Sélectionner
-              </Button>
-            )}
-          </View>
-        </View>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-          <DataTable>
-            <DataTable.Header>
-              {selectionMode && (
-                <DataTable.Title style={styles.checkboxColumn}>
-                  <TouchableOpacity onPress={toggleSelectAll}>
-                    <MaterialIcons
-                      name={selectedSalaries.length === data.length ? "check-box" : "check-box-outline-blank"}
-                      size={24}
-                      color="#2E86C1"
-                    />
-                  </TouchableOpacity>
-                </DataTable.Title>
-              )}
-              <DataTable.Title style={styles.tableColumnSmall}>Matricule</DataTable.Title>
-              <DataTable.Title style={styles.tableColumnLarge}>Nom Complet</DataTable.Title>
-              <DataTable.Title style={styles.tableColumnMedium}>Type</DataTable.Title>
-              <DataTable.Title numeric style={styles.tableColumnMedium}>Salaire Brut</DataTable.Title>
-              <DataTable.Title numeric style={styles.tableColumnMedium}>Salaire Net</DataTable.Title>
-              <DataTable.Title style={styles.tableColumnMedium}>Statut</DataTable.Title>
-              {activeSalaryTab === 'paid' && (
-                <>
-                  <DataTable.Title style={styles.tableColumnMedium}>Date Paiement</DataTable.Title>
-                  <DataTable.Title style={styles.tableColumnMedium}>Référence</DataTable.Title>
-                </>
-              )}
-              <DataTable.Title style={styles.tableColumnSmall}>Actions</DataTable.Title>
-            </DataTable.Header>
-
-            {data.map((salary) => (
-              <DataTable.Row
-                key={salary.id}
-                style={selectedSalaries.includes(salary.id) ? styles.selectedRow : null}
-              >
-                {selectionMode && (
-                  <DataTable.Cell style={styles.checkboxColumn}>
-                    <TouchableOpacity onPress={() => toggleSelectSalary(salary.id)}>
-                      <MaterialIcons
-                        name={selectedSalaries.includes(salary.id) ? "check-box" : "check-box-outline-blank"}
-                        size={24}
-                        color="#2E86C1"
-                      />
-                    </TouchableOpacity>
-                  </DataTable.Cell>
-                )}
-                <DataTable.Cell style={styles.tableColumnSmall}>
-                  {salary.matricule}
-                </DataTable.Cell>
-                <DataTable.Cell style={styles.tableColumnLarge}>
-                  <View style={styles.employeeCell}>
-                    {salary.employee_photo && (
-                      <Image
-                        source={{ uri: salary.employee_photo }}
-                        style={styles.employeePhoto}
-                      />
-                    )}
-                    <Text style={styles.employeeName}>{salary.employee_name}</Text>
-                  </View>
-                </DataTable.Cell>
-                <DataTable.Cell style={styles.tableColumnMedium}>
-                  <Chip mode="outlined" compact>
-                    {salary.type_employe}
-                  </Chip>
-                </DataTable.Cell>
-                <DataTable.Cell numeric style={styles.tableColumnMedium}>
-                  {formatCurrency(salary.salaire_brut)}
-                </DataTable.Cell>
-                <DataTable.Cell numeric style={styles.tableColumnMedium}>
-                  <Text style={styles.netSalary}>
-                    {formatCurrency(salary.salaire_net)}
-                  </Text>
-                </DataTable.Cell>
-                <DataTable.Cell style={styles.tableColumnMedium}>
-                  <Chip
-                    mode="flat"
-                    style={[
-                      styles.statusChip,
-                      { backgroundColor: getStatusColor(salary.statut_paiement) }
-                    ]}
-                    textStyle={{ color: '#FFF' }}
-                  >
-                    {salary.statut_paiement}
-                  </Chip>
-                </DataTable.Cell>
-                {activeSalaryTab === 'paid' && (
-                  <>
-                    <DataTable.Cell style={styles.tableColumnMedium}>
-                      {salary.date_paiement
-                        ? new Date(salary.date_paiement).toLocaleDateString('fr-FR')
-                        : '-'
-                      }
-                    </DataTable.Cell>
-                    <DataTable.Cell style={styles.tableColumnMedium}>
-                      {salary.reference_paiement || '-'}
-                    </DataTable.Cell>
-                  </>
-                )}
-                <DataTable.Cell style={styles.tableColumnSmall}>
-                  <View style={styles.actionsCell}>
-                    <IconButton
-                      icon="eye"
-                      size={20}
-                      onPress={() => handleViewSalaryDetails(salary)}
-                    />
-                    {activeSalaryTab === 'notPaid' && (
-                      <IconButton
-                        icon="cash"
-                        size={20}
-                        color="#2ECC71"
-                        onPress={() => handleQuickPay(salary)}
-                      />
-                    )}
-                  </View>
-                </DataTable.Cell>
-              </DataTable.Row>
-            ))}
-          </DataTable>
-        </ScrollView>
-      </Card.Content>
-    </Card>
-  );
-
-  // Cartes des salaires (mobile/tablette)
-  const renderSalariesCards = (data) => (
-    <View style={styles.cardsContainer}>
-      {data.map((salary) => (
-        <Card key={salary.id} style={styles.salaryCard}>
-          <Card.Content>
-            <View style={styles.salaryCardHeader}>
-              <View style={styles.salaryCardEmployee}>
-                {salary.employee_photo && (
-                  <Image
-                    source={{ uri: salary.employee_photo }}
-                    style={styles.employeePhotoCard}
-                  />
-                )}
-                <View style={styles.employeeInfo}>
-                  <Text style={styles.employeeNameCard}>{salary.employee_name}</Text>
-                  <Text style={styles.employeeMatricule}>{salary.matricule}</Text>
-                  <Chip mode="outlined" compact style={styles.typeChip}>
-                    {salary.type_employe}
-                  </Chip>
-                </View>
-              </View>
-              <Chip
-                mode="flat"
-                style={[
-                  styles.statusChipCard,
-                  { backgroundColor: getStatusColor(salary.statut_paiement) }
-                ]}
-                textStyle={{ color: '#FFF', fontSize: 11 }}
-              >
-                {salary.statut_paiement}
-              </Chip>
-            </View>
-
-            <View style={styles.salaryCardAmounts}>
-              <View style={styles.amountItem}>
-                <Text style={styles.amountItemLabel}>Brut</Text>
-                <Text style={styles.amountItemValue}>
-                  {formatCurrency(salary.salaire_brut)}
-                </Text>
-              </View>
-              <View style={styles.amountItem}>
-                <Text style={styles.amountItemLabel}>Net</Text>
-                <Text style={[styles.amountItemValue, styles.netAmount]}>
-                  {formatCurrency(salary.salaire_net)}
-                </Text>
-              </View>
-            </View>
-
-            {activeSalaryTab === 'paid' && salary.date_paiement && (
-              <View style={styles.salaryCardFooter}>
-                <View style={styles.paymentInfo}>
-                  <MaterialIcons name="event" size={16} color="#7F8C8D" />
-                  <Text style={styles.paymentInfoText}>
-                    Payé le {new Date(salary.date_paiement).toLocaleDateString('fr-FR')}
-                  </Text>
-                </View>
-                {salary.reference_paiement && (
-                  <Text style={styles.paymentReference}>
-                    Réf: {salary.reference_paiement}
-                  </Text>
-                )}
-              </View>
-            )}
-
-            {activeSalaryTab === 'notPaid' && salary.jours_attente && (
-              <View style={styles.waitingInfo}>
-                <MaterialIcons name="schedule" size={16} color="#F39C12" />
-                <Text style={styles.waitingText}>
-                  En attente depuis {salary.jours_attente} jour{salary.jours_attente > 1 ? 's' : ''}
-                </Text>
-              </View>
-            )}
-
-            <View style={styles.salaryCardActions}>
-              <Button
-                mode="outlined"
-                icon="eye"
-                onPress={() => handleViewSalaryDetails(salary)}
-                style={styles.cardButton}
-              >
-                Détails
-              </Button>
-              {activeSalaryTab === 'notPaid' && (
-                <Button
-                  mode="contained"
-                  icon="cash"
-                  onPress={() => handleQuickPay(salary)}
-                  style={styles.cardButton}
-                  buttonColor="#2ECC71"
-                >
-                  Payer
-                </Button>
-              )}
-            </View>
-          </Card.Content>
-        </Card>
-      ))}
-    </View>
-  );
-
-  // Demandes de paiement
-  const renderPaymentRequests = () => {
-    if (salariesData.paymentRequests.length === 0) {
-      return (
-        <View style={styles.emptyState}>
-          <MaterialIcons name="inbox" size={64} color="#BDC3C7" />
-          <Text style={styles.emptyStateText}>Aucune demande en attente</Text>
-        </View>
-      );
-    }
-
-    return (
-      <View style={styles.requestsContainer}>
-        {salariesData.paymentRequests.map((request) => (
-          <Card key={request.id} style={styles.requestCard}>
-            <Card.Content>
-              <View style={styles.requestHeader}>
-                <View style={styles.requestEmployee}>
-                  {request.employe_photo && (
-                    <Image
-                      source={{ uri: request.employe_photo }}
-                      style={styles.employeePhotoRequest}
-                    />
-                  )}
-                  <View>
-                    <Text style={styles.requestEmployeeName}>{request.employe_nom}</Text>
-                    <Text style={styles.requestMatricule}>{request.matricule}</Text>
-                  </View>
-                </View>
-                <View style={styles.requestWaiting}>
-                  <MaterialIcons name="schedule" size={20} color="#F39C12" />
-                  <Text style={styles.requestDays}>{request.jours_attente}j</Text>
-                </View>
-              </View>
-
-              <View style={styles.requestBody}>
-                <View style={styles.requestAmount}>
-                  <Text style={styles.requestAmountLabel}>Montant demandé</Text>
-                  <Text style={styles.requestAmountValue}>
-                    {formatCurrency(request.montant)}
-                  </Text>
-                </View>
-
-                {request.justification && (
-                  <View style={styles.requestJustification}>
-                    <Text style={styles.requestJustificationLabel}>Justification:</Text>
-                    <Text style={styles.requestJustificationText}>
-                      {request.justification}
-                    </Text>
-                  </View>
-                )}
-
-                <View style={styles.requestMeta}>
-                  <Text style={styles.requestDate}>
-                    Demandé le {new Date(request.date_demande).toLocaleDateString('fr-FR')}
-                  </Text>
-                  <Chip mode="outlined" compact>
-                    {request.urgence}
-                  </Chip>
-                </View>
-              </View>
-
-              <View style={styles.requestActions}>
-                <Button
-                  mode="outlined"
-                  icon="close"
-                  onPress={() => handleRejectRequest(request)}
-                  style={styles.requestButton}
-                  textColor="#E74C3C"
-                >
-                  Rejeter
-                </Button>
-                <Button
-                  mode="contained"
-                  icon="check"
-                  onPress={() => handleApproveRequest(request)}
-                  style={styles.requestButton}
-                  buttonColor="#2ECC71"
-                >
-                  Approuver & Payer
-                </Button>
-              </View>
-            </Card.Content>
-          </Card>
-        ))}
-      </View>
-    );
-  };
-
-  // Analytiques - Statistiques annuelles
-  const renderAnalytics = () => {
-    if (!salariesData.statistics) return null;
-
-    const { evolution_mensuelle, par_type_employe, taux_confirmation } = salariesData.statistics;
-
-    return (
-      <ScrollView style={styles.analyticsContainer}>
-        {/* Évolution mensuelle */}
-        <Card style={[styles.card, styles.chartCard]}>
-          <Card.Content>
-            <Title style={styles.cardTitle}>Évolution Mensuelle des Salaires</Title>
-
-            {evolution_mensuelle && evolution_mensuelle.length > 0 && (
-              <LineChart
-                data={{
-                  labels: evolution_mensuelle.map(m => `M${m.mois}`),
-                  datasets: [{
-                    data: evolution_mensuelle.map(m => parseFloat(m.total_net)),
-                    color: (opacity = 1) => `rgba(46, 204, 113, ${opacity})`,
-                    strokeWidth: 2
-                  }]
-                }}
-                width={isWeb ? Math.min(screenWidth - 100, 800) : screenWidth - 70}
-                height={250}
-                chartConfig={{
-                  backgroundColor: '#FFF',
-                  backgroundGradientFrom: '#FFF',
-                  backgroundGradientTo: '#FFF',
-                  decimalPlaces: 0,
-                  color: (opacity = 1) => `rgba(46, 204, 113, ${opacity})`,
-                  labelColor: (opacity = 1) => `rgba(44, 62, 80, ${opacity})`,
-                  propsForDots: {
-                    r: '5',
-                    strokeWidth: '2',
-                    stroke: '#2ECC71'
-                  }
-                }}
-                bezier
-                style={styles.chart}
-              />
-            )}
-
-            <View style={styles.monthlyStatsGrid}>
-              {evolution_mensuelle && evolution_mensuelle.map((month, index) => (
-                <View key={index} style={styles.monthlyStatCard}>
-                  <Text style={styles.monthlyStatMonth}>Mois {month.mois}</Text>
-                  <Text style={styles.monthlyStatEmployees}>
-                    {month.nombre_employes} employés
-                  </Text>
-                  <Text style={styles.monthlyStatAmount}>
-                    {formatCurrency(month.total_net)}
-                  </Text>
-                  <View style={styles.monthlyStatDetails}>
-                    <Text style={styles.monthlyStatDetail}>
-                      Payés: {month.payes}
-                    </Text>
-                    {month.delai_moyen_paiement && (
-                      <Text style={styles.monthlyStatDetail}>
-                        Délai: {Math.round(month.delai_moyen_paiement)}j
-                      </Text>
-                    )}
-                  </View>
-                </View>
-              ))}
-            </View>
-          </Card.Content>
-        </Card>
-
-        {/* Par type d'employé */}
-        <Card style={[styles.card, styles.chartCard]}>
-          <Card.Content>
-            <Title style={styles.cardTitle}>Répartition par Type d'Employé</Title>
-
-            {par_type_employe && par_type_employe.length > 0 && (
-              <>
-                <PieChart
-                  data={par_type_employe.map((type, index) => ({
-                    name: type.type_employe,
-                    population: parseFloat(type.total_annuel),
-                    color: getPieChartColor(index),
-                    legendFontColor: '#7F8C8D',
-                    legendFontSize: 12
-                  }))}
-                  width={isWeb ? Math.min(screenWidth - 100, 800) : screenWidth - 70}
-                  height={220}
-                  chartConfig={{
-                    color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`
-                  }}
-                  accessor="population"
-                  backgroundColor="transparent"
-                  paddingLeft="15"
-                  absolute
-                />
-
-                <View style={styles.typeStatsTable}>
-                  {par_type_employe.map((type, index) => (
-                    <View key={index} style={styles.typeStatRow}>
-                      <View style={styles.typeStatLeft}>
-                        <View style={[
-                          styles.typeStatColor,
-                          { backgroundColor: getPieChartColor(index) }
-                        ]} />
-                        <View>
-                          <Text style={styles.typeStatName}>{type.type_employe}</Text>
-                          <Text style={styles.typeStatCount}>
-                            {type.nombre_employes} employé{type.nombre_employes > 1 ? 's' : ''}
-                          </Text>
-                        </View>
-                      </View>
-                      <View style={styles.typeStatRight}>
-                        <Text style={styles.typeStatAmount}>
-                          {formatCurrency(type.total_annuel)}
-                        </Text>
-                        <Text style={styles.typeStatAverage}>
-                          Moy: {formatCurrency(type.salaire_net_moyen)}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              </>
-            )}
-          </Card.Content>
-        </Card>
-
-        {/* Taux de confirmation */}
-        <Card style={[styles.card]}>
-          <Card.Content>
-            <Title style={styles.cardTitle}>Taux de Confirmation des Réceptions</Title>
-
-            <View style={styles.confirmationStats}>
-              <View style={styles.confirmationStatItem}>
-                <Text style={styles.confirmationStatLabel}>Salaires Payés</Text>
-                <Text style={styles.confirmationStatValue}>
-                  {taux_confirmation.total_salaires_payes || 0}
-                </Text>
-              </View>
-              <View style={styles.confirmationStatItem}>
-                <Text style={styles.confirmationStatLabel}>Confirmés</Text>
-                <Text style={[styles.confirmationStatValue, { color: '#2ECC71' }]}>
-                  {taux_confirmation.total_confirmes || 0}
-                </Text>
-              </View>
-              <View style={styles.confirmationStatItem}>
-                <Text style={styles.confirmationStatLabel}>Taux</Text>
-                <Text style={[styles.confirmationStatValue, { color: '#3498DB' }]}>
-                  {taux_confirmation.taux_confirmation || 0}%
-                </Text>
-              </View>
-            </View>
-
-            <ProgressBar
-              progress={(taux_confirmation.taux_confirmation || 0) / 100}
-              color="#2ECC71"
-              style={styles.confirmationProgressBar}
-            />
-          </Card.Content>
-        </Card>
-      </ScrollView>
-    );
-  };
-
-  // Section Rapports
-  const renderReports = () => (
-    <View style={styles.reportsContainer}>
-      <Card style={styles.card}>
-        <Card.Content>
-          <Title style={styles.cardTitle}>Générer un Rapport</Title>
-          <Paragraph style={styles.cardSubtitle}>
-            Sélectionnez le type de rapport à générer
-          </Paragraph>
-
-          <View style={styles.reportOptions}>
-            <TouchableOpacity
-              style={styles.reportOption}
-              onPress={() => handleGenerateReport('complete', 'excel')}
-            >
-              <MaterialIcons name="insert-drive-file" size={48} color="#27AE60" />
-              <Text style={styles.reportOptionTitle}>Rapport Complet</Text>
-              <Text style={styles.reportOptionDesc}>
-                Tous les salaires avec détails
-              </Text>
-              <Button mode="contained" icon="download" buttonColor="#27AE60">
-                Excel
-              </Button>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.reportOption}
-              onPress={() => handleGenerateReport('salaires', 'excel')}
-            >
-              <MaterialIcons name="table-chart" size={48} color="#3498DB" />
-              <Text style={styles.reportOptionTitle}>Liste Salaires</Text>
-              <Text style={styles.reportOptionDesc}>
-                Liste simple des salaires
-              </Text>
-              <Button mode="contained" icon="download" buttonColor="#3498DB">
-                Excel
-              </Button>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.reportOption}
-              onPress={() => handleGenerateReport('statistiques', 'excel')}
-            >
-              <MaterialIcons name="pie-chart" size={48} color="#9B59B6" />
-              <Text style={styles.reportOptionTitle}>Statistiques</Text>
-              <Text style={styles.reportOptionDesc}>
-                Analyses et graphiques
-              </Text>
-              <Button mode="contained" icon="download" buttonColor="#9B59B6">
-                Excel
-              </Button>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.reportOption}
-              onPress={() => handleGenerateReport('paiements', 'excel')}
-            >
-              <MaterialIcons name="payment" size={48} color="#E67E22" />
-              <Text style={styles.reportOptionTitle}>Paiements</Text>
-              <Text style={styles.reportOptionDesc}>
-                Historique des paiements
-              </Text>
-              <Button mode="contained" icon="download" buttonColor="#E67E22">
-                Excel
-              </Button>
-            </TouchableOpacity>
-          </View>
-        </Card.Content>
-      </Card>
-
-      {/* Rapports récents */}
-      <Card style={styles.card}>
-        <Card.Content>
-          <Title style={styles.cardTitle}>Rapports Récents</Title>
-          <Paragraph style={styles.emptyStateText}>
-            Les rapports générés apparaîtront ici
-          </Paragraph>
-        </Card.Content>
-      </Card>
-    </View>
-  );
-
-  // ==================== FONCTIONS UTILITAIRES ====================
-
-  const getGridColumns = () => {
-    if (isDesktop) return 4;
-    if (isTablet) return 3;
-    return 2;
   };
 
   const formatCurrency = (amount) => {
@@ -1407,79 +584,737 @@ const DashboardManagerScreen = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'payé': return '#2ECC71';
-      case 'calculé': return '#F39C12';
-      case 'reporté': return '#E74C3C';
-      default: return '#95A5A6';
+      case 'payé': return COLORS.statusPaid;
+      case 'calculé': return COLORS.statusPending;
+      case 'reporté': return COLORS.error;
+      default: return COLORS.textLight;
     }
   };
 
-  const getPieChartColor = (index) => {
-    const colors = ['#2ECC71', '#3498DB', '#9B59B6', '#E67E22', '#E74C3C', '#1ABC9C'];
+  const getPieChartColors = (index) => {
+    const colors = [COLORS.chart1, COLORS.chart2, COLORS.chart3, COLORS.chart4, COLORS.chart5, COLORS.chart6];
     return colors[index % colors.length];
   };
 
-  const toggleSelectSalary = (salaryId) => {
-    setSelectedSalaries(prev =>
-      prev.includes(salaryId)
-        ? prev.filter(id => id !== salaryId)
-        : [...prev, salaryId]
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadAllData();
+  }, [selectedPeriod]);
+
+  // ==================== RENDER COMPONENTS ====================
+
+  const renderHeader = () => (
+    <LinearGradient
+      colors={[COLORS.gradientStart, COLORS.gradientEnd]}
+      style={styles.header}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+    >
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.gradientStart} />
+
+      <View style={styles.headerTop}>
+        <View style={styles.headerLeft}>
+          <Avatar.Icon
+            size={45}
+            icon="view-dashboard"
+            style={styles.headerIcon}
+            color={COLORS.primary}
+          />
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>Dashboard Manager</Text>
+            <Text style={styles.headerSubtitle}>
+              {new Date().toLocaleDateString('fr-FR', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long'
+              })}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.headerActions}>
+          <Menu
+            visible={showPeriodMenu}
+            onDismiss={() => setShowPeriodMenu(false)}
+            anchor={
+              <IconButton
+                icon="calendar-range"
+                iconColor="#FFF"
+                size={24}
+                onPress={() => setShowPeriodMenu(true)}
+              />
+            }
+          >
+            <Menu.Item
+              onPress={() => { setSelectedPeriod('week'); setShowPeriodMenu(false); }}
+              title="Cette semaine"
+            />
+            <Menu.Item
+              onPress={() => { setSelectedPeriod('month'); setShowPeriodMenu(false); }}
+              title="Ce mois"
+            />
+            <Menu.Item
+              onPress={() => { setSelectedPeriod('year'); setShowPeriodMenu(false); }}
+              title="Cette année"
+            />
+          </Menu>
+          <IconButton
+            icon="bell-outline"
+            iconColor="#FFF"
+            size={24}
+            onPress={() => navigation.navigate('Notifications')}
+          />
+          <IconButton
+            icon="email-outline"
+            iconColor="#FFF"
+            size={24}
+            onPress={() => setCommunicationModalVisible(true)}
+          />
+          <IconButton
+            icon="refresh"
+            iconColor="#FFF"
+            size={24}
+            onPress={() => loadAllData()}
+          />
+        </View>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tabsContainer}
+        contentContainerStyle={styles.tabsContent}
+      >
+        {[
+          { key: 'overview', label: 'Vue d\'ensemble', icon: 'view-dashboard' },
+          { key: 'salaries', label: 'Salaires', icon: 'cash-multiple' },
+          { key: 'analytics', label: 'Statistiques', icon: 'chart-line' },
+          { key: 'reports', label: 'Rapports', icon: 'file-document' }
+        ].map(tab => (
+          <TouchableOpacity
+            key={tab.key}
+            style={[
+              styles.tab,
+              activeTab === tab.key && styles.tabActive
+            ]}
+            onPress={() => setActiveTab(tab.key)}
+            activeOpacity={0.7}
+          >
+            <MaterialIcons
+              name={tab.icon}
+              size={20}
+              color={activeTab === tab.key ? COLORS.primary : 'rgba(255,255,255,0.8)'}
+            />
+            <Text style={[
+              styles.tabLabel,
+              activeTab === tab.key && styles.tabLabelActive
+            ]}>
+              {tab.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </LinearGradient>
+  );
+
+  const renderKPICards = () => {
+    if (!dashboardData) return null;
+
+    const kpis = [
+      {
+        title: 'Employés Actifs',
+        value: dashboardData.kpis?.employes_actifs || 0,
+        icon: 'group',
+        gradient: ['#66BB6A', '#43A047'],
+        onPress: () => navigation.navigate('EquipeRH')
+      },
+      {
+        title: 'Présences Aujourd\'hui',
+        value: dashboardData.kpis?.presences_aujourdhui || 0,
+        icon: 'check-circle',
+        gradient: ['#42A5F5', '#1E88E5'],
+        percentage: dashboardData.kpis?.employes_actifs > 0
+          ? Math.round((dashboardData.kpis?.presences_aujourdhui / dashboardData.kpis?.employes_actifs) * 100)
+          : 0,
+        onPress: () => navigation.navigate('EquipeRH', { tab: 'presences' })
+      },
+      {
+        title: 'Demandes en Attente',
+        value: dashboardData.kpis?.demandes_en_attente || 0,
+        icon: 'access-time',
+        gradient: ['#FFA726', '#FB8C00'],
+        onPress: () => navigation.navigate('Notifications')
+      },
+      {
+        title: 'Budget Utilisé',
+        value: `${dashboardData.kpis?.budget_utilise || 0}%`,
+        icon: 'account-balance-wallet',
+        gradient: ['#FF6F00', '#E65100'],
+        progress: dashboardData.kpis?.budget_utilise || 0,
+        onPress: () => navigation.navigate('FinancierDept')
+      }
+    ];
+
+    return (
+      <View style={styles.kpiContainer}>
+        {kpis.map((kpi, index) => (
+          <TouchableOpacity
+            key={index}
+            style={styles.kpiCard}
+            onPress={kpi.onPress}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={kpi.gradient}
+              style={styles.kpiGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <View style={styles.kpiHeader}>
+                <View style={styles.kpiIconContainer}>
+                  <MaterialIcons name={kpi.icon} size={28} color="#FFF" />
+                </View>
+              </View>
+
+              <View style={styles.kpiBody}>
+                <Text style={styles.kpiValue}>{kpi.value}</Text>
+                <Text style={styles.kpiTitle}>{kpi.title}</Text>
+
+                {kpi.percentage !== undefined && (
+                  <View style={styles.kpiPercentageContainer}>
+                    <Text style={styles.kpiPercentage}>{kpi.percentage}% présent</Text>
+                  </View>
+                )}
+
+                {kpi.progress !== undefined && (
+                  <View style={styles.kpiProgressContainer}>
+                    <View style={styles.kpiProgressBar}>
+                      <View
+                        style={[
+                          styles.kpiProgressFill,
+                          { width: `${kpi.progress}%` }
+                        ]}
+                      />
+                    </View>
+                  </View>
+                )}
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+        ))}
+      </View>
     );
   };
 
-  const toggleSelectAll = () => {
-    const currentData = activeSalaryTab === 'notPaid'
-      ? salariesData.notPaid
-      : salariesData.detailed;
+  const renderSalariesOverview = () => {
+    if (!salariesData.overview) return null;
 
-    if (selectedSalaries.length === currentData.length) {
-      setSelectedSalaries([]);
-    } else {
-      setSelectedSalaries(currentData.map(s => s.id));
+    const { stats, repartition } = salariesData.overview;
+    const paymentProgress = stats?.total_employes > 0
+      ? (stats?.employes_payes / stats?.total_employes) * 100
+      : 0;
+
+    return (
+      <Card style={styles.overviewCard}>
+        <Card.Content>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardHeaderLeft}>
+              <MaterialIcons name="account-balance-wallet" size={24} color={COLORS.primary} />
+              <Title style={styles.cardTitle}>Aperçu des Salaires</Title>
+            </View>
+            <Chip
+              icon="calendar"
+              mode="outlined"
+              style={styles.periodChip}
+              textStyle={styles.periodChipText}
+            >
+              {new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+            </Chip>
+          </View>
+
+          <View style={styles.statsGrid}>
+            <Surface style={[styles.statCard, { backgroundColor: '#E8F5E9' }]}>
+              <MaterialIcons name="people" size={32} color={COLORS.success} />
+              <Text style={styles.statValue}>{stats?.total_employes || 0}</Text>
+              <Text style={styles.statLabel}>Total Employés</Text>
+            </Surface>
+
+            <Surface style={[styles.statCard, { backgroundColor: '#E3F2FD' }]}>
+              <MaterialIcons name="check-circle" size={32} color={COLORS.info} />
+              <Text style={styles.statValue}>{stats?.employes_payes || 0}</Text>
+              <Text style={styles.statLabel}>Payés</Text>
+            </Surface>
+
+            <Surface style={[styles.statCard, { backgroundColor: '#FFF3E0' }]}>
+              <MaterialIcons name="pending" size={32} color={COLORS.warning} />
+              <Text style={styles.statValue}>{stats?.employes_non_payes || 0}</Text>
+              <Text style={styles.statLabel}>En Attente</Text>
+            </Surface>
+
+            <Surface style={[styles.statCard, { backgroundColor: '#FCE4EC' }]}>
+              <MaterialIcons name="notifications-active" size={32} color={COLORS.error} />
+              <Text style={styles.statValue}>{salariesData.overview?.demandes_en_attente || 0}</Text>
+              <Text style={styles.statLabel}>Demandes</Text>
+            </Surface>
+          </View>
+
+          <Divider style={styles.divider} />
+
+          <View style={styles.amountsSection}>
+            <View style={styles.amountRow}>
+              <View style={styles.amountLabelContainer}>
+                <MaterialIcons name="trending-up" size={20} color={COLORS.textSecondary} />
+                <Text style={styles.amountLabel}>Total Brut</Text>
+              </View>
+              <Text style={[styles.amountValue, { color: COLORS.primary }]}>
+                {formatCurrency(stats?.total_brut || 0)}
+              </Text>
+            </View>
+
+            <View style={styles.amountRow}>
+              <View style={styles.amountLabelContainer}>
+                <MaterialIcons name="account-balance" size={20} color={COLORS.textSecondary} />
+                <Text style={styles.amountLabel}>Total Net</Text>
+              </View>
+              <Text style={[styles.amountValue, { color: COLORS.success }]}>
+                {formatCurrency(stats?.total_net || 0)}
+              </Text>
+            </View>
+
+            <View style={styles.amountRow}>
+              <View style={styles.amountLabelContainer}>
+                <MaterialIcons name="remove-circle" size={20} color={COLORS.textSecondary} />
+                <Text style={styles.amountLabel}>INSS</Text>
+              </View>
+              <Text style={[styles.amountValue, { color: COLORS.error }]}>
+                {formatCurrency(stats?.total_inss || 0)}
+              </Text>
+            </View>
+
+            <Divider style={styles.divider} />
+
+            <View style={styles.amountRow}>
+              <View style={styles.amountLabelContainer}>
+                <MaterialIcons name="check-circle" size={20} color={COLORS.success} />
+                <Text style={[styles.amountLabel, { fontWeight: 'bold' }]}>Montant Payé</Text>
+              </View>
+              <Text style={[styles.amountValue, styles.amountHighlight, { color: COLORS.success }]}>
+                {formatCurrency(stats?.montant_paye || 0)}
+              </Text>
+            </View>
+
+            <View style={styles.amountRow}>
+              <View style={styles.amountLabelContainer}>
+                <MaterialIcons name="pending" size={20} color={COLORS.warning} />
+                <Text style={[styles.amountLabel, { fontWeight: 'bold' }]}>Montant Restant</Text>
+              </View>
+              <Text style={[styles.amountValue, styles.amountHighlight, { color: COLORS.warning }]}>
+                {formatCurrency(stats?.montant_restant || 0)}
+              </Text>
+            </View>
+          </View>
+
+          <Divider style={styles.divider} />
+
+          <View style={styles.progressSection}>
+            <View style={styles.progressHeader}>
+              <Text style={styles.progressLabel}>Progression des paiements</Text>
+              <Text style={styles.progressPercentage}>{Math.round(paymentProgress)}%</Text>
+            </View>
+            <ProgressBar
+              progress={paymentProgress / 100}
+              color={COLORS.success}
+              style={styles.progressBar}
+            />
+            <Text style={styles.progressSubtext}>
+              {stats?.employes_payes || 0} sur {stats?.total_employes || 0} employés payés
+            </Text>
+          </View>
+
+          {repartition && repartition.length > 0 && (
+            <>
+              <Divider style={styles.divider} />
+              <View style={styles.repartitionSection}>
+                <Text style={styles.sectionTitle}>Répartition par Type</Text>
+                {repartition.map((item, index) => (
+                  <Surface key={index} style={styles.repartitionCard} elevation={1}>
+                    <View style={styles.repartitionHeader}>
+                      <Chip mode="outlined" compact textStyle={{ fontSize: 12 }}>
+                        {item.type_employe}
+                      </Chip>
+                      <Text style={styles.repartitionCount}>
+                        {item.nombre} employé{item.nombre > 1 ? 's' : ''}
+                      </Text>
+                    </View>
+                    <View style={styles.repartitionBody}>
+                      <View style={styles.repartitionStats}>
+                        <View style={styles.repartitionStat}>
+                          <Text style={styles.repartitionStatLabel}>Payés</Text>
+                          <Text style={[styles.repartitionStatValue, { color: COLORS.success }]}>
+                            {item.payes}
+                          </Text>
+                        </View>
+                        <View style={styles.repartitionStat}>
+                          <Text style={styles.repartitionStatLabel}>En attente</Text>
+                          <Text style={[styles.repartitionStatValue, { color: COLORS.warning }]}>
+                            {item.non_payes}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={styles.repartitionAmount}>
+                        {formatCurrency(item.total_net || 0)}
+                      </Text>
+                    </View>
+                  </Surface>
+                ))}
+              </View>
+            </>
+          )}
+        </Card.Content>
+      </Card>
+    );
+  };
+
+  const renderSalaryTabs = () => (
+    <View style={styles.salaryTabsContainer}>
+      {[
+        { key: 'all', label: 'Tous', count: salariesData.detailed.length, icon: 'format-list-bulleted' },
+        { key: 'notPaid', label: 'Non Payés', count: salariesData.notPaid.length, icon: 'clock-alert-outline' },
+        { key: 'paid', label: 'Payés', count: salariesData.paid.length, icon: 'check-circle-outline' },
+        { key: 'requests', label: 'Demandes', count: salariesData.paymentRequests.length, icon: 'message-alert-outline' },
+        { key: 'noConfirm', label: 'Sans Confirm.', count: salariesData.withoutConfirmation.length, icon: 'alert-circle-outline' }
+      ].map(tab => (
+        <TouchableOpacity
+          key={tab.key}
+          style={[
+            styles.salaryTab,
+            activeSalaryTab === tab.key && styles.salaryTabActive
+          ]}
+          onPress={() => setActiveSalaryTab(tab.key)}
+          activeOpacity={0.7}
+        >
+          <MaterialIcons
+            name={tab.icon}
+            size={18}
+            color={activeSalaryTab === tab.key ? COLORS.primary : COLORS.textSecondary}
+          />
+          <Text style={[
+            styles.salaryTabLabel,
+            activeSalaryTab === tab.key && styles.salaryTabLabelActive
+          ]}>
+            {tab.label}
+          </Text>
+          {tab.count > 0 && (
+            <Badge
+              style={[
+                styles.salaryTabBadge,
+                activeSalaryTab === tab.key && styles.salaryTabBadgeActive
+              ]}
+            >
+              {tab.count}
+            </Badge>
+          )}
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  const renderSalariesList = () => {
+    let dataToDisplay = [];
+
+    switch (activeSalaryTab) {
+      case 'all': dataToDisplay = salariesData.detailed; break;
+      case 'notPaid': dataToDisplay = salariesData.notPaid; break;
+      case 'paid': dataToDisplay = salariesData.paid; break;
+      case 'requests': return renderPaymentRequests();
+      case 'noConfirm': dataToDisplay = salariesData.withoutConfirmation; break;
+      default: dataToDisplay = salariesData.detailed;
     }
-  };
 
-  const handleViewSalaryDetails = (salary) => {
-    setSelectedSalary(salary);
-    setShowSalaryDetailsModal(true);
-  };
+    if (dataToDisplay.length === 0) {
+      return (
+        <View style={styles.emptyState}>
+          <MaterialIcons name="inbox" size={64} color={COLORS.textLight} />
+          <Text style={styles.emptyStateText}>Aucun salaire à afficher</Text>
+        </View>
+      );
+    }
 
-  const handleQuickPay = (salary) => {
-    Alert.alert(
-      'Payer le salaire',
-      `Confirmer le paiement de ${formatCurrency(salary.salaire_net)} à ${salary.employee_name}?`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Payer',
-          onPress: () => {
-            // Ouvrir modale de paiement avec les détails
-            handlePaySalary(salary.id, {
-              mode_paiement: 'virement',
-              date_paiement: new Date().toISOString().split('T')[0]
-            });
-          }
-        }
-      ]
+    return (
+      <View style={styles.salariesListContainer}>
+        {selectionMode && selectedSalaries.length > 0 && (
+          <Surface style={styles.selectionBar} elevation={2}>
+            <Text style={styles.selectionCount}>{selectedSalaries.length} sélectionné(s)</Text>
+            <View style={styles.selectionActions}>
+              <Button
+                mode="contained"
+                icon="cash-multiple"
+                onPress={() => setShowPaymentModal(true)}
+                style={styles.selectionButton}
+                buttonColor={COLORS.success}
+                compact
+              >
+                Payer
+              </Button>
+              <Button
+                mode="outlined"
+                onPress={() => {
+                  setSelectionMode(false);
+                  setSelectedSalaries([]);
+                }}
+                compact
+              >
+                Annuler
+              </Button>
+            </View>
+          </Surface>
+        )}
+
+        <ScrollView style={styles.salariesScroll}>
+          {dataToDisplay.map((salary) => (
+            <Card key={salary.id} style={styles.salaryItemCard}>
+              <Card.Content>
+                <View style={styles.salaryItemHeader}>
+                  {selectionMode && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setSelectedSalaries(prev =>
+                          prev.includes(salary.id)
+                            ? prev.filter(id => id !== salary.id)
+                            : [...prev, salary.id]
+                        );
+                      }}
+                      style={styles.salaryCheckbox}
+                    >
+                      <MaterialIcons
+                        name={selectedSalaries.includes(salary.id) ? "check-box" : "check-box-outline-blank"}
+                        size={24}
+                        color={COLORS.primary}
+                      />
+                    </TouchableOpacity>
+                  )}
+
+                  <View style={styles.salaryEmployee}>
+                    <Avatar.Text
+                      size={50}
+                      label={salary.employee_name?.substring(0, 2).toUpperCase() || 'EM'}
+                      style={{ backgroundColor: COLORS.primaryLight }}
+                    />
+                    <View style={styles.salaryEmployeeInfo}>
+                      <Text style={styles.salaryEmployeeName}>{salary.employee_name}</Text>
+                      <Text style={styles.salaryEmployeeMatricule}>{salary.matricule}</Text>
+                      <Chip mode="outlined" compact style={styles.typeChip}>
+                        {salary.type_employe}
+                      </Chip>
+                    </View>
+                  </View>
+
+                  <Chip
+                    mode="flat"
+                    style={[
+                      styles.statusChip,
+                      { backgroundColor: getStatusColor(salary.statut_paiement) }
+                    ]}
+                    textStyle={{ color: '#FFF', fontSize: 11 }}
+                  >
+                    {salary.statut_paiement}
+                  </Chip>
+                </View>
+
+                <Divider style={styles.divider} />
+
+                <View style={styles.salaryAmounts}>
+                  <View style={styles.salaryAmount}>
+                    <Text style={styles.salaryAmountLabel}>Salaire Brut</Text>
+                    <Text style={styles.salaryAmountValue}>
+                      {formatCurrency(salary.salaire_brut)}
+                    </Text>
+                  </View>
+                  <View style={styles.salaryAmount}>
+                    <Text style={styles.salaryAmountLabel}>Salaire Net</Text>
+                    <Text style={[styles.salaryAmountValue, styles.salaryNetAmount]}>
+                      {formatCurrency(salary.salaire_net)}
+                    </Text>
+                  </View>
+                </View>
+
+                {activeSalaryTab === 'paid' && salary.date_paiement && (
+                  <View style={styles.salaryPaymentInfo}>
+                    <MaterialIcons name="event" size={16} color={COLORS.textSecondary} />
+                    <Text style={styles.salaryPaymentText}>
+                      Payé le {new Date(salary.date_paiement).toLocaleDateString('fr-FR')}
+                    </Text>
+                    {salary.reference_paiement && (
+                      <Text style={styles.salaryReference}>• Réf: {salary.reference_paiement}</Text>
+                    )}
+                  </View>
+                )}
+
+                {activeSalaryTab === 'noConfirm' && (
+                  <View style={styles.noConfirmInfo}>
+                    <MaterialIcons name="info-outline" size={16} color={COLORS.warning} />
+                    <Text style={styles.noConfirmText}>
+                      En attente de confirmation de réception
+                    </Text>
+                    <Button
+                      mode="text"
+                      onPress={() => handleSendReminder(salary.id)}
+                      compact
+                      textColor={COLORS.primary}
+                    >
+                      Rappeler
+                    </Button>
+                  </View>
+                )}
+
+                {activeSalaryTab === 'notPaid' && (
+                  <View style={styles.salaryActions}>
+                    <Button
+                      mode="outlined"
+                      icon="eye"
+                      onPress={() => {
+                        setSelectedSalary(salary);
+                        setShowSalaryDetailsModal(true);
+                      }}
+                      style={styles.salaryActionButton}
+                      compact
+                    >
+                      Détails
+                    </Button>
+                    <Button
+                      mode="text"
+                      icon="alert"
+                      onPress={() => handleMarkAsDebt(salary.id)}
+                      style={styles.salaryActionButton}
+                      textColor={COLORS.warning}
+                      compact
+                    >
+                      Marquer Dette
+                    </Button>
+                    <Button
+                      mode="contained"
+                      icon="cash"
+                      onPress={() => {
+                        setSelectedSalary(salary);
+                        setShowPaymentModal(true);
+                      }}
+                      style={styles.salaryActionButton}
+                      buttonColor={COLORS.success}
+                      compact
+                    >
+                      Payer
+                    </Button>
+                  </View>
+                )}
+              </Card.Content>
+            </Card>
+          ))}
+        </ScrollView>
+
+        {!selectionMode && activeSalaryTab === 'notPaid' && dataToDisplay.length > 0 && (
+          <Button
+            mode="outlined"
+            icon="checkbox-marked"
+            onPress={() => setSelectionMode(true)}
+            style={styles.selectModeButton}
+          >
+            Sélectionner Multiple
+          </Button>
+        )}
+      </View>
     );
   };
 
-  const handleBatchPayment = () => {
-    Alert.alert(
-      'Paiement Groupé',
-      `Payer ${selectedSalaries.length} salaire(s)?`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Payer',
-          onPress: () => {
-            handlePayMultipleSalaries({
-              mode_paiement: 'virement',
-              date_paiement: new Date().toISOString().split('T')[0]
-            });
-          }
-        }
-      ]
+  const renderPaymentRequests = () => {
+    if (salariesData.paymentRequests.length === 0) {
+      return (
+        <View style={styles.emptyState}>
+          <MaterialIcons name="inbox" size={64} color={COLORS.textLight} />
+          <Text style={styles.emptyStateText}>Aucune demande en attente</Text>
+        </View>
+      );
+    }
+
+    return (
+      <ScrollView style={styles.requestsScroll}>
+        {salariesData.paymentRequests.map((request) => (
+          <Card key={request.id} style={styles.requestCard}>
+            <Card.Content>
+              <View style={styles.requestHeader}>
+                <View style={styles.requestEmployee}>
+                  <Avatar.Text
+                    size={45}
+                    label={request.employe_nom?.substring(0, 2).toUpperCase() || 'EM'}
+                    style={{ backgroundColor: COLORS.warning }}
+                  />
+                  <View style={styles.requestEmployeeInfo}>
+                    <Text style={styles.requestEmployeeName}>{request.employe_nom}</Text>
+                    <Text style={styles.requestMatricule}>{request.matricule}</Text>
+                  </View>
+                </View>
+                <View style={styles.requestBadge}>
+                  <MaterialIcons name="schedule" size={18} color={COLORS.warning} />
+                  <Text style={styles.requestDays}>{request.jours_attente}j</Text>
+                </View>
+              </View>
+
+              <Divider style={styles.divider} />
+
+              <View style={styles.requestBody}>
+                <Surface style={styles.requestAmount} elevation={0}>
+                  <Text style={styles.requestAmountLabel}>Montant demandé</Text>
+                  <Text style={styles.requestAmountValue}>
+                    {formatCurrency(request.montant)}
+                  </Text>
+                </Surface>
+
+                {request.justification && (
+                  <View style={styles.requestJustification}>
+                    <Text style={styles.requestJustificationLabel}>Justification:</Text>
+                    <Text style={styles.requestJustificationText}>
+                      {request.justification}
+                    </Text>
+                  </View>
+                )}
+
+                <View style={styles.requestMeta}>
+                  <Text style={styles.requestDate}>
+                    {new Date(request.date_demande).toLocaleDateString('fr-FR')}
+                  </Text>
+                  <Chip mode="outlined" compact>
+                    {request.urgence}
+                  </Chip>
+                </View>
+              </View>
+
+              <Divider style={styles.divider} />
+
+              <View style={styles.requestActions}>
+                <Button
+                  mode="outlined"
+                  icon="close"
+                  onPress={() => handleRejectRequest(request)}
+                  style={styles.requestButton}
+                  textColor={COLORS.error}
+                  compact
+                >
+                  Rejeter
+                </Button>
+                <Button
+                  mode="contained"
+                  icon="check"
+                  onPress={() => handleApproveRequest(request)}
+                  style={styles.requestButton}
+                  buttonColor={COLORS.success}
+                  compact
+                >
+                  Approuver
+                </Button>
+              </View>
+            </Card.Content>
+          </Card>
+        ))}
+      </ScrollView>
     );
   };
 
@@ -1495,15 +1330,14 @@ const DashboardManagerScreen = () => {
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-
       Alert.alert('Succès', 'Demande approuvée et salaire payé');
       loadAllData(true);
     } catch (error) {
-      Alert.alert('Erreur', error.response?.data?.error || 'Erreur lors du traitement');
+      Alert.alert('Erreur', 'Impossible de traiter la demande');
     }
   };
 
-  const handleRejectRequest = async (request) => {
+  const handleRejectRequest = (request) => {
     Alert.prompt(
       'Rejeter la demande',
       'Raison du rejet:',
@@ -1512,75 +1346,448 @@ const DashboardManagerScreen = () => {
           const token = await getAuthToken();
           await axios.post(
             `${API_URL}/payment-requests/${request.id}/process`,
-            {
-              action: 'reject',
-              commentaire: reason
-            },
+            { action: 'reject', commentaire: reason },
             { headers: { Authorization: `Bearer ${token}` } }
           );
-
           Alert.alert('Succès', 'Demande rejetée');
           loadAllData(true);
         } catch (error) {
-          Alert.alert('Erreur', 'Erreur lors du rejet');
+          Alert.alert('Erreur', 'Impossible de rejeter');
         }
       }
     );
   };
 
-  const handleSendMessage = async () => {
-    if (!messageSubject.trim() || !messageBody.trim()) {
-      Alert.alert('Erreur', 'Veuillez remplir le sujet et le message');
-      return;
+  const renderAnalytics = () => {
+    if (!salariesData.statistics) {
+      return (
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.emptyStateText}>Chargement des statistiques...</Text>
+        </View>
+      );
     }
 
-    try {
-      setIsSending(true);
-      const token = await getAuthToken();
+    const { evolution_mensuelle, par_type_employe, taux_confirmation } = salariesData.statistics;
 
-      const response = await axios.post(`${API_URL.replace('/api/manager', '')}/api/notifications/contact-admin`, {
-        sujet: messageSubject,
-        message: messageBody
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+    return (
+      <ScrollView style={styles.analyticsContainer}>
+        {/* Évolution Mensuelle */}
+        {evolution_mensuelle && evolution_mensuelle.length > 0 && (
+          <Card style={styles.chartCard}>
+            <Card.Content>
+              <View style={styles.cardHeader}>
+                <MaterialIcons name="trending-up" size={24} color={COLORS.primary} />
+                <Title style={styles.cardTitle}>Évolution Mensuelle des Salaires</Title>
+              </View>
 
-      if (response.data.success) {
-        Alert.alert('Succès', 'Votre message a été envoyé à l\'administration');
-        setCommunicationModalVisible(false);
-        setMessageSubject('');
-        setMessageBody('');
-      } else {
-        Alert.alert('Erreur', response.data.message || 'Impossible d\'envoyer le message');
-      }
-    } catch (error) {
-      console.error('❌ Erreur envoi message:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue lors de l\'envoi');
-    } finally {
-      setIsSending(false);
-    }
+              <LineChart
+                data={{
+                  labels: evolution_mensuelle.map(m => `M${m.mois}`),
+                  datasets: [{
+                    data: evolution_mensuelle.map(m => parseFloat(m.total_net) || 0)
+                  }]
+                }}
+                width={screenWidth - 70}
+                height={220}
+                chartConfig={{
+                  backgroundColor: COLORS.surface,
+                  backgroundGradientFrom: COLORS.surface,
+                  backgroundGradientTo: COLORS.surface,
+                  decimalPlaces: 0,
+                  color: (opacity = 1) => `rgba(30, 136, 229, ${opacity})`,
+                  labelColor: (opacity = 1) => `rgba(33, 33, 33, ${opacity})`,
+                  propsForDots: {
+                    r: '6',
+                    strokeWidth: '2',
+                    stroke: COLORS.primary
+                  }
+                }}
+                bezier
+                style={styles.chart}
+              />
+
+              <Divider style={styles.divider} />
+
+              <View style={styles.monthlyStatsGrid}>
+                {evolution_mensuelle.slice(0, 6).map((month, index) => (
+                  <Surface key={index} style={styles.monthlyStatCard} elevation={1}>
+                    <Text style={styles.monthlyStatMonth}>Mois {month.mois}</Text>
+                    <Text style={styles.monthlyStatEmployees}>
+                      {month.nombre_employes} employés
+                    </Text>
+                    <Text style={styles.monthlyStatAmount}>
+                      {formatCurrency(month.total_net)}
+                    </Text>
+                    <View style={styles.monthlyStatDetails}>
+                      <Text style={styles.monthlyStatDetail}>Payés: {month.payes}</Text>
+                      {month.delai_moyen_paiement && (
+                        <Text style={styles.monthlyStatDetail}>
+                          Délai: {Math.round(month.delai_moyen_paiement)}j
+                        </Text>
+                      )}
+                    </View>
+                  </Surface>
+                ))}
+              </View>
+            </Card.Content>
+          </Card>
+        )}
+
+        {/* Par Type d'Employé */}
+        {par_type_employe && par_type_employe.length > 0 && (
+          <Card style={styles.chartCard}>
+            <Card.Content>
+              <View style={styles.cardHeader}>
+                <MaterialIcons name="pie-chart" size={24} color={COLORS.primary} />
+                <Title style={styles.cardTitle}>Répartition par Type d'Employé</Title>
+              </View>
+
+              <PieChart
+                data={par_type_employe.map((type, index) => ({
+                  name: type.type_employe,
+                  population: parseFloat(type.total_annuel) || 0,
+                  color: getPieChartColors(index),
+                  legendFontColor: COLORS.textSecondary,
+                  legendFontSize: 12
+                }))}
+                width={screenWidth - 70}
+                height={220}
+                chartConfig={{
+                  color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`
+                }}
+                accessor="population"
+                backgroundColor="transparent"
+                paddingLeft="15"
+                absolute
+              />
+
+              <Divider style={styles.divider} />
+
+              <View style={styles.typeStatsTable}>
+                {par_type_employe.map((type, index) => (
+                  <Surface key={index} style={styles.typeStatRow} elevation={1}>
+                    <View style={styles.typeStatLeft}>
+                      <View style={[
+                        styles.typeStatColor,
+                        { backgroundColor: getPieChartColors(index) }
+                      ]} />
+                      <View>
+                        <Text style={styles.typeStatName}>{type.type_employe}</Text>
+                        <Text style={styles.typeStatCount}>
+                          {type.nombre_employes} employé{type.nombre_employes > 1 ? 's' : ''}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.typeStatRight}>
+                      <Text style={styles.typeStatAmount}>
+                        {formatCurrency(type.total_annuel)}
+                      </Text>
+                      <Text style={styles.typeStatAverage}>
+                        Moy: {formatCurrency(type.salaire_net_moyen)}
+                      </Text>
+                    </View>
+                  </Surface>
+                ))}
+              </View>
+            </Card.Content>
+          </Card>
+        )}
+
+        {/* Taux de Confirmation */}
+        <Card style={styles.chartCard}>
+          <Card.Content>
+            <View style={styles.cardHeader}>
+              <MaterialIcons name="verified" size={24} color={COLORS.primary} />
+              <Title style={styles.cardTitle}>Taux de Confirmation</Title>
+            </View>
+
+            <View style={styles.confirmationStats}>
+              <View style={styles.confirmationStatItem}>
+                <Text style={styles.confirmationStatLabel}>Salaires Payés</Text>
+                <Text style={styles.confirmationStatValue}>
+                  {taux_confirmation?.total_salaires_payes || 0}
+                </Text>
+              </View>
+              <View style={styles.confirmationStatItem}>
+                <Text style={styles.confirmationStatLabel}>Confirmés</Text>
+                <Text style={[styles.confirmationStatValue, { color: COLORS.success }]}>
+                  {taux_confirmation?.total_confirmes || 0}
+                </Text>
+              </View>
+              <View style={styles.confirmationStatItem}>
+                <Text style={styles.confirmationStatLabel}>Taux</Text>
+                <Text style={[styles.confirmationStatValue, { color: COLORS.info }]}>
+                  {taux_confirmation?.taux_confirmation || 0}%
+                </Text>
+              </View>
+            </View>
+
+            <ProgressBar
+              progress={(taux_confirmation?.taux_confirmation || 0) / 100}
+              color={COLORS.success}
+              style={styles.confirmationProgressBar}
+            />
+          </Card.Content>
+        </Card>
+
+        {/* Tendance Financière */}
+        {financialTrend && financialTrend.length > 0 && (
+          <Card style={styles.chartCard}>
+            <Card.Content>
+              <View style={styles.cardHeader}>
+                <MaterialIcons name="show-chart" size={24} color={COLORS.primary} />
+                <Title style={styles.cardTitle}>Tendance Financière (6 mois)</Title>
+              </View>
+
+              <BarChart
+                data={{
+                  labels: financialTrend.map(t => t.mois.substring(5)),
+                  datasets: [
+                    {
+                      data: financialTrend.map(t => parseFloat(t.depenses) || 0),
+                      color: (opacity = 1) => `rgba(239, 83, 80, ${opacity})`
+                    },
+                    {
+                      data: financialTrend.map(t => parseFloat(t.revenus) || 0),
+                      color: (opacity = 1) => `rgba(76, 175, 80, ${opacity})`
+                    }
+                  ],
+                  legend: ['Dépenses', 'Revenus']
+                }}
+                width={screenWidth - 70}
+                height={220}
+                chartConfig={{
+                  backgroundColor: COLORS.surface,
+                  backgroundGradientFrom: COLORS.surface,
+                  backgroundGradientTo: COLORS.surface,
+                  decimalPlaces: 0,
+                  color: (opacity = 1) => `rgba(30, 136, 229, ${opacity})`,
+                  labelColor: (opacity = 1) => `rgba(33, 33, 33, ${opacity})`
+                }}
+                style={styles.chart}
+              />
+            </Card.Content>
+          </Card>
+        )}
+
+        {/* Dépenses par Catégorie */}
+        {expensesByCategory && expensesByCategory.length > 0 && (
+          <Card style={styles.chartCard}>
+            <Card.Content>
+              <View style={styles.cardHeader}>
+                <MaterialIcons name="category" size={24} color={COLORS.primary} />
+                <Title style={styles.cardTitle}>Dépenses par Catégorie</Title>
+              </View>
+
+              <PieChart
+                data={expensesByCategory.map((cat, index) => ({
+                  name: cat.categorie,
+                  population: parseFloat(cat.total) || 0,
+                  color: getPieChartColors(index),
+                  legendFontColor: COLORS.textSecondary,
+                  legendFontSize: 12
+                }))}
+                width={screenWidth - 70}
+                height={220}
+                chartConfig={{
+                  color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`
+                }}
+                accessor="population"
+                backgroundColor="transparent"
+                paddingLeft="15"
+                absolute
+              />
+            </Card.Content>
+          </Card>
+        )}
+
+        {/* Revenus par Source */}
+        {revenuesBySource && revenuesBySource.length > 0 && (
+          <Card style={styles.chartCard}>
+            <Card.Content>
+              <View style={styles.cardHeader}>
+                <MaterialIcons name="attach-money" size={24} color={COLORS.primary} />
+                <Title style={styles.cardTitle}>Revenus par Source</Title>
+              </View>
+
+              <PieChart
+                data={revenuesBySource.map((src, index) => ({
+                  name: src.source,
+                  population: parseFloat(src.total) || 0,
+                  color: getPieChartColors(index),
+                  legendFontColor: COLORS.textSecondary,
+                  legendFontSize: 12
+                }))}
+                width={screenWidth - 70}
+                height={220}
+                chartConfig={{
+                  color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`
+                }}
+                accessor="population"
+                backgroundColor="transparent"
+                paddingLeft="15"
+                absolute
+              />
+            </Card.Content>
+          </Card>
+        )}
+      </ScrollView>
+    );
   };
 
-  // ==================== RENDU PRINCIPAL ====================
+  const renderReports = () => {
+    return (
+      <ScrollView style={styles.reportsContainer}>
+        <Card style={styles.card}>
+          <Card.Content>
+            <View style={styles.cardHeader}>
+              <MaterialIcons name="description" size={24} color={COLORS.primary} />
+              <Title style={styles.cardTitle}>Générer un Rapport</Title>
+            </View>
+
+            <Paragraph style={styles.cardSubtitle}>
+              Sélectionnez le type et le format du rapport à générer
+            </Paragraph>
+
+            <Divider style={styles.divider} />
+
+            <Text style={styles.reportSectionTitle}>Type de Rapport</Text>
+            <RadioButton.Group
+              onValueChange={value => setReportType(value)}
+              value={reportType}
+            >
+              <View style={styles.radioItem}>
+                <RadioButton value="complete" color={COLORS.primary} />
+                <Text style={styles.radioLabel}>Rapport Complet (tous les détails)</Text>
+              </View>
+              <View style={styles.radioItem}>
+                <RadioButton value="salaires" color={COLORS.primary} />
+                <Text style={styles.radioLabel}>Liste des Salaires</Text>
+              </View>
+              <View style={styles.radioItem}>
+                <RadioButton value="statistiques" color={COLORS.primary} />
+                <Text style={styles.radioLabel}>Statistiques & Analyses</Text>
+              </View>
+              <View style={styles.radioItem}>
+                <RadioButton value="paiements" color={COLORS.primary} />
+                <Text style={styles.radioLabel}>Historique des Paiements</Text>
+              </View>
+            </RadioButton.Group>
+
+            <Divider style={styles.divider} />
+
+            <Text style={styles.reportSectionTitle}>Format</Text>
+            <View style={styles.formatButtons}>
+              <Button
+                mode={reportFormat === 'excel' ? 'contained' : 'outlined'}
+                icon="file-excel"
+                onPress={() => setReportFormat('excel')}
+                style={styles.formatButton}
+                buttonColor={reportFormat === 'excel' ? COLORS.success : undefined}
+              >
+                Excel (.xlsx)
+              </Button>
+              <Button
+                mode={reportFormat === 'pdf' ? 'contained' : 'outlined'}
+                icon="file-pdf"
+                onPress={() => setReportFormat('pdf')}
+                style={styles.formatButton}
+                buttonColor={reportFormat === 'pdf' ? COLORS.error : undefined}
+              >
+                PDF
+              </Button>
+            </View>
+
+            <Button
+              mode="contained"
+              icon="download"
+              onPress={handleGenerateReport}
+              loading={generatingReport}
+              disabled={generatingReport}
+              style={styles.generateButton}
+              buttonColor={COLORS.primary}
+            >
+              Générer le Rapport
+            </Button>
+          </Card.Content>
+        </Card>
+
+        {/* Quick Actions */}
+        <Card style={styles.card}>
+          <Card.Content>
+            <Title style={styles.cardTitle}>Actions Rapides</Title>
+
+            <TouchableOpacity
+              style={styles.quickActionItem}
+              onPress={() => navigation.navigate('FinancierDept')}
+            >
+              <MaterialIcons name="analytics" size={24} color={COLORS.primary} />
+              <View style={styles.quickActionText}>
+                <Text style={styles.quickActionTitle}>Voir Budget Département</Text>
+                <Text style={styles.quickActionSubtitle}>Consulter les finances</Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={24} color={COLORS.textLight} />
+            </TouchableOpacity>
+
+            <Divider style={styles.divider} />
+
+            <TouchableOpacity
+              style={styles.quickActionItem}
+              onPress={() => navigation.navigate('EquipeRH')}
+            >
+              <MaterialIcons name="people" size={24} color={COLORS.success} />
+              <View style={styles.quickActionText}>
+                <Text style={styles.quickActionTitle}>Gérer l'Équipe</Text>
+                <Text style={styles.quickActionSubtitle}>RH & Présences</Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={24} color={COLORS.textLight} />
+            </TouchableOpacity>
+
+            <Divider style={styles.divider} />
+
+            <TouchableOpacity
+              style={styles.quickActionItem}
+              onPress={() => setShowReportModal(true)}
+            >
+              <MaterialIcons name="file-download" size={24} color={COLORS.accent} />
+              <View style={styles.quickActionText}>
+                <Text style={styles.quickActionTitle}>Exporter les Données</Text>
+                <Text style={styles.quickActionSubtitle}>Télécharger un rapport</Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={24} color={COLORS.textLight} />
+            </TouchableOpacity>
+          </Card.Content>
+        </Card>
+      </ScrollView>
+    );
+  };
+
+  // ==================== MAIN RENDER ====================
 
   if (loading && !dashboardData) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2E86C1" />
+        <ActivityIndicator size="large" color={COLORS.primary} />
         <Text style={styles.loadingText}>Chargement du dashboard...</Text>
       </View>
     );
   }
 
   return (
-    <View style={[styles.container, isWeb && styles.containerWeb]}>
+    <View style={styles.container}>
       {renderHeader()}
 
       <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollViewContent}
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[COLORS.primary]}
+            tintColor={COLORS.primary}
+          />
         }
       >
         {activeTab === 'overview' && (
@@ -1598,21 +1805,131 @@ const DashboardManagerScreen = () => {
         )}
 
         {activeTab === 'analytics' && renderAnalytics()}
-
         {activeTab === 'reports' && renderReports()}
       </ScrollView>
 
       {/* Modales */}
       <Portal>
-        {/* Modale Filtres */}
+        {/* Modale Communication */}
         <Modal
-          visible={showFiltersModal}
-          onDismiss={() => setShowFiltersModal(false)}
+          visible={communicationModalVisible}
+          onDismiss={() => setCommunicationModalVisible(false)}
           contentContainerStyle={styles.modalContainer}
         >
-          <Title>Filtres</Title>
-          {/* Implémenter les filtres ici */}
-          <Button onPress={() => setShowFiltersModal(false)}>Fermer</Button>
+          <View style={styles.modalHeader}>
+            <Title>Contacter l'Administration</Title>
+            <IconButton
+              icon="close"
+              size={24}
+              onPress={() => setCommunicationModalVisible(false)}
+            />
+          </View>
+
+          <TextInput
+            mode="outlined"
+            label="Sujet"
+            value={messageSubject}
+            onChangeText={setMessageSubject}
+            style={styles.modalInput}
+          />
+
+          <TextInput
+            mode="outlined"
+            label="Message"
+            value={messageBody}
+            onChangeText={setMessageBody}
+            multiline
+            numberOfLines={5}
+            style={styles.modalInput}
+          />
+
+          <View style={styles.modalActions}>
+            <Button
+              mode="outlined"
+              onPress={() => setCommunicationModalVisible(false)}
+              disabled={isSending}
+            >
+              Annuler
+            </Button>
+            <Button
+              mode="contained"
+              onPress={handleSendMessage}
+              loading={isSending}
+              disabled={isSending || !messageSubject.trim() || !messageBody.trim()}
+            >
+              Envoyer
+            </Button>
+          </View>
+        </Modal>
+
+        {/* Modale Paiement */}
+        <Modal
+          visible={showPaymentModal}
+          onDismiss={() => setShowPaymentModal(false)}
+          contentContainerStyle={styles.modalContainer}
+        >
+          <View style={styles.modalHeader}>
+            <Title>
+              {selectedSalaries.length > 0
+                ? `Payer ${selectedSalaries.length} salaire(s)`
+                : 'Payer le salaire'
+              }
+            </Title>
+            <IconButton
+              icon="close"
+              size={24}
+              onPress={() => setShowPaymentModal(false)}
+            />
+          </View>
+
+          <TextInput
+            mode="outlined"
+            label="Mode de paiement"
+            value={paymentData.mode_paiement}
+            onChangeText={(text) => setPaymentData(prev => ({ ...prev, mode_paiement: text }))}
+            style={styles.modalInput}
+          />
+
+          <TextInput
+            mode="outlined"
+            label="Date de paiement"
+            value={paymentData.date_paiement}
+            onChangeText={(text) => setPaymentData(prev => ({ ...prev, date_paiement: text }))}
+            style={styles.modalInput}
+          />
+
+          <TextInput
+            mode="outlined"
+            label="Notes (optionnel)"
+            value={paymentData.notes}
+            onChangeText={(text) => setPaymentData(prev => ({ ...prev, notes: text }))}
+            multiline
+            numberOfLines={3}
+            style={styles.modalInput}
+          />
+
+          <View style={styles.modalActions}>
+            <Button
+              mode="outlined"
+              onPress={() => setShowPaymentModal(false)}
+            >
+              Annuler
+            </Button>
+            <Button
+              mode="contained"
+              icon="cash"
+              onPress={() => {
+                if (selectedSalaries.length > 0) {
+                  handlePayMultipleSalaries();
+                } else if (selectedSalary) {
+                  handlePaySalary(selectedSalary.id, paymentData);
+                }
+              }}
+              buttonColor={COLORS.success}
+            >
+              Confirmer
+            </Button>
+          </View>
         </Modal>
 
         {/* Modale Détails Salaire */}
@@ -1623,860 +1940,1245 @@ const DashboardManagerScreen = () => {
         >
           {selectedSalary && (
             <>
-              <Title>Détails du Salaire</Title>
-              {/* Afficher les détails complets */}
-              <Button onPress={() => setShowSalaryDetailsModal(false)}>Fermer</Button>
+              <View style={styles.modalHeader}>
+                <Title>Détails du Salaire</Title>
+                <IconButton
+                  icon="close"
+                  size={24}
+                  onPress={() => setShowSalaryDetailsModal(false)}
+                />
+              </View>
+
+              <View style={styles.detailsContent}>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Employé:</Text>
+                  <Text style={styles.detailValue}>{selectedSalary.employee_name}</Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Matricule:</Text>
+                  <Text style={styles.detailValue}>{selectedSalary.matricule}</Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Type:</Text>
+                  <Text style={styles.detailValue}>{selectedSalary.type_employe}</Text>
+                </View>
+
+                <Divider style={styles.divider} />
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Salaire Brut:</Text>
+                  <Text style={styles.detailValue}>{formatCurrency(selectedSalary.salaire_brut)}</Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>INSS:</Text>
+                  <Text style={[styles.detailValue, { color: COLORS.error }]}>
+                    {formatCurrency(selectedSalary.deduction_inss)}
+                  </Text>
+                </View>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Salaire Net:</Text>
+                  <Text style={[styles.detailValue, { color: COLORS.success, fontWeight: 'bold' }]}>
+                    {formatCurrency(selectedSalary.salaire_net)}
+                  </Text>
+                </View>
+
+                <Divider style={styles.divider} />
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Statut:</Text>
+                  <Chip
+                    mode="flat"
+                    style={[
+                      styles.statusChip,
+                      { backgroundColor: getStatusColor(selectedSalary.statut_paiement) }
+                    ]}
+                    textStyle={{ color: '#FFF' }}
+                  >
+                    {selectedSalary.statut_paiement}
+                  </Chip>
+                </View>
+              </View>
+
+              <Button
+                mode="contained"
+                onPress={() => setShowSalaryDetailsModal(false)}
+                style={{ marginTop: 20 }}
+              >
+                Fermer
+              </Button>
             </>
           )}
-        </Modal>
-
-        {/* Modale Communication Admin */}
-        <Modal
-          visible={communicationModalVisible}
-          onDismiss={() => setCommunicationModalVisible(false)}
-          contentContainerStyle={[styles.commModalContainer, isWeb && { width: 500 }]}
-        >
-          <View style={styles.commModalHeader}>
-            <View style={styles.commModalIconWrapper}>
-              <MaterialIcons name="contact-support" size={24} color="#FFF" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.commModalTitle}>Contacter l'Admin</Text>
-              <Text style={styles.commModalSubtitle}>Envoyez un message à l'administration</Text>
-            </View>
-            <IconButton
-              icon="close"
-              onPress={() => setCommunicationModalVisible(false)}
-            />
-          </View>
-
-          <ScrollView style={styles.commModalBody}>
-            <Text style={styles.commInputLabel}>Sujet</Text>
-            <TextInput
-              mode="outlined"
-              placeholder="Sujet de votre message..."
-              value={messageSubject}
-              onChangeText={setMessageSubject}
-              style={styles.commInput}
-            />
-
-            <Text style={styles.commInputLabel}>Message</Text>
-            <TextInput
-              mode="outlined"
-              placeholder="Votre message détaillé..."
-              value={messageBody}
-              onChangeText={setMessageBody}
-              multiline
-              numberOfLines={6}
-              style={[styles.commInput, { height: 120 }]}
-            />
-          </ScrollView>
-
-          <View style={styles.commModalFooter}>
-            <Button
-              mode="outlined"
-              onPress={() => setCommunicationModalVisible(false)}
-              style={styles.commFooterBtn}
-              disabled={isSending}
-            >
-              Annuler
-            </Button>
-            <Button
-              mode="contained"
-              onPress={handleSendMessage}
-              style={[styles.commFooterBtn, { flex: 2 }]}
-              loading={isSending}
-              disabled={isSending || !messageSubject.trim() || !messageBody.trim()}
-              icon="send"
-            >
-              Envoyer
-            </Button>
-          </View>
         </Modal>
       </Portal>
     </View>
   );
 };
 
-// ==================== STYLES ====================
-
 const styles = StyleSheet.create({
+  // ========================================
+  // 1. CONTENEURS DE BASE
+  // ========================================
   container: {
     flex: 1,
-    backgroundColor: '#F5F6F8',
+    backgroundColor: COLORS.background,
   },
-  containerWeb: {
-    maxWidth: 1400,
-    alignSelf: 'center',
-    width: '100%',
-  },
+
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F6F8',
+    backgroundColor: COLORS.background,
   },
+
   loadingText: {
-    marginTop: 10,
-    color: '#7F8C8D',
-    fontSize: 16,
+    marginTop: 16,
+    fontSize: 15,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
   },
+
+  // ========================================
+  // 2. HEADER MINIMALISTE
+  // ========================================
   header: {
-    backgroundColor: '#2E86C1',
+    backgroundColor: COLORS.surface,
     paddingTop: Platform.OS === 'ios' ? 50 : 20,
-    paddingBottom: 10,
+    paddingBottom: 20,
     paddingHorizontal: 20,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
-  headerWeb: {
-    borderRadius: 0,
-  },
-  headerContent: {
+
+  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 20,
   },
+
   headerLeft: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFF',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.9)',
-    marginTop: 4,
-  },
-  headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
+
+  headerIcon: {
+    backgroundColor: COLORS.surfaceAlt,
+  },
+
+  headerTitleContainer: {
+    marginLeft: 12,
+  },
+
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: COLORS.text,
+    letterSpacing: -0.5,
+  },
+
+  headerSubtitle: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+    fontWeight: '400',
+  },
+
+  headerActions: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+
+  // ========================================
+  // 3. ONGLETS (TABS) PRINCIPAUX
+  // ========================================
   tabsContainer: {
-    maxHeight: 50,
+    marginTop: 16,
+    backgroundColor: COLORS.surface,
   },
+
+  tabsContent: {
+    paddingHorizontal: 20,
+  },
+
   tab: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    marginRight: 10,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    marginRight: 8,
+    borderRadius: 8,
+    backgroundColor: 'transparent',
   },
+
   tabActive: {
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: COLORS.primary,
   },
+
   tabLabel: {
-    color: 'rgba(255,255,255,0.7)',
     marginLeft: 8,
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
+    color: COLORS.textSecondary,
   },
+
   tabLabelActive: {
-    color: '#FFF',
-    fontWeight: 'bold',
+    color: '#FFFFFF',
   },
-  scrollView: {
+
+  // ========================================
+  // 4. CONTENU PRINCIPAL
+  // ========================================
+  content: {
     flex: 1,
   },
-  scrollViewContent: {
+
+  contentContainer: {
     paddingBottom: 30,
   },
+
+  // ========================================
+  // 5. CARTES KPI - AFFICHAGE HORIZONTAL RESPONSIVE
+  // ========================================
   kpiContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    padding: 10,
-    justifyContent: 'space-between',
+    flexDirection: 'row',        // ✅ HORIZONTAL FORCÉ
+    flexWrap: 'nowrap',          // ✅ PAS DE RETOUR À LA LIGNE
+    paddingVertical: 20,
+    paddingLeft: 20,
+    gap: 16,
+    paddingRight: 20,            // ✅ ESPACE À DROITE
   },
-  kpiContainerWeb: {
-    padding: 20,
-  },
+
   kpiCard: {
-    borderRadius: 15,
-    padding: 15,
-    marginBottom: 15,
-    elevation: 3,
-    shadowColor: '#000',
+    width: getCardWidth(),       // ✅ LARGEUR CALCULÉE DYNAMIQUEMENT
+    minWidth: screenWidth < 480 ? screenWidth * 0.65 : 200, // Min pour mobile
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: COLORS.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 2,
   },
+
+  kpiGradient: {
+    borderRadius: 12,
+    padding: 0,
+  },
+
   kpiHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+
+  kpiIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: COLORS.surfaceAlt,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
   },
-  kpiBadge: {
-    backgroundColor: 'rgba(0,0,0,0.3)',
-  },
-  kpiContent: {
+
+  kpiBody: {
     flex: 1,
   },
+
   kpiValue: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#FFF',
+    fontSize: screenWidth < 480 ? 28 : 32, // ✅ Taille adaptative
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 4,
+    letterSpacing: -1,
   },
-  kpiTotal: {
-    fontSize: 18,
-    fontWeight: 'normal',
-    opacity: 0.8,
-  },
+
   kpiTitle: {
-    fontSize: 14,
-    color: '#FFF',
-    marginTop: 5,
-    opacity: 0.9,
+    fontSize: screenWidth < 480 ? 12 : 13, // ✅ Taille adaptative
+    color: COLORS.textSecondary,
+    fontWeight: '500',
   },
-  kpiSubtitle: {
-    fontSize: 11,
-    color: '#FFF',
-    marginTop: 2,
-    opacity: 0.7,
+
+  kpiPercentageContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.divider,
   },
+
   kpiPercentage: {
-    marginTop: 8,
-  },
-  kpiPercentageText: {
-    color: '#FFF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  kpiTrend: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  kpiTrendText: {
-    color: '#FFF',
     fontSize: 12,
-    marginLeft: 4,
-    fontWeight: '600',
+    color: COLORS.textLight,
+    fontWeight: '500',
   },
-  progressBar: {
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 2,
+
+  kpiProgressContainer: {
     marginTop: 8,
+  },
+
+  kpiProgressBar: {
+    height: 4,
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: 2,
     overflow: 'hidden',
   },
-  progressFill: {
+
+  kpiProgressFill: {
     height: '100%',
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.primary,
     borderRadius: 2,
   },
-  card: {
-    marginHorizontal: 10,
-    marginBottom: 15,
-    borderRadius: 15,
-    elevation: 2,
-  },
-  cardWeb: {
+
+  // ========================================
+  // 6. CARTE D'APERÇU
+  // ========================================
+  overviewCard: {
     marginHorizontal: 20,
+    marginBottom: 20,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
+
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  cardSubtitle: {
-    color: '#7F8C8D',
-    marginTop: 5,
-  },
-  periodChip: {
-    backgroundColor: '#F8F9F9',
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
     marginBottom: 20,
   },
-  statsGridWeb: {
-    gap: 15,
-  },
-  statCard: {
-    width: '48%',
-    padding: 15,
-    borderRadius: 12,
+
+  cardHeaderLeft: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
+    flex: 1,
   },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2C3E50',
-    marginTop: 8,
+
+  cardTitle: {
+    marginLeft: 12,
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text,
   },
-  statLabel: {
+
+  cardSubtitle: {
+    color: COLORS.textSecondary,
+    marginTop: 4,
+    fontSize: 14,
+  },
+
+  periodChip: {
+    backgroundColor: COLORS.surfaceAlt,
+    borderWidth: 0,
+  },
+
+  periodChipText: {
     fontSize: 12,
-    color: '#7F8C8D',
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+  },
+
+  // ========================================
+  // 7. GRILLE DE STATISTIQUES - HORIZONTAL RESPONSIVE
+  // ========================================
+  statsGrid: {
+    flexDirection: 'row',        // ✅ HORIZONTAL FORCÉ
+    flexWrap: 'nowrap',          // ✅ PAS DE RETOUR À LA LIGNE
+    gap: 12,
+    marginBottom: 20,
+    paddingRight: 20,            // ✅ ESPACE À DROITE
+  },
+
+  statCard: {
+    width: getStatCardWidth(),   // ✅ LARGEUR CALCULÉE DYNAMIQUEMENT
+    minWidth: screenWidth < 480 ? screenWidth * 0.35 : 120, // Min pour mobile
+    padding: 16,
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  statValue: {
+    fontSize: screenWidth < 480 ? 24 : 28, // ✅ Taille adaptative
+    fontWeight: '700',
+    color: COLORS.text,
+    marginTop: 8,
+    letterSpacing: -0.5,
+  },
+
+  statLabel: {
+    fontSize: screenWidth < 480 ? 11 : 12, // ✅ Taille adaptative
+    color: COLORS.textSecondary,
     marginTop: 4,
     textAlign: 'center',
+    fontWeight: '500',
   },
-  amountsContainer: {
-    backgroundColor: '#F8F9F9',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 15,
+
+  // ========================================
+  // 8. SÉPARATEUR
+  // ========================================
+  divider: {
+    marginVertical: 16,
+    backgroundColor: COLORS.divider,
+    height: 1,
   },
+
+  // ========================================
+  // 9. SECTION DES MONTANTS
+  // ========================================
+  amountsSection: {
+    marginBottom: 16,
+  },
+
   amountRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#ECF0F1',
+    paddingVertical: 10,
   },
+
+  amountLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
   amountLabel: {
     fontSize: 14,
-    color: '#7F8C8D',
-  },
-  amountValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2C3E50',
-  },
-  progressSection: {
-    marginTop: 15,
-  },
-  progressLabel: {
-    fontSize: 14,
-    color: '#2C3E50',
-    marginBottom: 8,
+    color: COLORS.textSecondary,
+    marginLeft: 8,
     fontWeight: '500',
   },
-  progressBarLarge: {
-    height: 10,
-    borderRadius: 5,
-  },
-  repartitionSection: {
-    marginTop: 20,
-  },
-  sectionSubtitle: {
-    fontSize: 16,
+
+  amountValue: {
+    fontSize: 15,
     fontWeight: '600',
-    color: '#2C3E50',
-    marginBottom: 10,
+    color: COLORS.text,
   },
-  repartitionItem: {
+
+  amountHighlight: {
+    fontSize: 17,
+    fontWeight: '700',
+  },
+
+  // ========================================
+  // 10. SECTION DE PROGRESSION
+  // ========================================
+  progressSection: {
+    marginTop: 8,
+  },
+
+  progressHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
-    backgroundColor: '#F8F9F9',
-    borderRadius: 10,
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  repartitionLeft: {
-    flex: 1,
-  },
-  repartitionType: {
+
+  progressLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#2C3E50',
+    color: COLORS.text,
   },
+
+  progressPercentage: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+
+  progressBar: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.surfaceAlt,
+  },
+
+  progressSubtext: {
+    fontSize: 12,
+    color: COLORS.textLight,
+    marginTop: 6,
+  },
+
+  // ========================================
+  // 11. SECTION DE RÉPARTITION
+  // ========================================
+  repartitionSection: {
+    marginTop: 8,
+  },
+
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 12,
+  },
+
+  repartitionCard: {
+    padding: 16,
+    borderRadius: 10,
+    marginBottom: 10,
+    backgroundColor: COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  repartitionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+
   repartitionCount: {
     fontSize: 12,
-    color: '#7F8C8D',
-    marginTop: 2,
+    color: COLORS.textLight,
+    fontWeight: '500',
   },
-  repartitionAmount: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2ECC71',
-  },
-  subTabsContainer: {
+
+  repartitionBody: {
     flexDirection: 'row',
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#ECF0F1',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  subTab: {
+
+  repartitionStats: {
+    flexDirection: 'row',
+    gap: 24,
+  },
+
+  repartitionStat: {
+    alignItems: 'center',
+  },
+
+  repartitionStatLabel: {
+    fontSize: 11,
+    color: COLORS.textLight,
+    marginBottom: 4,
+  },
+
+  repartitionStatValue: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+
+  repartitionAmount: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+
+  // ========================================
+  // 12. ONGLETS DE SALAIRES
+  // ========================================
+  salaryTabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+
+  salaryTab: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    marginRight: 10,
-    borderRadius: 20,
-    backgroundColor: '#F8F9F9',
+    borderRadius: 6,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  subTabActive: {
-    backgroundColor: '#2E86C1',
+
+  salaryTabActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
-  subTabLabel: {
-    fontSize: 14,
-    color: '#7F8C8D',
-    fontWeight: '500',
+
+  salaryTabLabel: {
+    fontSize: 13,
+    marginLeft: 6,
+    color: COLORS.textSecondary,
+    fontWeight: '600',
   },
-  subTabLabelActive: {
-    color: '#FFF',
-    fontWeight: 'bold',
+
+  salaryTabLabelActive: {
+    color: '#FFFFFF',
   },
-  subTabBadge: {
+
+  salaryTabBadge: {
     marginLeft: 8,
-    backgroundColor: '#E74C3C',
+    backgroundColor: COLORS.error,
   },
-  subTabBadgeActive: {
+
+  salaryTabBadgeActive: {
     backgroundColor: 'rgba(255,255,255,0.3)',
   },
+
+  // ========================================
+  // 13. ÉTAT VIDE
+  // ========================================
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
-    minHeight: 300,
+    paddingVertical: 80,
   },
+
   emptyStateText: {
-    marginTop: 15,
-    fontSize: 16,
-    color: '#95A5A6',
+    marginTop: 16,
+    fontSize: 15,
+    color: COLORS.textLight,
     textAlign: 'center',
   },
-  tableCard: {
-    marginHorizontal: 10,
-    marginBottom: 15,
+
+  // ========================================
+  // 14. LISTE DES SALAIRES
+  // ========================================
+  salariesListContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background,
   },
-  tableHeader: {
+
+  selectionBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    padding: 16,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
-  tableTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+
+  selectionCount: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.text,
   },
-  tableActions: {
+
+  selectionActions: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
-  batchButton: {
-    marginRight: 10,
+
+  selectionButton: {
+    marginLeft: 8,
   },
-  checkboxColumn: {
-    width: 50,
+
+  salariesScroll: {
+    flex: 1,
+    padding: 20,
   },
-  tableColumnSmall: {
-    minWidth: 100,
+
+  // ========================================
+  // 15. CARTE D'ÉLÉMENT DE SALAIRE
+  // ========================================
+  salaryItemCard: {
+    marginBottom: 12,
+    backgroundColor: COLORS.surface,
+    borderRadius: 10,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  tableColumnMedium: {
-    minWidth: 150,
-  },
-  tableColumnLarge: {
-    minWidth: 200,
-  },
-  selectedRow: {
-    backgroundColor: '#E3F2FD',
-  },
-  employeeCell: {
+
+  salaryItemHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 12,
   },
-  employeePhoto: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    marginRight: 10,
+
+  salaryCheckbox: {
+    marginRight: 12,
   },
-  employeeName: {
-    fontSize: 14,
-    fontWeight: '500',
+
+  salaryEmployee: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
-  netSalary: {
-    fontWeight: 'bold',
-    color: '#2ECC71',
+
+  salaryEmployeeInfo: {
+    marginLeft: 12,
+    flex: 1,
   },
+
+  salaryEmployeeName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+
+  salaryEmployeeMatricule: {
+    fontSize: 12,
+    color: COLORS.textLight,
+    marginTop: 2,
+  },
+
+  typeChip: {
+    marginTop: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
   statusChip: {
     alignSelf: 'flex-start',
   },
-  actionsCell: {
-    flexDirection: 'row',
-  },
-  cardsContainer: {
-    padding: 10,
-  },
-  salaryCard: {
-    marginBottom: 15,
-    borderRadius: 12,
-    elevation: 2,
-  },
-  salaryCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 15,
-  },
-  salaryCardEmployee: {
-    flexDirection: 'row',
-    flex: 1,
-  },
-  employeePhotoCard: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    marginRight: 12,
-  },
-  employeeInfo: {
-    flex: 1,
-  },
-  employeeNameCard: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2C3E50',
-  },
-  employeeMatricule: {
-    fontSize: 12,
-    color: '#7F8C8D',
-    marginTop: 2,
-  },
-  typeChip: {
-    marginTop: 5,
-    alignSelf: 'flex-start',
-  },
-  statusChipCard: {
-    alignSelf: 'flex-start',
-  },
-  salaryCardAmounts: {
+
+  salaryAmounts: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingVertical: 15,
-    backgroundColor: '#F8F9F9',
-    borderRadius: 10,
-    marginBottom: 10,
-  },
-  amountItem: {
-    alignItems: 'center',
-  },
-  amountItemLabel: {
-    fontSize: 12,
-    color: '#7F8C8D',
-    marginBottom: 5,
-  },
-  amountItemValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2C3E50',
-  },
-  netAmount: {
-    color: '#2ECC71',
-  },
-  salaryCardFooter: {
-    marginTop: 10,
-  },
-  paymentInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  paymentInfoText: {
-    fontSize: 13,
-    color: '#7F8C8D',
-    marginLeft: 8,
-  },
-  paymentReference: {
-    fontSize: 12,
-    color: '#95A5A6',
-    marginTop: 5,
-  },
-  waitingInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF3E0',
-    padding: 8,
+    paddingVertical: 16,
+    backgroundColor: COLORS.surfaceAlt,
     borderRadius: 8,
-    marginTop: 10,
+    marginTop: 12,
   },
-  waitingText: {
-    fontSize: 13,
-    color: '#F39C12',
-    marginLeft: 8,
-    fontWeight: '500',
+
+  salaryAmount: {
+    alignItems: 'center',
   },
-  salaryCardActions: {
+
+  salaryAmountLabel: {
+    fontSize: 11,
+    color: COLORS.textLight,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+
+  salaryAmountValue: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+
+  salaryNetAmount: {
+    color: COLORS.primary,
+  },
+
+  salaryPaymentInfo: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 15,
+    alignItems: 'center',
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: 8,
   },
-  cardButton: {
+
+  salaryPaymentText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginLeft: 8,
     flex: 1,
-    marginHorizontal: 5,
   },
-  requestsContainer: {
-    padding: 10,
+
+  salaryReference: {
+    fontSize: 11,
+    color: COLORS.textLight,
   },
+
+  noConfirmInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.warning,
+  },
+
+  noConfirmText: {
+    fontSize: 13,
+    color: '#92400E',
+    marginLeft: 8,
+    flex: 1,
+  },
+
+  salaryActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    flexWrap: 'wrap',
+  },
+
+  salaryActionButton: {
+    flex: 1,
+    minWidth: screenWidth < 375 ? '100%' : 100,
+  },
+
+  selectModeButton: {
+    margin: 20,
+  },
+
+  // ========================================
+  // 16. DEMANDES DE PAIEMENT
+  // ========================================
+  requestsScroll: {
+    padding: 20,
+  },
+
   requestCard: {
-    marginBottom: 15,
-    borderRadius: 12,
-    elevation: 2,
+    marginBottom: 12,
+    backgroundColor: COLORS.surface,
+    borderRadius: 10,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
+
   requestHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 12,
   },
+
   requestEmployee: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
-  employeePhotoRequest: {
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
-    marginRight: 12,
+
+  requestEmployeeInfo: {
+    marginLeft: 12,
   },
+
   requestEmployeeName: {
     fontSize: 15,
-    fontWeight: 'bold',
-    color: '#2C3E50',
+    fontWeight: '600',
+    color: COLORS.text,
   },
+
   requestMatricule: {
     fontSize: 12,
-    color: '#7F8C8D',
+    color: COLORS.textLight,
     marginTop: 2,
   },
-  requestWaiting: {
+
+  requestBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF3E0',
+    backgroundColor: '#FEF3C7',
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 15,
+    borderRadius: 6,
   },
+
   requestDays: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#F39C12',
-    marginLeft: 5,
-  },
-  requestBody: {
-    marginBottom: 15,
-  },
-  requestAmount: {
-    backgroundColor: '#E8F5E9',
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 10,
-  },
-  requestAmountLabel: {
     fontSize: 12,
-    color: '#27AE60',
-    marginBottom: 5,
+    fontWeight: '700',
+    color: '#92400E',
+    marginLeft: 4,
   },
+
+  requestBody: {
+    marginBottom: 12,
+  },
+
+  requestAmount: {
+    backgroundColor: '#ECFDF5',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.success,
+  },
+
+  requestAmountLabel: {
+    fontSize: 11,
+    color: '#065F46',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    fontWeight: '600',
+  },
+
   requestAmountValue: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#27AE60',
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#065F46',
   },
+
   requestJustification: {
     marginBottom: 10,
   },
+
   requestJustificationLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#2C3E50',
-    marginBottom: 5,
+    color: COLORS.text,
+    marginBottom: 4,
   },
+
   requestJustificationText: {
     fontSize: 13,
-    color: '#7F8C8D',
+    color: COLORS.textSecondary,
     lineHeight: 20,
   },
+
   requestMeta: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+
   requestDate: {
     fontSize: 12,
-    color: '#95A5A6',
+    color: COLORS.textLight,
   },
+
   requestActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 10,
+    gap: 8,
+    marginTop: 12,
   },
+
   requestButton: {
     flex: 1,
-    marginHorizontal: 5,
   },
+
+  // ========================================
+  // 17. ANALYTIQUES - HORIZONTAL RESPONSIVE
+  // ========================================
   analyticsContainer: {
-    flex: 1,
+    padding: 20,
   },
+
   chartCard: {
     marginBottom: 20,
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
+
   chart: {
-    marginVertical: 10,
-    borderRadius: 16,
+    marginVertical: 12,
+    borderRadius: 10,
   },
+
+  // ✅ GRILLE MENSUELLE - HORIZONTAL RESPONSIVE
   monthlyStatsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 20,
+    flexDirection: 'row',        // ✅ HORIZONTAL FORCÉ
+    flexWrap: 'nowrap',          // ✅ PAS DE RETOUR À LA LIGNE
+    gap: 12,
+    paddingRight: 20,            // ✅ ESPACE À DROITE
   },
+
   monthlyStatCard: {
-    flex: 1,
-    minWidth: 150,
-    backgroundColor: '#F8F9F9',
-    padding: 12,
+    width: getMonthlyStatCardWidth(), // ✅ LARGEUR CALCULÉE DYNAMIQUEMENT
+    minWidth: screenWidth < 480 ? screenWidth * 0.45 : 160, // Min pour mobile
+    backgroundColor: COLORS.surfaceAlt,
+    padding: 14,
     borderRadius: 10,
     borderLeftWidth: 3,
-    borderLeftColor: '#2ECC71',
+    borderLeftColor: COLORS.primary,
   },
+
   monthlyStatMonth: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#2C3E50',
-    marginBottom: 5,
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 4,
   },
+
   monthlyStatEmployees: {
     fontSize: 12,
-    color: '#7F8C8D',
-    marginBottom: 5,
-  },
-  monthlyStatAmount: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2ECC71',
+    color: COLORS.textLight,
     marginBottom: 8,
   },
+
+  monthlyStatAmount: {
+    fontSize: screenWidth < 480 ? 14 : 16, // ✅ Taille adaptative
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+
   monthlyStatDetails: {
     borderTopWidth: 1,
-    borderTopColor: '#ECF0F1',
+    borderTopColor: COLORS.divider,
     paddingTop: 8,
   },
+
   monthlyStatDetail: {
     fontSize: 11,
-    color: '#95A5A6',
+    color: COLORS.textLight,
     marginTop: 2,
   },
+
   typeStatsTable: {
-    marginTop: 20,
+    gap: 10,
   },
+
   typeStatRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 12,
-    backgroundColor: '#F8F9F9',
+    padding: 16,
     borderRadius: 10,
-    marginBottom: 8,
+    backgroundColor: COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
+
   typeStatLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
+
   typeStatColor: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 4,
+    height: 40,
+    borderRadius: 2,
     marginRight: 12,
   },
+
   typeStatName: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#2C3E50',
+    color: COLORS.text,
   },
+
   typeStatCount: {
     fontSize: 12,
-    color: '#7F8C8D',
+    color: COLORS.textLight,
     marginTop: 2,
   },
+
   typeStatRight: {
     alignItems: 'flex-end',
   },
+
   typeStatAmount: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2ECC71',
+    fontWeight: '700',
+    color: COLORS.text,
   },
+
   typeStatAverage: {
-    fontSize: 12,
-    color: '#7F8C8D',
+    fontSize: 11,
+    color: COLORS.textLight,
     marginTop: 2,
   },
+
   confirmationStats: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingVertical: 15,
-    marginBottom: 15,
+    marginBottom: 20,
   },
+
   confirmationStatItem: {
     alignItems: 'center',
   },
+
   confirmationStatLabel: {
     fontSize: 12,
-    color: '#7F8C8D',
+    color: COLORS.textLight,
     marginBottom: 8,
+    textTransform: 'uppercase',
+    fontWeight: '600',
   },
+
   confirmationStatValue: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#2C3E50',
+    fontWeight: '700',
+    color: COLORS.text,
   },
+
   confirmationProgressBar: {
-    height: 10,
-    borderRadius: 5,
+    height: 6,
+    borderRadius: 3,
+    marginTop: 8,
+    backgroundColor: COLORS.surfaceAlt,
   },
+
+  // ========================================
+  // 18. RAPPORTS
+  // ========================================
   reportsContainer: {
-    padding: 10,
-  },
-  reportOptions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 15,
-    marginTop: 20,
-  },
-  reportOption: {
-    flex: 1,
-    minWidth: 250,
-    backgroundColor: '#F8F9F9',
     padding: 20,
+  },
+
+  card: {
+    marginBottom: 16,
+    backgroundColor: COLORS.surface,
     borderRadius: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#ECF0F1',
-  },
-  reportOptionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2C3E50',
-    marginTop: 12,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  reportOptionDesc: {
-    fontSize: 13,
-    color: '#7F8C8D',
-    textAlign: 'center',
-    marginBottom: 15,
-  },
-  modalContainer: {
-    backgroundColor: 'white',
     padding: 20,
-    margin: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  reportSectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginTop: 16,
+    marginBottom: 12,
+  },
+
+  radioItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+
+  radioLabel: {
+    fontSize: 14,
+    color: COLORS.text,
+    marginLeft: 8,
+    flex: 1,
+  },
+
+  formatButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+
+  formatButton: {
+    flex: 1,
+  },
+
+  generateButton: {
+    marginTop: 24,
+    paddingVertical: 4,
+  },
+
+  quickActionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+
+  quickActionText: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  quickActionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+
+  quickActionSubtitle: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+
+  // ========================================
+  // 19. MODALES
+  // ========================================
+  modalContainer: {
+    backgroundColor: COLORS.surface,
+    marginHorizontal: screenWidth < 768 ? 20 : '20%',
+    marginVertical: screenWidth < 768 ? 50 : '10%',
+    padding: 24,
+    borderRadius: 16,
+    maxHeight: screenWidth < 768 ? screenHeight * 0.85 : '80%',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.divider,
+  },
+
+  modalInput: {
+    marginBottom: 16,
+    backgroundColor: COLORS.surface,
+  },
+
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.divider,
+  },
+
+  detailsContent: {
+    marginBottom: 16,
+  },
+
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.divider,
+  },
+
+  detailLabel: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+  },
+
+  detailValue: {
+    fontSize: 15,
+    color: COLORS.text,
+    fontWeight: '600',
+    textAlign: 'right',
+    flex: 1,
+    marginLeft: 10,
+  },
+
+  // ========================================
+  // 20. UTILITAIRES
+  // ========================================
+  errorContainer: {
+    backgroundColor: '#FEE2E2',
+    padding: 16,
     borderRadius: 10,
-    maxHeight: '80%',
+    marginVertical: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.error,
+  },
+
+  errorText: {
+    color: '#991B1B',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+
+  successContainer: {
+    backgroundColor: '#ECFDF5',
+    padding: 16,
+    borderRadius: 10,
+    marginVertical: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.success,
+  },
+
+  successText: {
+    color: '#065F46',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
 

@@ -2,7 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_URL = process.env.REACT_APP_API_URL || 'https://nutrifix-1-twdf.onrender.com/api';
 
 // ============================================
 // CLASSE DE BASE POUR LES SERVICES
@@ -415,6 +415,20 @@ class EmployeINSSService extends BaseEmployeService {
   async markNotificationAsRead(notificationId) {
     return await this.put(`/employe-inss/notifications/${notificationId}/marquer-lu`);
   }
+
+  /**
+   * Salaires - Demander un code de vérification
+   */
+  async requestCode(salaireId) {
+    return await this.post(`/employe-inss/salaires/${salaireId}/demander-code`);
+  }
+
+  /**
+   * Salaires - Confirmer la réception avec le code
+   */
+  async confirmReception(salaireId, codeData) {
+    return await this.post(`/employe-inss/salaires/${salaireId}/confirmer-reception`, codeData);
+  }
 }
 
 // ============================================
@@ -581,6 +595,20 @@ class TempsPartielService extends BaseEmployeService {
       latitude: 0,
       longitude: 0
     };
+  }
+
+  /**
+   * Salaires - Demander un code de vérification
+   */
+  async requestCode(salaireId) {
+    return await this.post(`/employe-temps-partiel/salaires/${salaireId}/demander-code`);
+  }
+
+  /**
+   * Salaires - Confirmer la réception avec le code
+   */
+  async confirmReception(salaireId, codeData) {
+    return await this.post(`/employe-temps-partiel/salaires/${salaireId}/confirmer-reception`, codeData);
   }
 }
 

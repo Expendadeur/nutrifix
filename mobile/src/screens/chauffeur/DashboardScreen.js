@@ -24,8 +24,8 @@ import { setupNotificationListener } from '../../services/notificationsSocket';
 
 // Configuration API
 const API_BASE_URL = Platform.select({
-    web: process.env.REACT_APP_API_URL || 'http://localhost:5000',
-    default: 'http://localhost:5000'
+    web: process.env.REACT_APP_API_URL || 'https://nutrifix-1-twdf.onrender.com',
+    default: 'https://nutrifix-1-twdf.onrender.com'
 });
 
 const DashboardScreen = ({ navigation }) => {

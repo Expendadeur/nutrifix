@@ -12,6 +12,8 @@ import {
   Animated,
   StyleSheet,
   StatusBar,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import {
   TextInput,
@@ -20,14 +22,14 @@ import {
   Portal,
   Dialog,
   Paragraph,
-  ProgressBar,
+  Divider,
 } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_URL = process.env.REACT_APP_API_URL || 'https://nutrifix-1-twdf.onrender.com/api';
 
 // ============================================
 // DESIGN SYSTEM - MODERN LIGHT THEME
@@ -38,11 +40,10 @@ const COLORS = {
   primaryDark: '#1E40AF',
   primaryLight: '#DBEAFE',
 
-  // Background - CLAIR ET LUMINEUX
-  bgPrimary: '#F8FAFC',        // Blanc cassé léger
-  bgSecondary: '#FFFFFF',      // Blanc pur
-  bgTertiary: '#F1F5F9',       // Gris très clair
-  bgAccent: '#E2E8F0',         // Gris clair doux
+  // Background
+  bgPrimary: '#F8FAFC',
+  bgSecondary: '#FFFFFF',
+  bgTertiary: '#F1F5F9',
 
   // Status Colors
   success: '#10B981',
@@ -53,6 +54,8 @@ const COLORS = {
   errorLight: '#FEE2E2',
   info: '#0EA5E9',
   infoLight: '#E0F2FE',
+  purple: '#8B5CF6',
+  purpleLight: '#EDE9FE',
 
   // Text Colors
   textPrimary: '#1E293B',
@@ -67,7 +70,7 @@ const COLORS = {
 // ============================================
 // GRADIENT COMPONENT FOR WEB
 // ============================================
-const LinearGradient = ({ colors, start, end, style, children }) => {
+const LinearGradient = ({ colors, style, children }) => {
   const gradientStyle = {
     background: `linear-gradient(135deg, ${colors[0]} 0%, ${colors[1]} 100%)`,
     ...StyleSheet.flatten(style),
@@ -80,9 +83,13 @@ const LinearGradient = ({ colors, start, end, style, children }) => {
 // ============================================
 const DemandeCongeScreen = ({ navigation }) => {
   const windowDimensions = useWindowDimensions();
-  const [showModal, setShowModal] = useState(false);
+  const [activeTab, setActiveTab] = useState('conges'); // 'conges' | 'salaire'
+  const [showCongeModal, setShowCongeModal] = useState(false);
+  const [showSalaireModal, setShowSalaireModal] = useState(false);
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [leaveBalance, setLeaveBalance] = useState(null);
   const [recentLeaves, setRecentLeaves] = useState([]);
+  const [salaireInfo, setSalaireInfo] = useState(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
@@ -103,7 +110,11 @@ const DemandeCongeScreen = ({ navigation }) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
       if (token) {
-        await Promise.all([loadBalance(), loadRecentLeaves()]);
+        await Promise.all([
+          loadBalance(),
+          loadRecentLeaves(),
+          loadSalaireInfo()
+        ]);
       }
     } finally {
       setLoading(false);
@@ -127,12 +138,23 @@ const DemandeCongeScreen = ({ navigation }) => {
     try {
       const token = await AsyncStorage.getItem('userToken');
       const response = await fetch(`${API_URL}/employe-inss/conges?limit=5`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Authorization': `Bearer ${token}` },
       });
       const data = await response.json();
       if (data.success) setRecentLeaves(data.data || []);
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  };
+
+  const loadSalaireInfo = async () => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      const response = await fetch(`${API_URL}/employe-inss/salaire/info`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (data.success) setSalaireInfo(data.data);
     } catch (error) {
       console.error('Error:', error);
     }
@@ -145,254 +167,359 @@ const DemandeCongeScreen = ({ navigation }) => {
   };
 
   // ============================================
-  // RENDER HEADER
+  // RENDER HEADER WITH TABS
   // ============================================
   const renderHeader = () => (
-    <Animated.View style={[dashboardStyles.header, { opacity: fadeAnim }]}>
+    <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
       <LinearGradient
         colors={['#2563EB', '#1E40AF']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={dashboardStyles.headerGradient}
+        style={styles.headerGradient}
       >
-        <View style={dashboardStyles.headerContent}>
+        <View style={styles.headerContent}>
           <View>
-            <Text style={dashboardStyles.headerTitle}>Gestion des Congés</Text>
-            <Text style={dashboardStyles.headerSubtitle}>Gérez vos demandes facilement</Text>
+            <Text style={styles.headerTitle}>Espace Employé</Text>
+            <Text style={styles.headerSubtitle}>Congés & Salaires</Text>
           </View>
-          <View style={dashboardStyles.headerIconContainer}>
-            <MaterialIcons name="beach-access" size={42} color="#FFF" />
+          <View style={styles.headerIconContainer}>
+            <MaterialIcons 
+              name={activeTab === 'conges' ? 'beach-access' : 'account-balance-wallet'} 
+              size={36} 
+              color="#FFF" 
+            />
           </View>
+        </View>
+
+        {/* TABS */}
+        <View style={styles.tabsContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'conges' && styles.tabActive]}
+            onPress={() => setActiveTab('conges')}
+            activeOpacity={0.7}
+          >
+            <MaterialIcons 
+              name="beach-access" 
+              size={20} 
+              color={activeTab === 'conges' ? '#FFF' : 'rgba(255,255,255,0.7)'} 
+            />
+            <Text style={[
+              styles.tabText,
+              activeTab === 'conges' && styles.tabTextActive
+            ]}>
+              Congés
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'salaire' && styles.tabActive]}
+            onPress={() => setActiveTab('salaire')}
+            activeOpacity={0.7}
+          >
+            <MaterialIcons 
+              name="account-balance-wallet" 
+              size={20} 
+              color={activeTab === 'salaire' ? '#FFF' : 'rgba(255,255,255,0.7)'} 
+            />
+            <Text style={[
+              styles.tabText,
+              activeTab === 'salaire' && styles.tabTextActive
+            ]}>
+              Salaires
+            </Text>
+          </TouchableOpacity>
         </View>
       </LinearGradient>
     </Animated.View>
   );
 
   // ============================================
-  // RENDER BALANCE CARD
+  // RENDER CONGES CONTENT
   // ============================================
-  const renderBalanceCard = () => {
-    if (!leaveBalance) return null;
-
-    return (
-      <View style={dashboardStyles.balanceCardWrapper}>
-        <View style={dashboardStyles.balanceCard}>
-          <View style={dashboardStyles.balanceHeader}>
-            <View style={dashboardStyles.balanceIconContainer}>
-              <MaterialIcons name="event-available" size={28} color={COLORS.success} />
+  const renderCongesContent = () => (
+    <View style={styles.tabContent}>
+      {/* Balance Card */}
+      {leaveBalance && (
+        <View style={styles.balanceCard}>
+          <View style={styles.balanceHeader}>
+            <View style={styles.balanceIconContainer}>
+              <MaterialIcons name="event-available" size={24} color={COLORS.success} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={dashboardStyles.balanceTitle}>Solde Disponible</Text>
-              <Text style={dashboardStyles.balanceSubtitle}>Jours de congé</Text>
+              <Text style={styles.balanceTitle}>Solde Disponible</Text>
+              <Text style={styles.balanceSubtitle}>Jours de congé</Text>
             </View>
           </View>
 
-          <View style={dashboardStyles.balanceMainValue}>
-            <Text style={dashboardStyles.balanceNumber}>
-              {leaveBalance.jours_disponibles}
-            </Text>
-            <Text style={dashboardStyles.balanceLabel}>jours disponibles</Text>
+          <View style={styles.balanceMainValue}>
+            <Text style={styles.balanceNumber}>{leaveBalance.jours_disponibles}</Text>
+            <Text style={styles.balanceLabel}>jours disponibles</Text>
           </View>
 
-          <View style={dashboardStyles.balanceDivider} />
+          <Divider style={styles.divider} />
 
-          <View style={dashboardStyles.balanceDetailsRow}>
-            <View style={dashboardStyles.balanceDetailItem}>
-              <View style={[dashboardStyles.balanceDetailIcon, { backgroundColor: COLORS.successLight }]}>
-                <MaterialIcons name="check-circle" size={20} color={COLORS.success} />
+          <View style={styles.balanceDetailsRow}>
+            <View style={styles.balanceDetailItem}>
+              <View style={[styles.balanceDetailIcon, { backgroundColor: COLORS.successLight }]}>
+                <MaterialIcons name="check-circle" size={18} color={COLORS.success} />
               </View>
-              <Text style={dashboardStyles.balanceDetailValue}>{leaveBalance.jours_pris || 0}</Text>
-              <Text style={dashboardStyles.balanceDetailLabel}>Pris</Text>
+              <Text style={styles.balanceDetailValue}>{leaveBalance.jours_pris || 0}</Text>
+              <Text style={styles.balanceDetailLabel}>Pris</Text>
             </View>
 
-            <View style={dashboardStyles.balanceDetailItem}>
-              <View style={[dashboardStyles.balanceDetailIcon, { backgroundColor: COLORS.warningLight }]}>
-                <MaterialIcons name="schedule" size={20} color={COLORS.warning} />
+            <View style={styles.balanceDetailItem}>
+              <View style={[styles.balanceDetailIcon, { backgroundColor: COLORS.warningLight }]}>
+                <MaterialIcons name="schedule" size={18} color={COLORS.warning} />
               </View>
-              <Text style={dashboardStyles.balanceDetailValue}>{leaveBalance.jours_en_attente || 0}</Text>
-              <Text style={dashboardStyles.balanceDetailLabel}>En attente</Text>
+              <Text style={styles.balanceDetailValue}>{leaveBalance.jours_en_attente || 0}</Text>
+              <Text style={styles.balanceDetailLabel}>En attente</Text>
             </View>
 
-            <View style={dashboardStyles.balanceDetailItem}>
-              <View style={[dashboardStyles.balanceDetailIcon, { backgroundColor: COLORS.infoLight }]}>
-                <MaterialIcons name="savings" size={20} color={COLORS.info} />
+            <View style={styles.balanceDetailItem}>
+              <View style={[styles.balanceDetailIcon, { backgroundColor: COLORS.infoLight }]}>
+                <MaterialIcons name="savings" size={18} color={COLORS.info} />
               </View>
-              <Text style={dashboardStyles.balanceDetailValue}>{leaveBalance.jours_acquis || 0}</Text>
-              <Text style={dashboardStyles.balanceDetailLabel}>Acquis</Text>
+              <Text style={styles.balanceDetailValue}>{leaveBalance.jours_acquis || 0}</Text>
+              <Text style={styles.balanceDetailLabel}>Acquis</Text>
             </View>
           </View>
         </View>
-      </View>
-    );
-  };
+      )}
 
-  // ============================================
-  // RENDER STATS CARDS
-  // ============================================
-  const renderStatsCards = () => (
-    <View style={dashboardStyles.statsGrid}>
-      <View style={[dashboardStyles.statCard, { backgroundColor: COLORS.successLight }]}>
-        <View style={[dashboardStyles.statIconCircle, { backgroundColor: COLORS.success }]}>
-          <MaterialIcons name="check-circle" size={28} color="#FFF" />
-        </View>
-        <Text style={[dashboardStyles.statValue, { color: COLORS.success }]}>
-          {leaveBalance?.jours_pris || 0}
-        </Text>
-        <Text style={dashboardStyles.statLabel}>Congés pris</Text>
-      </View>
+      {/* Quick Action Button */}
+      <TouchableOpacity
+        style={styles.quickActionButton}
+        onPress={() => setShowCongeModal(true)}
+        activeOpacity={0.85}
+      >
+        <LinearGradient
+          colors={['#10B981', '#059669']}
+          style={styles.quickActionGradient}
+        >
+          <View style={styles.quickActionIconCircle}>
+            <MaterialIcons name="add" size={24} color="#FFF" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.quickActionTitle}>Nouvelle demande de congé</Text>
+            <Text style={styles.quickActionSubtitle}>Soumettre une demande</Text>
+          </View>
+          <MaterialIcons name="arrow-forward" size={22} color="#FFF" />
+        </LinearGradient>
+      </TouchableOpacity>
 
-      <View style={[dashboardStyles.statCard, { backgroundColor: COLORS.warningLight }]}>
-        <View style={[dashboardStyles.statIconCircle, { backgroundColor: COLORS.warning }]}>
-          <MaterialIcons name="schedule" size={28} color="#FFF" />
+      {/* Recent Leaves */}
+      <View style={styles.recentSection}>
+        <View style={styles.sectionHeader}>
+          <MaterialIcons name="history" size={22} color={COLORS.primary} />
+          <Text style={styles.sectionTitle}>Demandes récentes</Text>
         </View>
-        <Text style={[dashboardStyles.statValue, { color: COLORS.warning }]}>
-          {leaveBalance?.jours_en_attente || 0}
-        </Text>
-        <Text style={dashboardStyles.statLabel}>En attente</Text>
-      </View>
 
-      <View style={[dashboardStyles.statCard, { backgroundColor: COLORS.infoLight }]}>
-        <View style={[dashboardStyles.statIconCircle, { backgroundColor: COLORS.info }]}>
-          <MaterialIcons name="event" size={28} color="#FFF" />
-        </View>
-        <Text style={[dashboardStyles.statValue, { color: COLORS.info }]}>
-          {leaveBalance?.jours_acquis || 0}
-        </Text>
-        <Text style={dashboardStyles.statLabel}>Jours acquis</Text>
+        {recentLeaves.length === 0 ? (
+          <View style={styles.emptyState}>
+            <MaterialIcons name="inbox" size={48} color={COLORS.textTertiary} />
+            <Text style={styles.emptyStateText}>Aucune demande récente</Text>
+          </View>
+        ) : (
+          <View style={styles.leavesList}>
+            {recentLeaves.map((leave, index) => {
+              const statusConfig = getStatusConfig(leave.statut);
+              return (
+                <View key={leave.id || index} style={styles.leaveCard}>
+                  <View style={styles.leaveCardHeader}>
+                    <View style={[styles.leaveTypeIcon, { backgroundColor: statusConfig.bg }]}>
+                      <MaterialIcons name="event" size={18} color={statusConfig.color} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.leaveType}>
+                        {leave.type_conge.charAt(0).toUpperCase() + leave.type_conge.slice(1)}
+                      </Text>
+                      <Text style={styles.leaveDates}>
+                        {new Date(leave.date_debut).toLocaleDateString('fr-FR', {
+                          day: 'numeric',
+                          month: 'short'
+                        })} - {new Date(leave.date_fin).toLocaleDateString('fr-FR', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        })}
+                      </Text>
+                    </View>
+                    <View style={[styles.leaveStatusBadge, { backgroundColor: statusConfig.bg }]}>
+                      <MaterialIcons name={statusConfig.icon} size={12} color={statusConfig.color} />
+                      <Text style={[styles.leaveStatusText, { color: statusConfig.color }]}>
+                        {statusConfig.label}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
       </View>
     </View>
   );
 
   // ============================================
-  // RENDER QUICK ACTION BUTTON
+  // RENDER SALAIRE CONTENT
   // ============================================
-  const renderQuickAction = () => (
-    <TouchableOpacity
-      style={dashboardStyles.newRequestButton}
-      onPress={() => setShowModal(true)}
-      activeOpacity={0.85}
-    >
-      <LinearGradient
-        colors={['#10B981', '#059669']}
-        style={dashboardStyles.newRequestGradient}
-      >
-        <View style={dashboardStyles.newRequestIconCircle}>
-          <MaterialIcons name="add" size={28} color="#FFF" />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={dashboardStyles.newRequestTitle}>Nouvelle demande</Text>
-          <Text style={dashboardStyles.newRequestSubtitle}>Créer une demande de congé</Text>
-        </View>
-        <MaterialIcons name="arrow-forward" size={24} color="#FFF" />
-      </LinearGradient>
-    </TouchableOpacity>
-  );
+  const renderSalaireContent = () => (
+    <View style={styles.tabContent}>
+      {/* Salaire Info Card */}
+      {salaireInfo && (
+        <View style={styles.salaireCard}>
+          <View style={styles.salaireHeader}>
+            <View style={[styles.salaireIconContainer, { backgroundColor: COLORS.purpleLight }]}>
+              <MaterialIcons name="account-balance-wallet" size={24} color={COLORS.purple} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.salaireTitle}>Informations Salaire</Text>
+              <Text style={styles.salaireSubtitle}>Mois en cours</Text>
+            </View>
+          </View>
 
-  // ============================================
-  // RENDER RECENT LEAVES
-  // ============================================
-  const renderRecentLeaves = () => {
-    if (recentLeaves.length === 0) {
-      return (
-        <View style={dashboardStyles.emptyState}>
-          <MaterialIcons name="inbox" size={64} color={COLORS.textTertiary} />
-          <Text style={dashboardStyles.emptyStateText}>Aucune demande récente</Text>
-        </View>
-      );
-    }
+          <View style={styles.salaireMainValue}>
+            <Text style={styles.salaireNumber}>
+              {salaireInfo.montant_net?.toLocaleString('fr-FR') || '0'}
+            </Text>
+            <Text style={styles.salaireLabel}>FBU - Net à payer</Text>
+          </View>
 
-    const getStatusConfig = (status) => {
-      switch (status) {
-        case 'en_attente':
-          return {
-            color: COLORS.warning,
-            bg: COLORS.warningLight,
-            label: 'En attente',
-            icon: 'schedule'
-          };
-        case 'approuve':
-          return {
-            color: COLORS.success,
-            bg: COLORS.successLight,
-            label: 'Approuvé',
-            icon: 'check-circle'
-          };
-        case 'rejete':
-          return {
-            color: COLORS.error,
-            bg: COLORS.errorLight,
-            label: 'Rejeté',
-            icon: 'cancel'
-          };
-        default:
-          return {
-            color: COLORS.info,
-            bg: COLORS.infoLight,
-            label: 'Inconnu',
-            icon: 'info'
-          };
-      }
-    };
+          <Divider style={styles.divider} />
 
-    return (
-      <View style={dashboardStyles.recentSection}>
-        <View style={dashboardStyles.sectionHeader}>
-          <MaterialIcons name="history" size={24} color={COLORS.primary} />
-          <Text style={dashboardStyles.sectionTitle}>Demandes récentes</Text>
-        </View>
-
-        <View style={dashboardStyles.leavesList}>
-          {recentLeaves.map((leave, index) => {
-            const statusConfig = getStatusConfig(leave.statut);
-            return (
-              <View key={leave.id || index} style={dashboardStyles.leaveCard}>
-                <View style={dashboardStyles.leaveCardHeader}>
-                  <View style={[dashboardStyles.leaveTypeIcon, { backgroundColor: statusConfig.bg }]}>
-                    <MaterialIcons name="event" size={20} color={statusConfig.color} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={dashboardStyles.leaveType}>
-                      {leave.type_conge.charAt(0).toUpperCase() + leave.type_conge.slice(1)}
-                    </Text>
-                    <Text style={dashboardStyles.leaveDates}>
-                      {new Date(leave.date_debut).toLocaleDateString('fr-FR', {
-                        day: 'numeric',
-                        month: 'short'
-                      })} - {new Date(leave.date_fin).toLocaleDateString('fr-FR', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric'
-                      })}
-                    </Text>
-                  </View>
-                  <View style={[dashboardStyles.leaveStatusBadge, { backgroundColor: statusConfig.bg }]}>
-                    <MaterialIcons name={statusConfig.icon} size={14} color={statusConfig.color} />
-                    <Text style={[dashboardStyles.leaveStatusText, { color: statusConfig.color }]}>
-                      {statusConfig.label}
-                    </Text>
-                  </View>
-                </View>
+          <View style={styles.salaireDetailsRow}>
+            <View style={styles.salaireDetailItem}>
+              <Text style={styles.salaireDetailLabel}>Salaire brut</Text>
+              <Text style={styles.salaireDetailValue}>
+                {salaireInfo.montant_brut?.toLocaleString('fr-FR') || '0'} FBU
+              </Text>
+            </View>
+            <View style={styles.salaireDetailItem}>
+              <Text style={styles.salaireDetailLabel}>Statut</Text>
+              <View style={[
+                styles.statutBadge,
+                {
+                  backgroundColor: salaireInfo.statut === 'paye' 
+                    ? COLORS.successLight 
+                    : salaireInfo.statut === 'en_attente'
+                    ? COLORS.warningLight
+                    : COLORS.errorLight
+                }
+              ]}>
+                <Text style={[
+                  styles.statutText,
+                  {
+                    color: salaireInfo.statut === 'paye' 
+                      ? COLORS.success 
+                      : salaireInfo.statut === 'en_attente'
+                      ? COLORS.warning
+                      : COLORS.error
+                  }
+                ]}>
+                  {salaireInfo.statut === 'paye' ? 'Payé' : 
+                   salaireInfo.statut === 'en_attente' ? 'En attente' : 'Impayé'}
+                </Text>
               </View>
-            );
-          })}
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Quick Actions */}
+      <View style={styles.actionsGrid}>
+        <TouchableOpacity
+          style={styles.actionCard}
+          onPress={() => setShowSalaireModal(true)}
+          activeOpacity={0.85}
+        >
+          <LinearGradient
+            colors={['#F59E0B', '#D97706']}
+            style={styles.actionGradient}
+          >
+            <View style={styles.actionIconCircle}>
+              <MaterialIcons name="request-quote" size={28} color="#FFF" />
+            </View>
+            <Text style={styles.actionTitle}>Demander mon salaire</Text>
+            <Text style={styles.actionSubtitle}>Envoyer une demande</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.actionCard}
+          onPress={() => setShowConfirmationModal(true)}
+          activeOpacity={0.85}
+        >
+          <LinearGradient
+            colors={['#8B5CF6', '#7C3AED']}
+            style={styles.actionGradient}
+          >
+            <View style={styles.actionIconCircle}>
+              <MaterialIcons name="verified" size={28} color="#FFF" />
+            </View>
+            <Text style={styles.actionTitle}>Confirmer réception</Text>
+            <Text style={styles.actionSubtitle}>Code de vérification</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+
+      {/* Info Box */}
+      <View style={styles.infoBox}>
+        <MaterialIcons name="info" size={20} color={COLORS.info} />
+        <View style={{ flex: 1, marginLeft: 12 }}>
+          <Text style={styles.infoTitle}>Communication par email</Text>
+          <Text style={styles.infoText}>
+            Toutes vos demandes et confirmations sont automatiquement envoyées par email 
+            à votre manager et à l'administration pour un suivi transparent.
+          </Text>
         </View>
       </View>
-    );
+    </View>
+  );
+
+  const getStatusConfig = (status) => {
+    switch (status) {
+      case 'en_attente':
+        return {
+          color: COLORS.warning,
+          bg: COLORS.warningLight,
+          label: 'En attente',
+          icon: 'schedule'
+        };
+      case 'approuve':
+        return {
+          color: COLORS.success,
+          bg: COLORS.successLight,
+          label: 'Approuvé',
+          icon: 'check-circle'
+        };
+      case 'rejete':
+        return {
+          color: COLORS.error,
+          bg: COLORS.errorLight,
+          label: 'Rejeté',
+          icon: 'cancel'
+        };
+      default:
+        return {
+          color: COLORS.info,
+          bg: COLORS.infoLight,
+          label: 'Inconnu',
+          icon: 'info'
+        };
+    }
   };
 
   return (
     <>
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bgPrimary} />
-      <View style={dashboardStyles.container}>
-        {loading && !leaveBalance ? (
-          <View style={dashboardStyles.loadingContainer}>
+      <View style={styles.container}>
+        {loading && !leaveBalance && !salaireInfo ? (
+          <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={COLORS.primary} />
-            <Text style={dashboardStyles.loadingText}>Chargement...</Text>
+            <Text style={styles.loadingText}>Chargement...</Text>
           </View>
         ) : (
           <ScrollView
-            style={dashboardStyles.scroll}
-            contentContainerStyle={dashboardStyles.scrollContent}
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             refreshControl={
               <RefreshControl
@@ -404,23 +531,40 @@ const DemandeCongeScreen = ({ navigation }) => {
             }
           >
             {renderHeader()}
-
-            <View style={dashboardStyles.content}>
-              {renderBalanceCard()}
-              {renderStatsCards()}
-              {renderQuickAction()}
-              {renderRecentLeaves()}
+            <View style={styles.content}>
+              {activeTab === 'conges' ? renderCongesContent() : renderSalaireContent()}
             </View>
           </ScrollView>
         )}
       </View>
 
-      <Modal visible={showModal} animationType="slide" transparent={false}>
+      {/* MODALS */}
+      <Modal visible={showCongeModal} animationType="slide" transparent={false}>
         <DemandeCongeModal
-          onClose={() => setShowModal(false)}
+          onClose={() => setShowCongeModal(false)}
           onSuccess={() => {
-            setShowModal(false);
+            setShowCongeModal(false);
             loadDashboardData();
+          }}
+        />
+      </Modal>
+
+      <Modal visible={showSalaireModal} animationType="slide" transparent={false}>
+        <DemandeSalaireModal
+          onClose={() => setShowSalaireModal(false)}
+          onSuccess={() => {
+            setShowSalaireModal(false);
+            loadSalaireInfo();
+          }}
+        />
+      </Modal>
+
+      <Modal visible={showConfirmationModal} animationType="slide" transparent={false}>
+        <ConfirmationSalaireModal
+          onClose={() => setShowConfirmationModal(false)}
+          onSuccess={() => {
+            setShowConfirmationModal(false);
+            loadSalaireInfo();
           }}
         />
       </Modal>
@@ -429,7 +573,7 @@ const DemandeCongeScreen = ({ navigation }) => {
 };
 
 // ============================================
-// MODAL COMPONENT
+// DEMANDE CONGE MODAL
 // ============================================
 const DemandeCongeModal = ({ onClose, onSuccess }) => {
   const windowDimensions = useWindowDimensions();
@@ -445,26 +589,6 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
   const [joursCalcules, setJoursCalcules] = useState(0);
 
   const isMobile = windowDimensions.width < 600;
-
-  const openDatePicker = (field, initialValue) => {
-    setDatePickerField(field);
-    setDatePickerValue(initialValue instanceof Date ? initialValue : new Date(initialValue));
-    setShowDatePicker(true);
-  };
-
-  const handleDateChange = (event, selectedDate) => {
-    setShowDatePicker(false);
-    if (selectedDate) {
-      if (datePickerField === 'dateDebut') {
-        const d = new Date(selectedDate);
-        setDateDebut(d);
-        // Ajuster la date de fin si elle est antérieure à la nouvelle date de début
-        if (d > dateFin) setDateFin(d);
-      } else if (datePickerField === 'dateFin') {
-        setDateFin(new Date(selectedDate));
-      }
-    }
-  };
 
   const typesConge = [
     { value: 'annuel', label: 'Annuel', icon: 'beach-access', color: '#2563EB', bg: '#DBEAFE' },
@@ -484,6 +608,25 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
       const diffTime = Math.abs(dateFin - dateDebut);
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
       setJoursCalcules(diffDays);
+    }
+  };
+
+  const openDatePicker = (field, initialValue) => {
+    setDatePickerField(field);
+    setDatePickerValue(initialValue instanceof Date ? initialValue : new Date(initialValue));
+    setShowDatePicker(true);
+  };
+
+  const handleDateChange = (event, selectedDate) => {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      if (datePickerField === 'dateDebut') {
+        const d = new Date(selectedDate);
+        setDateDebut(d);
+        if (d > dateFin) setDateFin(d);
+      } else if (datePickerField === 'dateFin') {
+        setDateFin(new Date(selectedDate));
+      }
     }
   };
 
@@ -539,9 +682,11 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
 
       const data = await response.json();
       if (data.success) {
-        Alert.alert('✓ Succès', 'Votre demande a été soumise avec succès!', [
-          { text: 'OK', onPress: onSuccess }
-        ]);
+        Alert.alert(
+          '✓ Succès', 
+          'Votre demande a été soumise avec succès!\n\nUn email de confirmation a été envoyé à votre manager et à l\'administration.',
+          [{ text: 'OK', onPress: onSuccess }]
+        );
       } else {
         Alert.alert('Erreur', data.message || 'Une erreur est survenue');
       }
@@ -559,16 +704,19 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
   });
 
   return (
-    <View style={modalStyles.container}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={modalStyles.container}
+    >
       <StatusBar barStyle="dark-content" backgroundColor={COLORS.bgSecondary} />
 
       {/* HEADER */}
       <View style={modalStyles.header}>
         <TouchableOpacity onPress={onClose} disabled={submitting} style={modalStyles.closeButton}>
-          <MaterialIcons name="close" size={28} color={COLORS.textPrimary} />
+          <MaterialIcons name="close" size={26} color={COLORS.textPrimary} />
         </TouchableOpacity>
         <View style={{ flex: 1, alignItems: 'center' }}>
-          <Text style={modalStyles.headerTitle}>Nouvelle demande</Text>
+          <Text style={modalStyles.headerTitle}>Nouvelle demande de congé</Text>
           <Text style={modalStyles.headerSubtitle}>Remplissez le formulaire</Text>
         </View>
         <View style={{ width: 40 }} />
@@ -598,7 +746,7 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
                 activeOpacity={0.7}
               >
                 <View style={[modalStyles.typeIconCircle, { backgroundColor: type.color }]}>
-                  <MaterialIcons name={type.icon} size={24} color="#FFF" />
+                  <MaterialIcons name={type.icon} size={20} color="#FFF" />
                 </View>
                 <Text style={[
                   modalStyles.typeLabel,
@@ -620,29 +768,27 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
             onPress={() => openDatePicker('dateDebut', dateDebut)}
           >
             <View style={[modalStyles.dateIconCircle, { backgroundColor: COLORS.primaryLight }]}>
-              <MaterialIcons name="event" size={22} color={COLORS.primary} />
+              <MaterialIcons name="event" size={20} color={COLORS.primary} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={modalStyles.dateLabel}>Date de début</Text>
               <Text style={modalStyles.dateValue}>{formatDate(dateDebut)}</Text>
             </View>
-            <MaterialIcons name="chevron-right" size={24} color={COLORS.textTertiary} />
+            <MaterialIcons name="chevron-right" size={22} color={COLORS.textTertiary} />
           </TouchableOpacity>
-
-          {/* Unified DatePicker replaced individual ones */}
 
           <TouchableOpacity
             style={modalStyles.dateCard}
             onPress={() => openDatePicker('dateFin', dateFin)}
           >
             <View style={[modalStyles.dateIconCircle, { backgroundColor: COLORS.primaryLight }]}>
-              <MaterialIcons name="event" size={22} color={COLORS.primary} />
+              <MaterialIcons name="event" size={20} color={COLORS.primary} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={modalStyles.dateLabel}>Date de fin</Text>
               <Text style={modalStyles.dateValue}>{formatDate(dateFin)}</Text>
             </View>
-            <MaterialIcons name="chevron-right" size={24} color={COLORS.textTertiary} />
+            <MaterialIcons name="chevron-right" size={22} color={COLORS.textTertiary} />
           </TouchableOpacity>
 
           {showDatePicker && (
@@ -657,7 +803,7 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
           {joursCalcules > 0 && (
             <View style={modalStyles.durationCard}>
               <View style={[modalStyles.durationIcon, { backgroundColor: COLORS.successLight }]}>
-                <MaterialIcons name="schedule" size={20} color={COLORS.success} />
+                <MaterialIcons name="schedule" size={18} color={COLORS.success} />
               </View>
               <Text style={modalStyles.durationText}>
                 Durée totale : <Text style={modalStyles.durationValue}>{joursCalcules} jour{joursCalcules > 1 ? 's' : ''}</Text>
@@ -675,7 +821,7 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
             value={raison}
             onChangeText={setRaison}
             multiline
-            numberOfLines={5}
+            numberOfLines={4}
             mode="outlined"
             style={modalStyles.textInput}
             outlineColor={COLORS.border}
@@ -695,7 +841,7 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
           {pieceJointe ? (
             <View style={modalStyles.documentPreview}>
               <View style={[modalStyles.documentIcon, { backgroundColor: COLORS.primaryLight }]}>
-                <MaterialIcons name="description" size={24} color={COLORS.primary} />
+                <MaterialIcons name="description" size={22} color={COLORS.primary} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={modalStyles.documentName} numberOfLines={1}>
@@ -709,13 +855,13 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
                 onPress={() => setPieceJointe(null)}
                 style={modalStyles.removeButton}
               >
-                <MaterialIcons name="close" size={20} color={COLORS.error} />
+                <MaterialIcons name="close" size={18} color={COLORS.error} />
               </TouchableOpacity>
             </View>
           ) : (
             <TouchableOpacity style={modalStyles.uploadCard} onPress={pickDocument}>
               <View style={[modalStyles.uploadIcon, { backgroundColor: COLORS.primaryLight }]}>
-                <MaterialIcons name="cloud-upload" size={32} color={COLORS.primary} />
+                <MaterialIcons name="cloud-upload" size={28} color={COLORS.primary} />
               </View>
               <Text style={modalStyles.uploadText}>Ajouter un document</Text>
               <Text style={modalStyles.uploadSubtext}>PDF, JPG, PNG (max 5MB)</Text>
@@ -739,7 +885,7 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
                 <ActivityIndicator color="#FFF" />
               ) : (
                 <>
-                  <MaterialIcons name="send" size={20} color="#FFF" />
+                  <MaterialIcons name="send" size={18} color="#FFF" />
                   <Text style={modalStyles.submitText}>Soumettre la demande</Text>
                 </>
               )}
@@ -756,14 +902,363 @@ const DemandeCongeModal = ({ onClose, onSuccess }) => {
           </TouchableOpacity>
         </View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 
 // ============================================
-// DASHBOARD STYLES
+// DEMANDE SALAIRE MODAL
 // ============================================
-const dashboardStyles = StyleSheet.create({
+const DemandeSalaireModal = ({ onClose, onSuccess }) => {
+  const [mois, setMois] = useState(new Date().getMonth() + 1);
+  const [annee, setAnnee] = useState(new Date().getFullYear());
+  const [motif, setMotif] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const moisOptions = [
+    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+  ];
+
+  const submitSalaireRequest = async () => {
+    if (!motif.trim()) {
+      Alert.alert('Attention', 'Veuillez indiquer le motif de votre demande');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      const response = await fetch(`${API_URL}/employe-inss/salaire/demande`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          mois,
+          annee,
+          motif
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        Alert.alert(
+          '✓ Demande envoyée',
+          'Votre demande de paiement a été envoyée avec succès!\n\n' +
+          '📧 Email envoyé à votre manager\n' +
+          '📧 Email envoyé à l\'administration\n\n' +
+          'Vous serez notifié dès que le paiement sera effectué.',
+          [{ text: 'OK', onPress: onSuccess }]
+        );
+      } else {
+        Alert.alert('Erreur', data.message || 'Une erreur est survenue');
+      }
+    } catch (error) {
+      Alert.alert('Erreur', error.message || 'Erreur réseau');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={modalStyles.container}
+    >
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bgSecondary} />
+
+      {/* HEADER */}
+      <View style={modalStyles.header}>
+        <TouchableOpacity onPress={onClose} disabled={submitting} style={modalStyles.closeButton}>
+          <MaterialIcons name="close" size={26} color={COLORS.textPrimary} />
+        </TouchableOpacity>
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Text style={modalStyles.headerTitle}>Demande de salaire</Text>
+          <Text style={modalStyles.headerSubtitle}>Notification manager & admin</Text>
+        </View>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <ScrollView
+        style={modalStyles.scroll}
+        contentContainerStyle={modalStyles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* PÉRIODE */}
+        <View style={modalStyles.section}>
+          <Text style={modalStyles.sectionTitle}>Période concernée *</Text>
+          
+          <View style={modalStyles.periodeRow}>
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <Text style={modalStyles.inputLabel}>Mois</Text>
+              <View style={modalStyles.selectCard}>
+                <MaterialIcons name="calendar-today" size={20} color={COLORS.primary} />
+                <Text style={modalStyles.selectText}>{moisOptions[mois - 1]}</Text>
+              </View>
+            </View>
+
+            <View style={{ flex: 1, marginLeft: 8 }}>
+              <Text style={modalStyles.inputLabel}>Année</Text>
+              <View style={modalStyles.selectCard}>
+                <MaterialIcons name="event" size={20} color={COLORS.primary} />
+                <Text style={modalStyles.selectText}>{annee}</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* MOTIF */}
+        <View style={modalStyles.section}>
+          <Text style={modalStyles.sectionTitle}>Motif de la demande *</Text>
+          <TextInput
+            placeholder="Expliquez pourquoi vous demandez votre salaire..."
+            placeholderTextColor={COLORS.textTertiary}
+            value={motif}
+            onChangeText={setMotif}
+            multiline
+            numberOfLines={4}
+            mode="outlined"
+            style={modalStyles.textInput}
+            outlineColor={COLORS.border}
+            activeOutlineColor={COLORS.primary}
+            textColor={COLORS.textPrimary}
+            theme={{
+              colors: {
+                background: COLORS.bgSecondary,
+              }
+            }}
+          />
+        </View>
+
+        {/* INFO BOX */}
+        <View style={[modalStyles.infoBox, { backgroundColor: COLORS.warningLight }]}>
+          <MaterialIcons name="email" size={20} color={COLORS.warning} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={[modalStyles.infoTitle, { color: COLORS.warning }]}>
+              Communication automatique
+            </Text>
+            <Text style={modalStyles.infoText}>
+              Votre demande sera envoyée par email à votre manager et à l'administration 
+              pour traitement rapide.
+            </Text>
+          </View>
+        </View>
+
+        {/* ACTIONS */}
+        <View style={modalStyles.actions}>
+          <TouchableOpacity
+            style={[modalStyles.submitButton, submitting && { opacity: 0.6 }]}
+            onPress={submitSalaireRequest}
+            disabled={submitting}
+            activeOpacity={0.85}
+          >
+            <LinearGradient
+              colors={['#F59E0B', '#D97706']}
+              style={modalStyles.submitGradient}
+            >
+              {submitting ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <>
+                  <MaterialIcons name="send" size={18} color="#FFF" />
+                  <Text style={modalStyles.submitText}>Envoyer la demande</Text>
+                </>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={modalStyles.cancelButton}
+            onPress={onClose}
+            disabled={submitting}
+            activeOpacity={0.7}
+          >
+            <Text style={modalStyles.cancelText}>Annuler</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+};
+
+// ============================================
+// CONFIRMATION SALAIRE MODAL
+// ============================================
+const ConfirmationSalaireModal = ({ onClose, onSuccess }) => {
+  const [code, setCode] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const confirmReception = async () => {
+    if (!code.trim() || code.length !== 6) {
+      Alert.alert('Attention', 'Veuillez entrer le code à 6 chiffres reçu par email');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      const response = await fetch(`${API_URL}/employe-inss/salaire/confirmer`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ code_verification: code }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        Alert.alert(
+          '✓ Confirmation réussie',
+          'Votre réception de salaire a été confirmée avec succès!\n\n' +
+          'Notification envoyée au manager\n' +
+          'Notification envoyée à l\'administration\n\n' +
+          'Merci pour votre confirmation.',
+          [{ text: 'OK', onPress: onSuccess }]
+        );
+      } else {
+        Alert.alert('Erreur', data.message || 'Code invalide ou expiré');
+      }
+    } catch (error) {
+      Alert.alert('Erreur', error.message || 'Erreur réseau');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={modalStyles.container}
+    >
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bgSecondary} />
+
+      {/* HEADER */}
+      <View style={modalStyles.header}>
+        <TouchableOpacity onPress={onClose} disabled={submitting} style={modalStyles.closeButton}>
+          <MaterialIcons name="close" size={26} color={COLORS.textPrimary} />
+        </TouchableOpacity>
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Text style={modalStyles.headerTitle}>Confirmer la réception</Text>
+          <Text style={modalStyles.headerSubtitle}>Code de vérification</Text>
+        </View>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <ScrollView
+        style={modalStyles.scroll}
+        contentContainerStyle={modalStyles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* INSTRUCTIONS */}
+        <View style={[modalStyles.section, { alignItems: 'center' }]}>
+          <View style={[modalStyles.iconCircleLarge, { backgroundColor: COLORS.purpleLight }]}>
+            <MaterialIcons name="verified" size={48} color={COLORS.purple} />
+          </View>
+          <Text style={modalStyles.instructionTitle}>
+            Vérification de réception
+          </Text>
+          <Text style={modalStyles.instructionText}>
+            Entrez le code à 6 chiffres que vous avez reçu par email pour confirmer 
+            la réception de votre salaire.
+          </Text>
+        </View>
+
+        {/* CODE INPUT */}
+        <View style={modalStyles.section}>
+          <Text style={modalStyles.sectionTitle}>Code de vérification *</Text>
+          <TextInput
+            placeholder="000000"
+            placeholderTextColor={COLORS.textTertiary}
+            value={code}
+            onChangeText={(text) => setCode(text.replace(/[^0-9]/g, '').slice(0, 6))}
+            keyboardType="number-pad"
+            maxLength={6}
+            mode="outlined"
+            style={[modalStyles.textInput, { fontSize: 24, textAlign: 'center', letterSpacing: 8 }]}
+            outlineColor={COLORS.border}
+            activeOutlineColor={COLORS.purple}
+            textColor={COLORS.textPrimary}
+            theme={{
+              colors: {
+                background: COLORS.bgSecondary,
+              }
+            }}
+          />
+        </View>
+
+        {/* WARNING BOX */}
+        <View style={[modalStyles.infoBox, { backgroundColor: COLORS.warningLight }]}>
+          <MaterialIcons name="info" size={20} color={COLORS.warning} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={[modalStyles.infoTitle, { color: COLORS.warning }]}>
+              Important
+            </Text>
+            <Text style={modalStyles.infoText}>
+              • Le code est valide pendant 24 heures{'\n'}
+              • Ne partagez jamais ce code{'\n'}
+              • Vérifiez votre boîte de réception et spams
+            </Text>
+          </View>
+        </View>
+
+        {/* INFO BOX */}
+        <View style={[modalStyles.infoBox, { backgroundColor: COLORS.infoLight }]}>
+          <MaterialIcons name="email" size={20} color={COLORS.info} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={[modalStyles.infoTitle, { color: COLORS.info }]}>
+              Notification automatique
+            </Text>
+            <Text style={modalStyles.infoText}>
+              Après confirmation, un email sera automatiquement envoyé à votre manager 
+              et à l'administration.
+            </Text>
+          </View>
+        </View>
+
+        {/* ACTIONS */}
+        <View style={modalStyles.actions}>
+          <TouchableOpacity
+            style={[modalStyles.submitButton, submitting && { opacity: 0.6 }]}
+            onPress={confirmReception}
+            disabled={submitting}
+            activeOpacity={0.85}
+          >
+            <LinearGradient
+              colors={['#8B5CF6', '#7C3AED']}
+              style={modalStyles.submitGradient}
+            >
+              {submitting ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <>
+                  <MaterialIcons name="verified" size={18} color="#FFF" />
+                  <Text style={modalStyles.submitText}>Confirmer la réception</Text>
+                </>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={modalStyles.cancelButton}
+            onPress={onClose}
+            disabled={submitting}
+            activeOpacity={0.7}
+          >
+            <Text style={modalStyles.cancelText}>Annuler</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+};
+
+// ============================================
+// MAIN STYLES
+// ============================================
+const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.bgPrimary,
@@ -775,7 +1270,7 @@ const dashboardStyles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 16,
-    fontSize: 16,
+    fontSize: 15,
     color: COLORS.textSecondary,
   },
   scroll: {
@@ -783,102 +1278,133 @@ const dashboardStyles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    paddingBottom: 20,
   },
   header: {
-    marginBottom: -20,
+    marginBottom: -16,
   },
   headerGradient: {
-    paddingTop: 50,
-    paddingBottom: 70,
-    paddingHorizontal: 24,
+    paddingTop: 40,
+    paddingBottom: 60,
+    paddingHorizontal: 20,
   },
   headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 20,
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '800',
     color: '#FFF',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   headerSubtitle: {
-    fontSize: 15,
+    fontSize: 14,
     color: 'rgba(255,255,255,0.9)',
   },
   headerIconContainer: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 30,
+
+  // TABS
+  tabsContainer: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  tabActive: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.7)',
+  },
+  tabTextActive: {
+    color: '#FFF',
   },
 
-  // Balance Card
-  balanceCardWrapper: {
-    marginBottom: 20,
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
   },
+  tabContent: {
+    paddingTop: 4,
+  },
+
+  // BALANCE CARD
   balanceCard: {
     backgroundColor: COLORS.bgSecondary,
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
   balanceHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
-    gap: 12,
+    marginBottom: 20,
+    gap: 10,
   },
   balanceIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: COLORS.successLight,
     justifyContent: 'center',
     alignItems: 'center',
   },
   balanceTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     color: COLORS.textPrimary,
   },
   balanceSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.textSecondary,
     marginTop: 2,
   },
   balanceMainValue: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   balanceNumber: {
-    fontSize: 56,
+    fontSize: 48,
     fontWeight: '900',
     color: COLORS.success,
-    letterSpacing: -2,
+    letterSpacing: -1,
   },
   balanceLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.textSecondary,
     marginTop: 4,
     fontWeight: '500',
   },
-  balanceDivider: {
-    height: 1,
+  divider: {
+    marginBottom: 16,
     backgroundColor: COLORS.border,
-    marginBottom: 20,
   },
   balanceDetailsRow: {
     flexDirection: 'row',
@@ -888,146 +1414,105 @@ const dashboardStyles = StyleSheet.create({
     alignItems: 'center',
   },
   balanceDetailIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   balanceDetailValue: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
     color: COLORS.textPrimary,
   },
   balanceDetailLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: COLORS.textSecondary,
-    marginTop: 4,
+    marginTop: 2,
   },
 
-  // Stats Grid
-  statsGrid: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  statIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  statValue: {
-    fontSize: 28,
-    fontWeight: '900',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    fontWeight: '600',
-  },
-
-  // New Request Button
-  newRequestButton: {
-    borderRadius: 16,
+  // QUICK ACTION BUTTON
+  quickActionButton: {
+    borderRadius: 14,
     overflow: 'hidden',
-    marginBottom: 24,
+    marginBottom: 20,
     shadowColor: COLORS.success,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  newRequestGradient: {
+  quickActionGradient: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-    gap: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    gap: 14,
   },
-  newRequestIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  quickActionIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  newRequestTitle: {
-    fontSize: 17,
+  quickActionTitle: {
+    fontSize: 15,
     fontWeight: '800',
     color: '#FFF',
   },
-  newRequestSubtitle: {
-    fontSize: 13,
+  quickActionSubtitle: {
+    fontSize: 12,
     color: 'rgba(255,255,255,0.9)',
     marginTop: 2,
   },
 
-  // Recent Leaves
+  // RECENT SECTION
   recentSection: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-    gap: 10,
+    marginBottom: 14,
+    gap: 8,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     color: COLORS.textPrimary,
   },
   leavesList: {
-    gap: 12,
+    gap: 10,
   },
   leaveCard: {
     backgroundColor: COLORS.bgSecondary,
     borderRadius: 12,
-    padding: 16,
+    padding: 14,
     borderWidth: 1,
     borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
   },
   leaveCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
   },
   leaveTypeIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
   leaveType: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     color: COLORS.textPrimary,
   },
   leaveDates: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.textSecondary,
     marginTop: 2,
   },
@@ -1035,22 +1520,164 @@ const dashboardStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
   },
   leaveStatusText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 60,
+    paddingVertical: 40,
   },
   emptyStateText: {
-    fontSize: 15,
+    fontSize: 14,
     color: COLORS.textTertiary,
-    marginTop: 12,
+    marginTop: 10,
+  },
+
+  // SALAIRE CARD
+  salaireCard: {
+    backgroundColor: COLORS.bgSecondary,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  salaireHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    gap: 10,
+  },
+  salaireIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  salaireTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  salaireSubtitle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  salaireMainValue: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  salaireNumber: {
+    fontSize: 42,
+    fontWeight: '900',
+    color: COLORS.purple,
+    letterSpacing: -1,
+  },
+  salaireLabel: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  salaireDetailsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  salaireDetailItem: {
+    flex: 1,
+  },
+  salaireDetailLabel: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginBottom: 4,
+  },
+  salaireDetailValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  statutBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  statutText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  // ACTIONS GRID
+  actionsGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  actionCard: {
+    flex: 1,
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  actionGradient: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  actionIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  actionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFF',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  actionSubtitle: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.9)',
+    textAlign: 'center',
+  },
+
+  // INFO BOX
+  infoBox: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.infoLight,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  infoTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.info,
+    marginBottom: 4,
+  },
+  infoText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    lineHeight: 18,
   },
 });
 
@@ -1065,8 +1692,8 @@ const modalStyles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     backgroundColor: COLORS.bgSecondary,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
@@ -1078,12 +1705,12 @@ const modalStyles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 19,
+    fontSize: 17,
     fontWeight: '800',
     color: COLORS.textPrimary,
   },
   headerSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     color: COLORS.textSecondary,
     marginTop: 2,
   },
@@ -1091,100 +1718,100 @@ const modalStyles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
-    paddingBottom: 40,
+    padding: 16,
+    paddingBottom: 32,
   },
   section: {
-    marginBottom: 28,
+    marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     color: COLORS.textPrimary,
-    marginBottom: 12,
+    marginBottom: 10,
   },
 
-  // Type Grid
+  // TYPE GRID
   typeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
     justifyContent: 'space-between',
   },
   typeCard: {
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 10,
+    padding: 14,
     alignItems: 'center',
     borderWidth: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
   typeIconCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   typeLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     textAlign: 'center',
   },
 
-  // Date Cards
+  // DATE CARDS
   dateCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
     backgroundColor: COLORS.bgSecondary,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   dateIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     justifyContent: 'center',
     alignItems: 'center',
   },
   dateLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: COLORS.textSecondary,
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 3,
   },
   dateValue: {
-    fontSize: 15,
+    fontSize: 14,
     color: COLORS.textPrimary,
     fontWeight: '600',
   },
   durationCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     backgroundColor: COLORS.successLight,
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 8,
+    borderRadius: 10,
+    padding: 14,
+    marginTop: 6,
   },
   durationIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
   durationText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.textSecondary,
     fontWeight: '600',
   },
@@ -1193,113 +1820,163 @@ const modalStyles = StyleSheet.create({
     fontWeight: '800',
   },
 
-  // Text Input
+  // TEXT INPUT
   textInput: {
     backgroundColor: COLORS.bgSecondary,
     fontSize: 14,
-    minHeight: 120,
+    minHeight: 100,
   },
 
-  // Document
+  // DOCUMENT
   documentPreview: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
     backgroundColor: COLORS.bgSecondary,
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 10,
+    padding: 14,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   documentIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
   },
   documentName: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: COLORS.textPrimary,
   },
   documentSize: {
-    fontSize: 12,
+    fontSize: 11,
     color: COLORS.textSecondary,
     marginTop: 2,
   },
   removeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: COLORS.errorLight,
     justifyContent: 'center',
     alignItems: 'center',
   },
   uploadCard: {
     alignItems: 'center',
-    padding: 32,
+    padding: 28,
     backgroundColor: COLORS.bgSecondary,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 2,
     borderColor: COLORS.border,
     borderStyle: 'dashed',
   },
   uploadIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  uploadText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.primary,
+    marginBottom: 4,
+  },
+  uploadSubtext: {
+    fontSize: 11,
+    color: COLORS.textTertiary,
+  },
+
+  // PERIODE ROW
+  periodeRow: {
+    flexDirection: 'row',
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+    marginBottom: 6,
+  },
+  selectCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: COLORS.bgSecondary,
+    borderRadius: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  selectText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    flex: 1,
+  },
+
+  // INSTRUCTIONS
+  iconCircleLarge: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
   },
-  uploadText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.primary,
-    marginBottom: 6,
+  instructionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.textPrimary,
+    marginBottom: 8,
+    textAlign: 'center',
   },
-  uploadSubtext: {
-    fontSize: 12,
-    color: COLORS.textTertiary,
+  instructionText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 
-  // Actions
+  // ACTIONS
   actions: {
-    gap: 12,
-    marginTop: 12,
+    gap: 10,
+    marginTop: 8,
   },
   submitButton: {
-    borderRadius: 12,
+    borderRadius: 10,
     overflow: 'hidden',
-    shadowColor: COLORS.success,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
   },
   submitGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    gap: 10,
+    paddingVertical: 14,
+    gap: 8,
   },
   submitText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
     color: '#FFF',
   },
   cancelButton: {
     backgroundColor: COLORS.bgSecondary,
-    borderRadius: 12,
-    paddingVertical: 16,
+    borderRadius: 10,
+    paddingVertical: 14,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   cancelText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: COLORS.textSecondary,
   },

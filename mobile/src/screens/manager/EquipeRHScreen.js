@@ -47,7 +47,7 @@ const isDesktop = screenWidth >= 1024;
 const isMobile = screenWidth < 768;
 
 // Configuration API
-const API_BASE_URL = 'http://localhost:5000/api'; // À adapter selon votre configuration
+const API_BASE_URL = 'https://nutrifix-1-twdf.onrender.com/api';
 
 const EquipeRHScreen = () => {
   const navigation = useNavigation();
@@ -66,7 +66,7 @@ const EquipeRHScreen = () => {
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [employeeModalVisible, setEmployeeModalVisible] = useState(false);
   const [filterRole, setFilterRole] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('actif');
+  const [filterStatus, setFilterStatus] = useState('all');
 
   // Présences
   const [presences, setPresences] = useState([]);
@@ -144,6 +144,7 @@ const EquipeRHScreen = () => {
     baseURL: API_BASE_URL,
     headers: {
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache'
     },
   });
 
@@ -805,7 +806,7 @@ const EquipeRHScreen = () => {
                 style={[styles.miniActionBtn, { backgroundColor: '#2ECC71' }]}
                 onPress={() => handleMarkPresence(id_utilisateur_ou_id_presence(item), 'present')}
               >
-                <MaterialIcons name="check" size={16} color="#FFF" />
+                <MaterialIcons name="check-circle" size={16} color="#FFF" />
                 <Text style={styles.miniActionText}>Présent</Text>
               </TouchableOpacity>
 
@@ -813,14 +814,19 @@ const EquipeRHScreen = () => {
                 style={[styles.miniActionBtn, { backgroundColor: '#E74C3C' }]}
                 onPress={() => handleMarkPresence(id_utilisateur_ou_id_presence(item), 'absent')}
               >
-                <MaterialIcons name="close" size={16} color="#FFF" />
+                <MaterialIcons name="cancel" size={16} color="#FFF" />
                 <Text style={styles.miniActionText}>Absent</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.miniActionBtn, { backgroundColor: '#3498DB' }]}
                 onPress={() => {
-                  setSelectedEmployee({ id: item.id_utilisateur || item.id_employe, nom_complet: item.employee_name });
+                  setSelectedEmployee({
+                    id: item.id_utilisateur || item.id_employe,
+                    nom_complet: item.employee_name,
+                    email: item.email
+                  });
+                  setNotifySubject(`Note concernant votre présence du ${selectedDate.toLocaleDateString()}`);
                   setNotificationModalVisible(true);
                 }}
               >
@@ -829,11 +835,20 @@ const EquipeRHScreen = () => {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.miniActionBtn, { backgroundColor: '#95A5A6' }]}
+                style={[
+                  styles.miniActionBtn,
+                  { backgroundColor: item.is_active === 0 ? '#27AE60' : '#F39C12' }
+                ]}
                 onPress={() => handleToggleStatus(item.id_utilisateur || item.id_employe)}
               >
-                <MaterialIcons name="power-settings-new" size={16} color="#FFF" />
-                <Text style={styles.miniActionText}>Statut</Text>
+                <MaterialIcons
+                  name={item.is_active === 0 ? "play-arrow" : "pause"}
+                  size={16}
+                  color="#FFF"
+                />
+                <Text style={styles.miniActionText}>
+                  {item.is_active === 0 ? 'Activer' : 'Désactiver'}
+                </Text>
               </TouchableOpacity>
             </View>
           )}
@@ -1003,7 +1018,10 @@ const EquipeRHScreen = () => {
 
       {/* Liste des présences */}
       <FlatList
-        data={presences}
+        data={filteredEmployees.map(emp => {
+          const presence = presences.find(p => p.id_utilisateur === emp.id || p.id_employe === emp.id);
+          return presence ? { ...emp, ...presence, employee_name: emp.nom_complet } : { ...emp, employee_name: emp.nom_complet, statut: null };
+        })}
         renderItem={renderPresenceItem}
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={styles.presenceList}
@@ -1326,6 +1344,10 @@ const EquipeRHScreen = () => {
           isMobile && styles.salaryCardMobile
         ]}
         onPress={() => {
+          if (item.statut_paiement === 'non_calculé') {
+            Alert.alert('Information', 'Ce salaire n\'a pas encore été calculé pour cette période.');
+            return;
+          }
           if (bulkPaymentMode && item.statut_paiement === 'calculé') {
             toggleSalarySelection(item.id);
           } else {
@@ -1400,9 +1422,9 @@ const EquipeRHScreen = () => {
             </Text>
             <Text style={[
               styles.salaryValue,
-              { fontWeight: 'bold', fontSize: isMobile ? 16 : 18, color: '#2ECC71' }
+              { fontWeight: 'bold', fontSize: isMobile ? 16 : 18, color: item.statut_paiement === 'non_calculé' ? '#95A5A6' : '#2ECC71' }
             ]}>
-              {formatCurrency(item.salaire_net)}
+              {item.statut_paiement === 'non_calculé' ? 'N/A' : formatCurrency(item.salaire_net)}
             </Text>
           </View>
         </View>
@@ -1653,6 +1675,16 @@ const EquipeRHScreen = () => {
         <View style={[styles.paymentRequestActions, isMobile && styles.paymentRequestActionsMobile]}>
           <Button
             mode="contained"
+            onPress={() => handleSendVerificationCode(item.id)}
+            icon="shield-lock"
+            style={[styles.paymentRequestButton, { backgroundColor: '#F39C12' }]}
+            compact={isMobile}
+          >
+            {isMobile ? 'OTP' : 'Envoyer Code OTP'}
+          </Button>
+
+          <Button
+            mode="contained"
             onPress={() => handleProcessPaymentRequest(item.id, 'approve')}
             icon="check"
             style={[styles.paymentRequestButton, { backgroundColor: '#2ECC71' }]}
@@ -1660,6 +1692,7 @@ const EquipeRHScreen = () => {
           >
             Approuver & Payer
           </Button>
+
           <Button
             mode="outlined"
             onPress={() => handleProcessPaymentRequest(item.id, 'reject')}
@@ -2376,7 +2409,12 @@ const EquipeRHScreen = () => {
 
           {/* Liste des salaires */}
           <FlatList
-            data={salaries}
+            key={isDesktop ? 'desktop-grid' : isTablet ? 'tablet-grid' : 'mobile-list'}
+            numColumns={isDesktop ? 4 : isTablet ? 2 : 1}
+            data={filteredEmployees.map(emp => {
+              const salary = salaries.find(s => s.id_employe === emp.id || s.id_utilisateur === emp.id);
+              return salary ? { ...emp, ...salary, employee_name: emp.nom_complet, id: salary.id } : { ...emp, employee_name: emp.nom_complet, statut_paiement: 'non_calculé', id: `temp-${emp.id}` };
+            })}
             renderItem={renderSalaryCard}
             keyExtractor={(item) => item.id.toString()}
             contentContainerStyle={styles.salaryList}
@@ -2733,11 +2771,13 @@ const EquipeRHScreen = () => {
 
   // =============== HELPERS ===============
   const formatCurrency = (amount) => {
+    const val = parseFloat(amount);
+    if (isNaN(val)) return '0 BIF';
     return new Intl.NumberFormat('fr-FR', {
       style: 'decimal',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
-    }).format(amount) + ' BIF';
+    }).format(val) + ' BIF';
   };
 
   const formatDate = (dateString) => {
@@ -3635,6 +3675,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 15,
     marginBottom: 10,
+    marginHorizontal: 5,
+    flex: 1,
+    minWidth: isDesktop ? '23%' : isTablet ? '45%' : '100%',
     elevation: 2,
   },
   salaryCardSelected: {
@@ -3677,22 +3720,22 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   salaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    marginBottom: 10,
   },
   salaryLabel: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#7F8C8D',
+    marginBottom: 2,
   },
   salaryLabelMobile: {
     fontSize: 12,
   },
   salaryValue: {
-    fontSize: 13,
+    fontSize: 14,
     color: '#2C3E50',
-    fontWeight: '500',
+    fontWeight: 'bold',
   },
   salaryValueMobile: {
     fontSize: 12,

@@ -40,7 +40,8 @@ router.get('/check-uniqueness', authenticate, async (req, res) => {
             params.push(excludeId);
         }
 
-        const [results] = await db.query(sql, params);
+        const resultsRaw = await db.query(sql, params);
+        const results = (resultsRaw && resultsRaw.length > 0) ? resultsRaw[0] : { count: 0 };
         const isUnique = results.count === 0;
 
         res.status(200).json({

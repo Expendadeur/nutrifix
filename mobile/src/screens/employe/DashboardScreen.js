@@ -1,4 +1,4 @@
-// frontend/src/screens/employe/DashboardScreen.js - VERSION AMÉLIORÉE RESPONSIVE
+// frontend/src/screens/employe/DashboardScreen.js - VERSION OPTIMISÉE
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
@@ -29,7 +29,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_URL = process.env.REACT_APP_API_URL || 'https://nutrifix-1-twdf.onrender.com/api';
 
 const DashboardScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
@@ -44,8 +44,12 @@ const DashboardScreen = ({ navigation }) => {
   const [messageBody, setMessageBody] = useState('');
   const [isSending, setIsSending] = useState(false);
 
+  // États pour le pointage
+  const [isCheckingIn, setIsCheckingIn] = useState(false);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+
   const { width } = useWindowDimensions();
-  const isTablet = width >= 768; // Détection tablette/desktop
+  const isTablet = width >= 768;
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -86,6 +90,31 @@ const DashboardScreen = ({ navigation }) => {
     } catch (error) {
       console.error('Erreur récupération token:', error);
       return { 'Content-Type': 'application/json' };
+    }
+  };
+
+  // ✅ FONCTION OPTIMISÉE : Charge uniquement les stats de présence
+  const loadAttendanceStats = async () => {
+    try {
+      const headers = await getAuthHeaders();
+      console.log('📡 Chargement stats de présence uniquement...');
+
+      const response = await fetch(`${API_URL}/employe-inss/dashboard`, { headers });
+
+      if (response.ok) {
+        const dashData = await response.json();
+        console.log('✅ Stats de présence mises à jour');
+        
+        // Met à jour UNIQUEMENT les données de présence
+        setDashboardData(prevData => ({
+          ...prevData,
+          presences_mois: dashData.data.presences_mois || prevData?.presences_mois
+        }));
+      } else {
+        console.warn(`⚠️ Dashboard status ${response.status}`);
+      }
+    } catch (error) {
+      console.error('❌ Erreur chargement stats présence:', error);
     }
   };
 
@@ -208,8 +237,10 @@ const DashboardScreen = ({ navigation }) => {
     loadAllData();
   };
 
+  // ✅ POINTAGE ENTRÉE OPTIMISÉ - Ne recharge QUE les stats de présence
   const handleCheckIn = async () => {
     try {
+      setIsCheckingIn(true);
       const headers = await getAuthHeaders();
       console.log('📡 Pointage entrée...');
 
@@ -235,18 +266,24 @@ const DashboardScreen = ({ navigation }) => {
       if (response.ok) {
         console.log('✅ Pointage enregistré');
         Alert.alert('Succès', 'Pointage d\'entrée enregistré');
-        loadAllData();
+        
+        // ✅ Recharge UNIQUEMENT les stats de présence (légère animation)
+        await loadAttendanceStats();
       } else {
         Alert.alert('Erreur', data.message);
       }
     } catch (error) {
       console.error('❌ Erreur pointage entrée:', error);
       Alert.alert('Erreur', 'Impossible d\'enregistrer le pointage');
+    } finally {
+      setIsCheckingIn(false);
     }
   };
 
+  // ✅ POINTAGE SORTIE OPTIMISÉ - Ne recharge QUE les stats de présence
   const handleCheckOut = async () => {
     try {
+      setIsCheckingOut(true);
       const headers = await getAuthHeaders();
       console.log('📡 Pointage sortie...');
 
@@ -272,13 +309,17 @@ const DashboardScreen = ({ navigation }) => {
       if (response.ok) {
         console.log('✅ Pointage enregistré');
         Alert.alert('Succès', 'Pointage de sortie enregistré');
-        loadAllData();
+        
+        // ✅ Recharge UNIQUEMENT les stats de présence (légère animation)
+        await loadAttendanceStats();
       } else {
         Alert.alert('Erreur', data.message);
       }
     } catch (error) {
       console.error('❌ Erreur pointage sortie:', error);
       Alert.alert('Erreur', 'Impossible d\'enregistrer le pointage');
+    } finally {
+      setIsCheckingOut(false);
     }
   };
 
@@ -354,29 +395,20 @@ const DashboardScreen = ({ navigation }) => {
   };
 
   const renderDigitalCard = () => {
-
-    // ✅ DEBUG
     console.log('🔍 renderDigitalCard appelé');
     console.log('🔍 carteData:', carteData);
-    console.log('🔍 carteData?.carte:', carteData?.carte);
-    console.log('🔍 Matricule:', carteData?.carte?.matricule);
 
     if (!carteData?.carte) return null;
     const { carte } = carteData;
 
-    // ✅ STRATÉGIE DE QR CODE :
-    // 1. Utiliser carte.qr_code du backend si c'est une Data URL
-    // 2. Sinon, générer localement avec les données de la carte
     let qrData;
     let useImageQR = false;
 
     if (carte.qr_code && carte.qr_code.startsWith('data:image')) {
-      // QR Code vient du backend comme Data URL
       qrData = carte.qr_code;
       useImageQR = true;
       console.log('✅ Utilisation QR Code du backend (Data URL)');
     } else {
-      // Générer QR Code localement
       qrData = JSON.stringify({
         id: carte.id || '000',
         matricule: carte.matricule || 'N/A',
@@ -384,7 +416,7 @@ const DashboardScreen = ({ navigation }) => {
         type: carte.type_employe,
         timestamp: Date.now()
       });
-      console.log('⚠️ Génération QR Code locale (backend n\'a pas fourni de Data URL)');
+      console.log('⚠️ Génération QR Code locale');
     }
 
     return (
@@ -396,7 +428,6 @@ const DashboardScreen = ({ navigation }) => {
             end={{ x: 1, y: 1 }}
             style={styles.mainCard}
           >
-            {/* En-tête */}
             <View style={styles.cardHeader}>
               <View style={styles.cardLogoSection}>
                 <View style={styles.cardLogoPlaceholder}>
@@ -413,9 +444,7 @@ const DashboardScreen = ({ navigation }) => {
               </View>
             </View>
 
-            {/* Corps - 2 Colonnes */}
             <View style={styles.cardBody}>
-              {/* Photo */}
               <View style={styles.photoColumn}>
                 {carte.photo_identite ? (
                   <Image source={{ uri: carte.photo_identite }} style={styles.cardPhoto} resizeMode="cover" />
@@ -426,7 +455,6 @@ const DashboardScreen = ({ navigation }) => {
                 )}
               </View>
 
-              {/* Infos */}
               <View style={styles.infoColumn}>
                 <View style={styles.infoWhiteBox}>
                   <Text style={styles.employeeName} numberOfLines={2}>{carte.nom_complet}</Text>
@@ -470,7 +498,6 @@ const DashboardScreen = ({ navigation }) => {
               </View>
             </View>
 
-            {/* Footer avec QR Code */}
             <View style={styles.cardFooter}>
               <View style={styles.footerLeft}>
                 <Text style={styles.footerLabel}>DATE DE VALIDITÉ</Text>
@@ -478,18 +505,15 @@ const DashboardScreen = ({ navigation }) => {
                 <Text style={styles.footerEmission}>Émise le {formatDate(new Date().toISOString())}</Text>
               </View>
 
-              {/* ✅ QR CODE SECTION - GÈRE LES DEUX CAS */}
               <View style={styles.qrSection}>
                 <View style={styles.qrWrapper}>
                   {useImageQR ? (
-                    // Cas 1: QR Code vient du backend comme image Data URL
                     <Image
                       source={{ uri: qrData }}
                       style={{ width: 75, height: 75 }}
                       resizeMode="contain"
                     />
                   ) : (
-                    // Cas 2: Génération locale avec react-native-qrcode-svg
                     <QRCode
                       value={qrData}
                       size={75}
@@ -531,17 +555,38 @@ const DashboardScreen = ({ navigation }) => {
               <Text style={styles.sectionTitle}>Pointage</Text>
             </View>
             <View style={styles.attendanceGrid}>
-              <TouchableOpacity style={[styles.attendanceButton, styles.checkInButton]} onPress={handleCheckIn}>
+              <TouchableOpacity 
+                style={[styles.attendanceButton, styles.checkInButton]} 
+                onPress={handleCheckIn}
+                disabled={isCheckingIn}
+              >
                 <View style={styles.attendanceIconWrapper}>
-                  <MaterialIcons name="login" size={28} color="#FFF" />
+                  {isCheckingIn ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <MaterialIcons name="login" size={28} color="#FFF" />
+                  )}
                 </View>
-                <Text style={styles.attendanceButtonText}>Pointer Entrée</Text>
+                <Text style={styles.attendanceButtonText}>
+                  {isCheckingIn ? 'Pointage...' : 'Pointer Entrée'}
+                </Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.attendanceButton, styles.checkOutButton]} onPress={handleCheckOut}>
+              
+              <TouchableOpacity 
+                style={[styles.attendanceButton, styles.checkOutButton]} 
+                onPress={handleCheckOut}
+                disabled={isCheckingOut}
+              >
                 <View style={styles.attendanceIconWrapper}>
-                  <MaterialIcons name="logout" size={28} color="#FFF" />
+                  {isCheckingOut ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <MaterialIcons name="logout" size={28} color="#FFF" />
+                  )}
                 </View>
-                <Text style={styles.attendanceButtonText}>Pointer Sortie</Text>
+                <Text style={styles.attendanceButtonText}>
+                  {isCheckingOut ? 'Pointage...' : 'Pointer Sortie'}
+                </Text>
               </TouchableOpacity>
             </View>
             <View style={styles.attendanceStats}>
@@ -660,15 +705,11 @@ const DashboardScreen = ({ navigation }) => {
     >
       {renderHeader()}
 
-      {/* LAYOUT RESPONSIVE: Sur tablette/desktop, disposition en 2 colonnes */}
       {isTablet ? (
         <View style={styles.tabletLayout}>
-          {/* Colonne Gauche: Carte */}
           <View style={styles.leftColumn}>
             {renderDigitalCard()}
           </View>
-
-          {/* Colonne Droite: Reste du contenu */}
           <View style={styles.rightColumn}>
             {renderAttendanceSection()}
             {renderQuickStats()}
@@ -676,7 +717,6 @@ const DashboardScreen = ({ navigation }) => {
           </View>
         </View>
       ) : (
-        /* LAYOUT MOBILE: Disposition verticale normale */
         <>
           {renderDigitalCard()}
           {renderAttendanceSection()}
@@ -684,7 +724,7 @@ const DashboardScreen = ({ navigation }) => {
           {renderQuickActions()}
         </>
       )}
-      {/* COMMUNICATION MODAL */}
+
       <Portal>
         <Modal
           visible={communicationModalVisible}
@@ -766,7 +806,6 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F3F4F6' },
   loadingText: { marginTop: 16, fontSize: 16, color: '#6B7280', fontWeight: '500' },
 
-  // LAYOUT RESPONSIVE TABLET/DESKTOP
   tabletLayout: {
     flexDirection: 'row',
     paddingHorizontal: 16,
@@ -783,7 +822,6 @@ const styles = StyleSheet.create({
 
   section: { paddingHorizontal: 16, marginBottom: 16 },
 
-  // Header
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -817,7 +855,6 @@ const styles = StyleSheet.create({
   },
   badgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '700' },
 
-  // Carte
   cardSection: { paddingHorizontal: 16, marginBottom: 20 },
   fullCardContainer: { width: '100%', maxWidth: 500, alignSelf: 'center' },
   mainCard: {
@@ -921,7 +958,6 @@ const styles = StyleSheet.create({
   },
   printNoteText: { fontSize: 11, color: '#6B7280', marginLeft: 6, fontWeight: '500', flex: 1 },
 
-  // Cards
   card: {
     borderRadius: 12,
     backgroundColor: '#FFFFFF',
@@ -935,7 +971,6 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 16, fontWeight: '700', color: '#111827', marginLeft: 10 },
   sectionTitleStandalone: { fontSize: 16, fontWeight: '700', color: '#111827', marginBottom: 16 },
 
-  // Pointage
   attendanceGrid: { flexDirection: 'row', gap: 12, marginBottom: 16 },
   attendanceButton: { flex: 1, alignItems: 'center', padding: 16, borderRadius: 10 },
   checkInButton: { backgroundColor: '#10B981' },
@@ -961,7 +996,6 @@ const styles = StyleSheet.create({
   attendanceStatValue: { fontSize: 18, fontWeight: '700', color: '#111827', marginTop: 8 },
   attendanceStatLabel: { fontSize: 10, color: '#6B7280', marginTop: 4, fontWeight: '500', textAlign: 'center' },
 
-  // Stats
   statsGrid: { flexDirection: 'row', gap: 12 },
   statCard: {
     flex: 1,
@@ -978,7 +1012,6 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 15, fontWeight: '700', color: '#111827', marginBottom: 4, textAlign: 'center' },
   statLabel: { fontSize: 10, color: '#6B7280', textAlign: 'center', fontWeight: '500', lineHeight: 14 },
 
-  // Actions
   actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   actionCard: {
     width: '48%',
@@ -992,7 +1025,6 @@ const styles = StyleSheet.create({
   actionIcon: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   actionLabel: { fontSize: 12, color: '#111827', textAlign: 'center', fontWeight: '600', lineHeight: 16 },
 
-  // Communication Modal Styles
   commModalContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,

@@ -3428,4 +3428,134 @@ router.post('/generate-salary-report', authorize('manager', 'admin'), async (req
   }
 });
 
+// ==================== FINANCE - TRANSACTIONS RAPIDES ====================
+
+// POST /api/manager/finances/transaction-rapide
+router.post('/finances/transaction-rapide', authorize('manager', 'admin'), async (req, res) => {
+  let connection;
+  try {
+    const { id: managerId, id_departement } = req.user;
+    const {
+      type, // 'vente' ou 'achat'
+      client_id,
+      fournisseur_id,
+      montant,
+      mode_paiement,
+      description,
+      article_type, // 'parcelle', 'animal', 'vehicule', 'produit', 'autre'
+      article_id,
+      date_transaction
+    } = req.body;
+
+    if (!type || !montant || !mode_paiement) {
+      return res.status(400).json({ error: 'Type, montant et mode de paiement requis' });
+    }
+
+    connection = await db.pool.getConnection();
+    await connection.beginTransaction();
+
+    const dateTrans = date_transaction || new Date();
+    // Générer numéro commande format: CMD-{TYPE}-{TIMESTAMP}
+    const timestamp = Date.now().toString().substr(-6);
+    const numCommande = `CMD-${type === 'vente' ? 'V' : 'A'}-${timestamp}`;
+
+    let commandeId;
+
+    if (type === 'vente') {
+      // 1. Créer Commande Vente
+      const [cmdResult] = await connection.query(
+        `INSERT INTO commandes_vente 
+          (numero_commande, id_client, date_commande, date_livraison_prevue, 
+           date_livraison_reelle, lieu_livraison, mode_paiement, montant_ht, 
+           montant_ttc, montant_total, statut, cree_par)
+         VALUES (?, ?, ?, ?, ?, 'Sur place', ?, ?, ?, ?, 'livree_complete', ?)`,
+        [numCommande, client_id || 1, dateTrans, dateTrans, dateTrans, mode_paiement, montant, montant, montant, managerId]
+      );
+      commandeId = cmdResult.insertId;
+
+      // 2. Créer Ligne Commande
+      await connection.query(
+        `INSERT INTO lignes_commande_vente 
+          (id_commande_vente, type_produit, id_produit, designation, 
+           quantite_commandee, quantite_livree, quantite_facturee, 
+           unite, prix_unitaire_ht, montant_ht, montant_ttc, statut_livraison)
+         VALUES (?, ?, ?, ?, 1, 1, 1, 'unité', ?, ?, ?, 'complete')`,
+        [commandeId, article_type || 'autre', article_id || null, description || 'Vente rapide', montant, montant, montant]
+      );
+
+      // 3. Créer Paiement (Recette)
+      // Note: Le trigger 'trigger_journal_vente' va s'occuper du journal quand statut = 'livree_complete'
+      // MAIS le trigger 'trigger_journal_paiement' s'occupe du paiement. 
+      // Si on veut que la comptabilité soit juste, il faut les deux, ou bien gérer pour ne pas doubler.
+      // Journal Vente = C.A. + Client (411 - 707)
+      // Journal Paiement = Banque + Client (512 - 411)
+      // Donc c'est correct d'avoir les deux.
+
+      await connection.query(
+        `INSERT INTO paiements 
+          (reference_paiement, type_paiement, source_type, id_source, 
+           id_commande, montant, mode_paiement, date_paiement, statut, description)
+         VALUES (?, 'recette', 'client', ?, ?, ?, ?, ?, 'valide', ?)`,
+        [`PAY-${numCommande}`, client_id || 1, commandeId, montant, mode_paiement, dateTrans, description || 'Paiement vente rapide']
+      );
+
+      // 4. Mettre à jour l'article vendu
+      if (article_type === 'parcelle' && article_id) {
+        // await connection.query('UPDATE parcelles SET statut = "active" WHERE id = ?', [article_id]); 
+        // Note: For now keeping status as active or assuming 'active' means owned. If sold, maybe ownership changes?
+        // User asked to use existing structure. Assuming no status change needed or status change to 'abandonnee' if sold (as per schema comment)
+      } else if (article_type === 'animal' && article_id) {
+        await connection.query('UPDATE animaux SET statut = "vendu", date_sortie = NOW(), raison_sortie = "Vente" WHERE id = ?', [article_id]);
+      } else if (article_type === 'produit_lait' && article_id) {
+        await connection.query('UPDATE productions_lait SET destination = "vente" WHERE id = ?', [article_id]);
+      } else if (article_type === 'produit_oeuf' && article_id) {
+        await connection.query('UPDATE productions_oeufs SET destination = "vente" WHERE id = ?', [article_id]);
+      } else if (article_type === 'vehicule' && article_id) {
+        await connection.query('UPDATE vehicules SET statut = "vendu" WHERE id = ?', [article_id]);
+      }
+
+    } else {
+      // ACHAT
+      // 1. Créer Commande Achat
+      const [cmdResult] = await connection.query(
+        `INSERT INTO commandes_achat
+          (numero_commande, id_fournisseur, date_commande, date_livraison_prevue,
+           date_livraison_reelle, lieu_livraison, mode_paiement, montant_ht,
+           montant_ttc, montant_total, statut, cree_par, observations_livraison)
+         VALUES (?, ?, ?, ?, ?, 'Sur place', ?, ?, ?, ?, 'livree_complete', ?, ?)`,
+        [numCommande, fournisseur_id || 1, dateTrans, dateTrans, dateTrans, mode_paiement, montant, montant, montant, managerId, description || 'Achat rapide']
+      );
+      commandeId = cmdResult.insertId;
+
+      // Pas de table lignes_commande_achat, on s'arrête là pour le détail.
+
+      // 2. Créer Paiement (Dépense)
+      await connection.query(
+        `INSERT INTO paiements 
+          (reference_paiement, type_paiement, source_type, id_source, 
+           id_commande, montant, mode_paiement, date_paiement, statut, description)
+         VALUES (?, 'depense', 'fournisseur', ?, ?, ?, ?, ?, 'valide', ?)`,
+        [`PAY-${numCommande}`, fournisseur_id || 1, commandeId, montant, mode_paiement, dateTrans, description || 'Paiement achat rapide']
+      );
+    }
+
+    // Trace
+    await connection.query(
+      `INSERT INTO traces (id_utilisateur, module, type_action, action_details)
+       VALUES (?, 'finance', 'transaction_rapide', ?)`,
+      [managerId, `${type === 'vente' ? 'Vente' : 'Achat'} rapide de ${montant} BIF - ${description}`]
+    );
+
+    await connection.commit();
+    res.json({ success: true, message: 'Transaction enregistrée avec succès', commandeId, numeroCommande: numCommande });
+
+  } catch (error) {
+    if (connection) await connection.rollback();
+    console.error('❌ Error processing transaction:', error);
+    res.status(500).json({ error: 'Erreur serveur', details: error.message });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
 module.exports = router;

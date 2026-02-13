@@ -27,7 +27,8 @@ import {
   ActivityIndicator,
   Portal,
   Provider,
-  IconButton
+  IconButton,
+  Snackbar
 } from 'react-native-paper';
 import { MaterialIcons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
@@ -38,11 +39,11 @@ import axios from 'axios';
 // Configuration de l'API
 const API_BASE_URL = __DEV__
   ? Platform.select({
-    ios: 'http://localhost:5000',
-    android: 'http://10.0.2.2:5000',
-    default: 'http://localhost:5000'
+    ios: 'https://nutrifix-1-twdf.onrender.com',
+    android: 'https://nutrifix-1-twdf.onrender.com',
+    default: 'https://nutrifix-1-twdf.onrender.com'
   })
-  : 'https://your-production-api.com';
+  : 'https://nutrifix-1-twdf.onrender.com';
 
 const ProfilScreen = ({ navigation, route, onLogout }) => {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -64,6 +65,17 @@ const ProfilScreen = ({ navigation, route, onLogout }) => {
     interventions_mois: 0,
     solde_conges: 0
   });
+
+  // Snackbar
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarType, setSnackbarType] = useState('info');
+
+  const showSnackbar = (message, type = 'info') => {
+    setSnackbarMessage(message);
+    setSnackbarType(type);
+    setSnackbarVisible(true);
+  };
 
   // Helpers responsive (placés ici pour éviter "access before initialization")
   const getResponsiveLayout = useCallback(() => {
@@ -131,10 +143,7 @@ const ProfilScreen = ({ navigation, route, onLogout }) => {
       }
     } catch (error) {
       console.error('Erreur chargement profil:', error);
-      Alert.alert(
-        'Erreur',
-        'Impossible de charger les données du profil. Veuillez réessayer.'
-      );
+      showSnackbar('Impossible de charger les données du profil. Veuillez réessayer.', 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -153,17 +162,17 @@ const ProfilScreen = ({ navigation, route, onLogout }) => {
 
     // Validation
     if (!currentPassword || !newPassword || !confirmPassword) {
-      Alert.alert('Erreur', 'Tous les champs sont requis');
+      showSnackbar('Tous les champs sont requis', 'error');
       return;
     }
 
     if (newPassword.length < 8) {
-      Alert.alert('Erreur', 'Le mot de passe doit contenir au moins 8 caractères');
+      showSnackbar('Le mot de passe doit contenir au moins 8 caractères', 'error');
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      Alert.alert('Erreur', 'Les nouveaux mots de passe ne correspondent pas');
+      showSnackbar('Les nouveaux mots de passe ne correspondent pas', 'error');
       return;
     }
 
@@ -182,30 +191,19 @@ const ProfilScreen = ({ navigation, route, onLogout }) => {
       );
 
       if (response.data.success) {
-        Alert.alert(
-          'Succès',
-          'Votre mot de passe a été modifié avec succès.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                setPasswordModalVisible(false);
-                setPasswordForm({
-                  currentPassword: '',
-                  newPassword: '',
-                  confirmPassword: ''
-                });
-              }
-            }
-          ]
-        );
+        showSnackbar('Votre mot de passe a été modifié avec succès.', 'success');
+        setPasswordModalVisible(false);
+        setPasswordForm({
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: ''
+        });
       }
     } catch (error) {
       console.error('Erreur changement mot de passe:', error);
-      Alert.alert(
-        'Erreur',
-        error.response?.data?.message ||
-        'Impossible de modifier le mot de passe. Vérifiez votre mot de passe actuel.'
+      showSnackbar(
+        error.response?.data?.message || 'Impossible de modifier le mot de passe.',
+        'error'
       );
     } finally {
       setPasswordLoading(false);
@@ -233,21 +231,13 @@ const ProfilScreen = ({ navigation, route, onLogout }) => {
           onLogout();
         } else {
           console.error('onLogout non disponible');
-          Alert.alert(
-            'Erreur',
-            'Impossible de se déconnecter. Veuillez redémarrer l\'application.'
-          );
+          showSnackbar('Impossible de se déconnecter. Veuillez redémarrer l\'application.', 'error');
         }
       }, 1000);
 
     } catch (error) {
       console.error('❌ Erreur déconnexion:', error);
-      //showNotification('Erreur lors de la déconnexion', 'error');
-
-      Alert.alert(
-        'Erreur',
-        'Une erreur est survenue lors de la déconnexion.'
-      );
+      showSnackbar('Une erreur est survenue lors de la déconnexion.', 'error');
     }
   };
 
@@ -682,7 +672,7 @@ const ProfilScreen = ({ navigation, route, onLogout }) => {
             description="Support NUTRIFIX"
             left={props => <List.Icon {...props} icon="help-circle-outline" color="#64748B" />}
             right={props => <List.Icon {...props} icon="chevron-right" color="#CBD5E1" />}
-            onPress={() => Alert.alert('Aide', 'Contactez l\'administrateur')}
+            onPress={() => showSnackbar('Contactez l\'administrateur pour toute assistance.', 'info')}
           />
           <Divider />
           <List.Item
@@ -1051,6 +1041,15 @@ const ProfilScreen = ({ navigation, route, onLogout }) => {
 
       {renderPasswordModal()}
       {renderQRModal()}
+
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={3000}
+        style={{ backgroundColor: snackbarType === 'error' ? '#E74C3C' : '#2ECC71' }}
+      >
+        {snackbarMessage}
+      </Snackbar>
     </Provider>
   );
 };

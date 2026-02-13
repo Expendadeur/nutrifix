@@ -1,7 +1,7 @@
 // mobile/src/services/chauffeurService.js - SERVICE COMPLET
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_URL = process.env.REACT_APP_API_URL || 'https://nutrifix-1-twdf.onrender.com/api';
 
 class ChauffeurService {
     // ============================================
@@ -132,7 +132,7 @@ class ChauffeurService {
             formData.append('description', incidentData.description);
             formData.append('location', incidentData.location);
             formData.append('urgency', incidentData.urgency);
-            
+
             if (incidentData.coordinates) {
                 formData.append('coordinates', JSON.stringify(incidentData.coordinates));
             }
@@ -198,7 +198,7 @@ class ChauffeurService {
             formData.append('date', expenseData.date);
             formData.append('description', expenseData.description);
             formData.append('paymentMethod', expenseData.paymentMethod);
-            
+
             if (expenseData.missionReference) {
                 formData.append('missionReference', expenseData.missionReference);
             }
@@ -377,6 +377,43 @@ class ChauffeurService {
         } catch (error) {
             console.error('Record maintenance error:', error);
             return { success: false, message: 'Erreur d\'enregistrement maintenance' };
+        }
+    }
+
+    /**
+     * Salaires - Demander un code de vérification
+     */
+    async requestCode() {
+        try {
+            const headers = await this.getHeaders();
+            const response = await fetch(`${API_URL}/chauffeur/salary/request-code`, {
+                method: 'POST',
+                headers
+            });
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Request code error:', error);
+            return { success: false, message: 'Erreur lors de la demande du code' };
+        }
+    }
+
+    /**
+     * Salaires - Confirmer la réception avec le code
+     */
+    async confirmReception(data) {
+        try {
+            const headers = await this.getHeaders();
+            const response = await fetch(`${API_URL}/chauffeur/salary/confirm-reception`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(data)
+            });
+            const result = await response.json();
+            return result;
+        } catch (error) {
+            console.error('Confirm reception error:', error);
+            return { success: false, message: 'Erreur lors de la confirmation' };
         }
     }
 }

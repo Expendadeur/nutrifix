@@ -199,6 +199,24 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
     retention_logs: '90'
   });
 
+  const [companySettings, setCompanySettings] = useState({
+    nom_entreprise: '',
+    nif: '',
+    numero_rc: '',
+    boite_postale: '',
+    telephone: '',
+    email: '',
+    commune: '',
+    quartier: '',
+    avenue: '',
+    rue: '',
+    numero_batiment: '',
+    assujetti_tva: false,
+    taux_tva_defaut: '',
+    centre_fiscal: '',
+    secteur_activite: ''
+  });
+
   const [systemStats, setSystemStats] = useState(null);
   const [backups, setBackups] = useState([]);
 
@@ -276,6 +294,9 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
           break;
         case 'stats':
           await loadSystemStats();
+          break;
+        case 'entreprise':
+          await loadCompanySettings();
           break;
       }
     } catch (error) {
@@ -393,6 +414,18 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
     } catch (error) {
       console.error('Erreur chargement stats système:', error);
       throw error;
+    }
+  };
+
+  const loadCompanySettings = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/admin/company-settings`, getAxiosConfig());
+      if (response.data.success) {
+        setCompanySettings(response.data.data);
+      }
+    } catch (error) {
+      console.error('Erreur chargement paramètres entreprise:', error);
+      // Ne pas bloquer si erreur, juste logger
     }
   };
 
@@ -715,6 +748,26 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
         }
       ]
     );
+  };
+
+  const handleSaveCompanySettings = async () => {
+    try {
+      if (!companySettings.nom_entreprise || !companySettings.nif) {
+        Alert.alert('Erreur', 'Le nom de l\'entreprise et le NIF sont obligatoires');
+        return;
+      }
+
+      setActionLoading(true);
+      const response = await axios.put(`${API_URL}/admin/company-settings`, companySettings, getAxiosConfig());
+
+      if (response.data.success) {
+        Alert.alert('Succès', 'Paramètres de l\'entreprise mis à jour');
+      }
+    } catch (error) {
+      Alert.alert('Erreur', error.response?.data?.message || error.message);
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   // ============================================
@@ -1361,6 +1414,238 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
           Sauvegarder les Paramètres
         </Button>
       </Surface>
+    </ScrollView>
+  );
+
+  // ============================================
+  // TAB: PARAMÈTRES ENTREPRISE
+  // ============================================
+  const renderCompanySettingsTab = () => (
+    <ScrollView style={styles.tabContent} contentContainerStyle={{ padding: cardPadding }}>
+      <View style={styles.sectionHeader}>
+        <Title style={{ fontSize: fontSize.subtitle, fontWeight: '700', color: '#111827' }}>
+          Identité de l'entreprise
+        </Title>
+        <Text style={{ fontSize: fontSize.small, color: '#6B7280', marginTop: 4 }}>
+          Informations légales affichées sur les factures et documents officiels.
+        </Text>
+      </View>
+
+      <Surface style={styles.formCard} elevation={1}>
+        <View style={styles.formRow}>
+          <TextInput
+            label="Nom de l'entreprise *"
+            value={companySettings.nom_entreprise}
+            onChangeText={(text) => setCompanySettings({ ...companySettings, nom_entreprise: text })}
+            mode="outlined"
+            style={styles.inputHalf}
+            outlineColor="#E5E7EB"
+            activeOutlineColor="#6366F1"
+            dense
+          />
+          <TextInput
+            label="NIF *"
+            value={companySettings.nif}
+            onChangeText={(text) => setCompanySettings({ ...companySettings, nif: text })}
+            mode="outlined"
+            style={styles.inputHalf}
+            outlineColor="#E5E7EB"
+            activeOutlineColor="#6366F1"
+            dense
+          />
+        </View>
+        <View style={styles.formRow}>
+          <TextInput
+            label="Registre de Commerce (RC)"
+            value={companySettings.numero_rc}
+            onChangeText={(text) => setCompanySettings({ ...companySettings, numero_rc: text })}
+            mode="outlined"
+            style={styles.inputHalf}
+            outlineColor="#E5E7EB"
+            activeOutlineColor="#6366F1"
+            dense
+          />
+          <TextInput
+            label="Secteur d'activité"
+            value={companySettings.secteur_activite}
+            onChangeText={(text) => setCompanySettings({ ...companySettings, secteur_activite: text })}
+            mode="outlined"
+            style={styles.inputHalf}
+            outlineColor="#E5E7EB"
+            activeOutlineColor="#6366F1"
+            dense
+          />
+        </View>
+      </Surface>
+
+      <View style={[styles.sectionHeader, { marginTop: 24 }]}>
+        <Title style={{ fontSize: fontSize.subtitle, fontWeight: '700', color: '#111827' }}>
+          Coordonnées
+        </Title>
+      </View>
+
+      <Surface style={styles.formCard} elevation={1}>
+        <View style={styles.formRow}>
+          <TextInput
+            label="Téléphone"
+            value={companySettings.telephone}
+            onChangeText={(text) => setCompanySettings({ ...companySettings, telephone: text })}
+            mode="outlined"
+            style={styles.inputHalf}
+            outlineColor="#E5E7EB"
+            activeOutlineColor="#6366F1"
+            left={<TextInput.Icon icon="phone" color="#9CA3AF" />}
+            dense
+          />
+          <TextInput
+            label="Email"
+            value={companySettings.email}
+            onChangeText={(text) => setCompanySettings({ ...companySettings, email: text })}
+            mode="outlined"
+            style={styles.inputHalf}
+            outlineColor="#E5E7EB"
+            activeOutlineColor="#6366F1"
+            left={<TextInput.Icon icon="email" color="#9CA3AF" />}
+            dense
+          />
+        </View>
+        <TextInput
+          label="Boîte Postale (BP)"
+          value={companySettings.boite_postale}
+          onChangeText={(text) => setCompanySettings({ ...companySettings, boite_postale: text })}
+          mode="outlined"
+          style={[styles.inputFull, { marginTop: 12 }]}
+          outlineColor="#E5E7EB"
+          activeOutlineColor="#6366F1"
+          dense
+        />
+      </Surface>
+
+      <View style={[styles.sectionHeader, { marginTop: 24 }]}>
+        <Title style={{ fontSize: fontSize.subtitle, fontWeight: '700', color: '#111827' }}>
+          Adresse Physique
+        </Title>
+      </View>
+
+      <Surface style={styles.formCard} elevation={1}>
+        <View style={styles.formRow}>
+          <TextInput
+            label="Commune"
+            value={companySettings.commune}
+            onChangeText={(text) => setCompanySettings({ ...companySettings, commune: text })}
+            mode="outlined"
+            style={styles.inputHalf}
+            outlineColor="#E5E7EB"
+            activeOutlineColor="#6366F1"
+            dense
+          />
+          <TextInput
+            label="Quartier"
+            value={companySettings.quartier}
+            onChangeText={(text) => setCompanySettings({ ...companySettings, quartier: text })}
+            mode="outlined"
+            style={styles.inputHalf}
+            outlineColor="#E5E7EB"
+            activeOutlineColor="#6366F1"
+            dense
+          />
+        </View>
+        <View style={styles.formRow}>
+          <TextInput
+            label="Avenue"
+            value={companySettings.avenue}
+            onChangeText={(text) => setCompanySettings({ ...companySettings, avenue: text })}
+            mode="outlined"
+            style={styles.inputHalf}
+            outlineColor="#E5E7EB"
+            activeOutlineColor="#6366F1"
+            dense
+          />
+          <TextInput
+            label="Rue"
+            value={companySettings.rue}
+            onChangeText={(text) => setCompanySettings({ ...companySettings, rue: text })}
+            mode="outlined"
+            style={styles.inputHalf}
+            outlineColor="#E5E7EB"
+            activeOutlineColor="#6366F1"
+            dense
+          />
+        </View>
+        <TextInput
+          label="Numéro bâtiment"
+          value={companySettings.numero_batiment}
+          onChangeText={(text) => setCompanySettings({ ...companySettings, numero_batiment: text })}
+          mode="outlined"
+          style={[styles.inputFull, { marginTop: 12 }]}
+          outlineColor="#E5E7EB"
+          activeOutlineColor="#6366F1"
+          dense
+        />
+      </Surface>
+
+      <View style={[styles.sectionHeader, { marginTop: 24 }]}>
+        <Title style={{ fontSize: fontSize.subtitle, fontWeight: '700', color: '#111827' }}>
+          Paramètres Fiscaux
+        </Title>
+      </View>
+
+      <Surface style={styles.formCard} elevation={1}>
+        <View style={styles.settingRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.settingLabel}>Assujetti à la TVA</Text>
+            <Text style={styles.settingDescription}>
+              L'entreprise collecte-t-elle la TVA sur ses ventes ?
+            </Text>
+          </View>
+          <Switch
+            value={companySettings.assujetti_tva == 1}
+            onValueChange={(val) => setCompanySettings({ ...companySettings, assujetti_tva: val ? 1 : 0 })}
+            trackColor={{ false: '#E5E7EB', true: '#818CF8' }}
+            thumbColor={companySettings.assujetti_tva ? '#4F46E5' : '#F3F4F6'}
+          />
+        </View>
+        <Divider style={{ marginVertical: 12 }} />
+        <View style={styles.formRow}>
+          <TextInput
+            label="Taux TVA par défaut (%)"
+            value={companySettings.taux_tva_defaut?.toString()}
+            onChangeText={(text) => setCompanySettings({ ...companySettings, taux_tva_defaut: text })}
+            keyboardType="numeric"
+            mode="outlined"
+            style={styles.inputHalf}
+            outlineColor="#E5E7EB"
+            activeOutlineColor="#6366F1"
+            dense
+          />
+          <TextInput
+            label="Centre Fiscal"
+            value={companySettings.centre_fiscal}
+            onChangeText={(text) => setCompanySettings({ ...companySettings, centre_fiscal: text })}
+            mode="outlined"
+            style={styles.inputHalf}
+            outlineColor="#E5E7EB"
+            activeOutlineColor="#6366F1"
+            dense
+          />
+        </View>
+      </Surface>
+
+      <View style={{ padding: 20 }}>
+        <Button
+          mode="contained"
+          onPress={handleSaveCompanySettings}
+          buttonColor="#6366F1"
+          style={styles.saveButton}
+          loading={actionLoading}
+          disabled={actionLoading}
+          labelStyle={{ fontSize: fontSize.body }}
+        >
+          Sauvegarder les Paramètres Ent.
+        </Button>
+      </View>
+
+      <View style={{ height: 100 }} />
     </ScrollView>
   );
 
@@ -2019,6 +2304,7 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
               { id: 'departements', label: 'Départements', icon: 'business' },
               { id: 'notifications', label: 'Notifications', icon: 'notifications' },
               { id: 'general', label: 'Général', icon: 'settings' },
+              { id: 'entreprise', label: 'Entreprise', icon: 'domain' },
               { id: 'backup', label: 'Backup', icon: 'backup' },
               { id: 'stats', label: 'Stats', icon: 'bar-chart' },
             ].map(tab => (
@@ -2075,6 +2361,7 @@ const TraceabiliteParametresScreen = ({ navigation, route }) => {
           {activeTab === 'departements' && renderDepartementsTab()}
           {activeTab === 'notifications' && renderNotificationsTab()}
           {activeTab === 'general' && renderGeneralTab()}
+          {activeTab === 'entreprise' && renderCompanySettingsTab()}
           {activeTab === 'backup' && renderBackupTab()}
           {activeTab === 'stats' && renderStatsTab()}
         </>

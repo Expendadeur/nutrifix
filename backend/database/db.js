@@ -27,13 +27,17 @@ class Database {
         }
     }
 
+    async getConnection() {
+        return await this.pool.getConnection();
+    }
+
     async transaction(operations) {
         const connection = await this.pool.getConnection();
         try {
             await connection.beginTransaction();
-            
+
             const result = await operations(connection);
-            
+
             await connection.commit();
             return result;
         } catch (error) {

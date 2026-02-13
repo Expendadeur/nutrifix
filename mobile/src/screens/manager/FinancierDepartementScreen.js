@@ -46,7 +46,7 @@ const getResponsiveValue = (mobile, tablet, desktop) => {
   return mobile;
 };
 
-const API_URL = 'http://localhost:5000/api'; // Ajustez selon votre config
+const API_URL = 'https://nutrifix-1-twdf.onrender.com/api';
 
 const FinancierDepartementScreen = () => {
   const [loading, setLoading] = useState(true);

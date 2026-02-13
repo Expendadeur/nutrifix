@@ -145,9 +145,9 @@ router.get(
       // =============================
       // Exécution
       // =============================
-      const [factures] = await db.query(sql, filters);
-      const [countResult] = await db.query(countSql, filters);
-      
+      const factures = await db.query(sql, filters);
+      const countResult = await db.query(countSql, filters);
+
       // Extraction sécurisée du total
       const total = countResult && countResult.length > 0 ? countResult[0].total : 0;
 
@@ -312,7 +312,7 @@ router.get('/factures/:id', authenticate, authorize('admin', 'comptable'), async
       WHERE f.id = ?
     `;
 
-    const [[facture]] = await db.query(sql, [id]);
+    const [facture] = await db.query(sql, [id]);
 
     if (!facture) {
       return res.status(404).json({
@@ -321,9 +321,32 @@ router.get('/factures/:id', authenticate, authorize('admin', 'comptable'), async
       });
     }
 
+    // Récupérer les lignes de la commande associée si c'est une facture de vente
+    let lignes = [];
+    if (facture.id_commande && facture.type_facture === 'vente') {
+      const lignesQuery = `
+        SELECT l.*, a.designation, a.code_article
+        FROM lignes_commande_vente l
+        LEFT JOIN articles a ON l.id_article = a.id
+        WHERE l.id_commande_vente = ?
+      `;
+      lignes = await db.query(lignesQuery, [facture.id_commande]);
+    } else if (facture.id_commande && facture.type_facture === 'achat') {
+      const lignesQuery = `
+        SELECT l.*, a.designation, a.code_article
+        FROM lignes_commande_achat l
+        LEFT JOIN articles a ON l.id_article = a.id
+        WHERE l.id_commande_achat = ?
+      `;
+      lignes = await db.query(lignesQuery, [facture.id_commande]);
+    }
+
     res.status(200).json({
       success: true,
-      data: facture
+      data: {
+        ...facture,
+        lignes
+      }
     });
   } catch (error) {
     console.error('Get facture error:', error);
@@ -403,7 +426,7 @@ router.delete('/factures/:id', authenticate, authorize('admin', 'comptable'), as
     const { id } = req.params;
 
     // Vérifier si la facture est payée
-    const [[facture]] = await db.query('SELECT statut_paiement FROM factures WHERE id = ?', [id]);
+    const [facture] = await db.query('SELECT statut_paiement FROM factures WHERE id = ?', [id]);
 
     if (!facture) {
       return res.status(404).json({
@@ -543,8 +566,8 @@ router.get('/paiements', authenticate, authorize('admin', 'comptable'), async (r
     // =============================
     // Exécution (même params pour les deux)
     // =============================
-    const [paiements] = await db.query(sql, params);
-    const [countResult] = await db.query(countSql, params);
+    const paiements = await db.query(sql, params);
+    const countResult = await db.query(countSql, params);
 
     // Extraction sécurisée du total
     const total = countResult && countResult.length > 0 ? countResult[0].total : 0;
@@ -647,7 +670,7 @@ router.post('/paiements', authenticate, authorize('admin', 'comptable'), async (
 
     // Update related invoice if applicable
     if (id_facture) {
-      const [[facture]] = await db.query(
+      const [facture] = await db.query(
         'SELECT montant_ttc, montant_regle FROM factures WHERE id = ?',
         [id_facture]
       );
@@ -704,7 +727,7 @@ router.get('/paiements/:id', authenticate, authorize('admin', 'comptable'), asyn
   try {
     const { id } = req.params;
 
-    const [[paiement]] = await db.query('SELECT * FROM paiements WHERE id = ?', [id]);
+    const [paiement] = await db.query('SELECT * FROM paiements WHERE id = ?', [id]);
 
     if (!paiement) {
       return res.status(404).json({
@@ -781,7 +804,7 @@ router.delete('/paiements/:id', authenticate, authorize('admin', 'comptable'), a
   try {
     const { id } = req.params;
 
-    const [[paiement]] = await db.query('SELECT id_facture, montant FROM paiements WHERE id = ?', [id]);
+    const [paiement] = await db.query('SELECT id_facture, montant FROM paiements WHERE id = ?', [id]);
 
     if (!paiement) {
       return res.status(404).json({
@@ -792,7 +815,7 @@ router.delete('/paiements/:id', authenticate, authorize('admin', 'comptable'), a
 
     // Reverser le paiement sur la facture
     if (paiement.id_facture) {
-      const [[facture]] = await db.query(
+      const [facture] = await db.query(
         'SELECT montant_ttc, montant_regle FROM factures WHERE id = ?',
         [paiement.id_facture]
       );
@@ -929,8 +952,8 @@ router.get('/journal-comptable-complet', authenticate, async (req, res) => {
       ${whereClause}
     `;
 
-    const [totauxRows] = await db.query(totauxQuery, params);
-    const t = totauxRows[0] || {};
+    const [totauxRow] = await db.query(totauxQuery, params);
+    const t = totauxRow || {};
 
     const totaux = {
       total_entrees: Number(t.total_entrees) || 0,
@@ -950,7 +973,7 @@ router.get('/journal-comptable-complet', authenticate, async (req, res) => {
       ORDER BY total_montant DESC
     `;
 
-    const [repartition] = await db.query(repartitionQuery, params);
+    const repartition = await db.query(repartitionQuery, params);
 
     // =============================
     // Mouvements paginés (SAFE)
@@ -963,7 +986,7 @@ router.get('/journal-comptable-complet', authenticate, async (req, res) => {
       LIMIT ${offset}, ${pLimit}
     `;
 
-    const [mouvements] = await db.query(mouvementsQuery, params);
+    const mouvements = await db.query(mouvementsQuery, params);
 
     // =============================
     // COUNT pagination
@@ -973,7 +996,7 @@ router.get('/journal-comptable-complet', authenticate, async (req, res) => {
       FROM journal_comptable
       ${whereClause}
     `;
-    const [[{ total }]] = await db.query(countQuery, params);
+    const [{ total }] = await db.query(countQuery, params);
 
     res.json({
       success: true,
@@ -1049,7 +1072,7 @@ router.get('/journal-comptable/statistiques', authenticate, async (req, res) => 
       ${whereClause}
       GROUP BY categorie
     `;
-    const [categorieStats] = await db.query(statsCategorie, params);
+    const categorieStats = await db.query(statsCategorie, params);
 
     // Statistiques par type
     const statsType = `
@@ -1061,7 +1084,7 @@ router.get('/journal-comptable/statistiques', authenticate, async (req, res) => 
       ${whereClause}
       GROUP BY type_mouvement
     `;
-    const [typeStats] = await db.query(statsType, params);
+    const typeStats = await db.query(statsType, params);
 
     // Évolution mensuelle
     const evolutionMensuelle = `
@@ -1076,7 +1099,7 @@ router.get('/journal-comptable/statistiques', authenticate, async (req, res) => 
       ORDER BY annee DESC, mois DESC
       LIMIT 12
     `;
-    const [evolutionStats] = await db.query(evolutionMensuelle, params);
+    const evolutionStats = await db.query(evolutionMensuelle, params);
 
     // Top 10 des plus grosses opérations
     const topOperations = `
@@ -1086,7 +1109,7 @@ router.get('/journal-comptable/statistiques', authenticate, async (req, res) => 
       ORDER BY montant DESC
       LIMIT 10
     `;
-    const [topOps] = await db.query(topOperations, params);
+    const topOps = await db.query(topOperations, params);
 
     res.json({
       success: true,
@@ -1108,12 +1131,18 @@ router.get('/journal-comptable/statistiques', authenticate, async (req, res) => 
   }
 });
 
-// =============================================
-// ROUTE 13: GET /balance-comptable
-// =============================================
 router.get('/balance-comptable', authenticate, async (req, res) => {
   try {
-    const { startDate, endDate, exercice, page = 1, limit = 50 } = req.query;
+    // Désactiver le cache (évite 304)
+    res.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+
+    const startDate = req.query.startDate || null;
+    const endDate = req.query.endDate || null;
+    const exercice = req.query.exercice ? parseInt(req.query.exercice, 10) : null;
 
     const whereConditions = [];
     const params = [];
@@ -1130,27 +1159,28 @@ router.get('/balance-comptable', authenticate, async (req, res) => {
 
     if (exercice) {
       whereConditions.push('exercice_comptable = ?');
-      params.push(parseInt(exercice));
+      params.push(exercice);
     }
 
-    const whereClause = whereConditions.length > 0
-      ? 'WHERE ' + whereConditions.join(' AND ')
-      : '';
+    const whereClause =
+      whereConditions.length > 0
+        ? 'WHERE ' + whereConditions.join(' AND ')
+        : '';
 
-    const query = `
+    const sql = `
       SELECT 
-        COALESCE(compte_debit, compte_credit) as compte,
-        SUM(CASE WHEN compte_debit IS NOT NULL THEN montant ELSE 0 END) as total_debit,
-        SUM(CASE WHEN compte_credit IS NOT NULL THEN montant ELSE 0 END) as total_credit,
-        SUM(CASE WHEN compte_debit IS NOT NULL THEN montant ELSE 0 END) - 
-        SUM(CASE WHEN compte_credit IS NOT NULL THEN montant ELSE 0 END) as solde
-      FROM journal_comptable 
+        COALESCE(compte_debit, compte_credit) AS compte,
+        SUM(CASE WHEN compte_debit IS NOT NULL THEN montant ELSE 0 END) AS total_debit,
+        SUM(CASE WHEN compte_credit IS NOT NULL THEN montant ELSE 0 END) AS total_credit,
+        SUM(CASE WHEN compte_debit IS NOT NULL THEN montant ELSE 0 END)
+        - SUM(CASE WHEN compte_credit IS NOT NULL THEN montant ELSE 0 END) AS solde
+      FROM journal_comptable
       ${whereClause}
       GROUP BY COALESCE(compte_debit, compte_credit)
       ORDER BY compte
     `;
 
-    const [balance] = await db.query(query, params);
+    const [balance] = await db.query(sql, params);
 
     res.json({
       success: true,
@@ -1167,12 +1197,23 @@ router.get('/balance-comptable', authenticate, async (req, res) => {
   }
 });
 
-// =============================================
-// ROUTE 14: GET /grand-livre
-// =============================================
 router.get('/grand-livre', authenticate, async (req, res) => {
   try {
-    const { compte, startDate, endDate, exercice, page = 1, limit = 50 } = req.query;
+    // Désactiver le cache (évite 304)
+    res.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+
+    const compte = req.query.compte;
+    const startDate = req.query.startDate || null;
+    const endDate = req.query.endDate || null;
+    const exercice = req.query.exercice ? parseInt(req.query.exercice, 10) : null;
+
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 50;
+    const offset = (page - 1) * limit;
 
     if (!compte) {
       return res.status(400).json({
@@ -1182,72 +1223,89 @@ router.get('/grand-livre', authenticate, async (req, res) => {
     }
 
     const whereConditions = ['(compte_debit = ? OR compte_credit = ?)'];
-    const params = [compte, compte];
+    const whereParams = [compte, compte];
 
     if (startDate) {
       whereConditions.push('date_operation >= ?');
-      params.push(startDate);
+      whereParams.push(startDate);
     }
 
     if (endDate) {
       whereConditions.push('date_operation <= ?');
-      params.push(endDate);
+      whereParams.push(endDate);
     }
 
     if (exercice) {
       whereConditions.push('exercice_comptable = ?');
-      params.push(parseInt(exercice));
+      whereParams.push(exercice);
     }
 
     const whereClause = 'WHERE ' + whereConditions.join(' AND ');
 
-    const pPage = parseInt(page);
-    const pLimit = parseInt(limit);
-    const offset = (pPage - 1) * pLimit;
-
-    const query = `
+    const sql = `
       SELECT *,
         CASE 
-          WHEN compte_debit = ? THEN montant 
-          ELSE 0 
-        END as debit,
+          WHEN compte_debit = ? THEN montant
+          ELSE 0
+        END AS debit,
         CASE 
-          WHEN compte_credit = ? THEN montant 
-          ELSE 0 
-        END as credit
-      FROM journal_comptable 
+          WHEN compte_credit = ? THEN montant
+          ELSE 0
+        END AS credit
+      FROM journal_comptable
       ${whereClause}
       ORDER BY date_operation, heure_operation
       LIMIT ? OFFSET ?
     `;
 
-    const queryParams = [compte, compte, ...params, pLimit, offset];
-    const [grandLivre] = await db.query(query, queryParams);
+    /**
+     * ORDRE DES PARAMÈTRES (CRITIQUE)
+     * 1  compte (CASE debit)
+     * 2  compte (CASE credit)
+     * 3+ whereParams
+     * n  limit (NUMBER)
+     * n+ offset (NUMBER)
+     */
+    const queryParams = [
+      compte,
+      compte,
+      ...whereParams,
+      limit,
+      offset
+    ];
 
-    // Calculer le solde progressif
+    const [grandLivre] = await db.query(sql, queryParams);
+
+    // Calcul du solde progressif
     let solde = 0;
     const grandLivreAvecSolde = grandLivre.map(ligne => {
-      solde += parseFloat(ligne.debit) - parseFloat(ligne.credit);
+      const debit = parseFloat(ligne.debit) || 0;
+      const credit = parseFloat(ligne.credit) || 0;
+      solde += debit - credit;
+
       return {
         ...ligne,
         solde_progressif: solde
       };
     });
 
-    // Count
-    const [[countResult]] = await db.query(
-      `SELECT COUNT(*) as total FROM journal_comptable ${whereClause}`,
-      params
-    );
+    // Total pour pagination
+    const countSql = `
+      SELECT COUNT(*) AS total
+      FROM journal_comptable
+      ${whereClause}
+    `;
+
+    const [[countResult]] = await db.query(countSql, whereParams);
 
     res.json({
       success: true,
       data: grandLivreAvecSolde,
       pagination: {
-        total: countResult?.total || 0,
-        page: pPage,
-        limit: pLimit,
-        pages: Math.ceil((countResult?.total || 0) / pLimit)
+        total: countResult.total,
+        page,
+        limit,
+        pages: Math.ceil(countResult.total / limit)
       }
     });
 
@@ -1269,7 +1327,7 @@ router.get('/journal-comptable/:id', authenticate, async (req, res) => {
     const { id } = req.params;
 
     const query = 'SELECT * FROM journal_comptable WHERE id = ?';
-    const [[result]] = await db.query(query, [id]);
+    const [result] = await db.query(query, [id]);
 
     if (!result) {
       return res.status(404).json({
@@ -1534,7 +1592,7 @@ router.post('/journal-comptable/export-excel',
         ${whereClause}
         ORDER BY date_operation DESC, heure_operation DESC
       `;
-      const [mouvements] = await db.query(query, params);
+      const mouvements = await db.query(query, params);
 
       // Calculate totals
       const totauxQuery = `
@@ -1544,7 +1602,7 @@ router.post('/journal-comptable/export-excel',
         FROM journal_comptable 
         ${whereClause}
       `;
-      const [[totauxResult]] = await db.query(totauxQuery, params);
+      const [totauxResult] = await db.query(totauxQuery, params);
       const total_entrees = parseFloat(totauxResult?.total_entrees) || 0;
       const total_sorties = parseFloat(totauxResult?.total_sorties) || 0;
       const solde = total_entrees - total_sorties;
@@ -1791,7 +1849,7 @@ router.post('/journal-comptable/export-pdf',
         ${whereClause}
         ORDER BY date_operation DESC, heure_operation DESC
       `;
-      const [mouvements] = await db.query(query, params);
+      const mouvements = await db.query(query, params);
 
       // Calculate totals
       const totauxQuery = `
@@ -1801,7 +1859,7 @@ router.post('/journal-comptable/export-pdf',
         FROM journal_comptable 
         ${whereClause}
       `;
-      const [[totauxResult]] = await db.query(totauxQuery, params);
+      const [totauxResult] = await db.query(totauxQuery, params);
       const total_entrees = parseFloat(totauxResult?.total_entrees) || 0;
       const total_sorties = parseFloat(totauxResult?.total_sorties) || 0;
       const solde = total_entrees - total_sorties;
@@ -1992,7 +2050,7 @@ router.get(
       `;
 
       const [rapports] = await db.query(sql, params);
-      const [[{ total }]] = await db.query(countSql, params);
+      const [{ total }] = await db.query(countSql, params);
 
       res.status(200).json({
         success: true,
@@ -2387,7 +2445,7 @@ router.post('/paiements-lot', authenticate, authorize('admin', 'comptable'), asy
 
         // Update invoice if applicable
         if (id_facture) {
-          const [[facture]] = await db.query(
+          const [facture] = await db.query(
             'SELECT montant_ttc, montant_regle FROM factures WHERE id = ?',
             [id_facture]
           );
@@ -2498,61 +2556,154 @@ router.get('/tresorerie', authenticate, authorize('admin', 'comptable'), async (
 });
 
 // =============================================
-// ROUTE 30: GET /analyses - Analyses financières
+// ROUTE 31: GET /factures/:id/pdf - Générer une facture OBR (PDF)
 // =============================================
-router.get('/analyses', authenticate, authorize('admin', 'comptable'), async (req, res) => {
+router.get('/factures/:id/pdf', authenticate, async (req, res) => {
   try {
-    const { startDate, endDate } = req.query;
+    const { id } = req.params;
 
-    // Ratio de liquidité
-    const [liquidite] = await db.query(`
-      SELECT 
-        SUM(CASE WHEN type_paiement = 'recette' THEN montant ELSE 0 END) as actif_courant,
-        SUM(CASE WHEN type_paiement = 'depense' THEN montant ELSE 0 END) as passif_courant
-      FROM paiements
-      WHERE statut = 'valide'
-      ${startDate ? `AND date_paiement >= '${startDate}'` : ''}
-      ${endDate ? `AND date_paiement <= '${endDate}'` : ''}
-    `);
-
-    // Rotation des créances
-    const [rotation] = await db.query(`
-      SELECT 
-        COUNT(*) as nombre_factures,
-        AVG(DATEDIFF(date_paiement, date_facture)) as jours_moyen_recouvrement
+    // 1. Récupérer les données de la facture
+    const [factures] = await db.query(`
+      SELECT f.*, cv.numero_commande, cv.lieu_livraison, cv.mode_paiement as c_mode_paiement
       FROM factures f
-      LEFT JOIN paiements p ON f.id = p.id_facture
-      WHERE f.statut_paiement = 'payee'
-      ${startDate ? `AND f.date_facture >= '${startDate}'` : ''}
-      ${endDate ? `AND f.date_facture <= '${endDate}'` : ''}
-    `);
+      LEFT JOIN commandes_vente cv ON f.id_commande = cv.id
+      WHERE f.id = ?
+    `, [id]);
 
-    // Endettement
-    const [endettement] = await db.query(`
-      SELECT 
-        SUM(CASE WHEN statut_paiement IN ('impayee', 'partiellement_payee') THEN montant_du ELSE 0 END) as dettes,
-        SUM(montant_ttc) as chiffre_affaires
-      FROM factures
-      WHERE type_facture = 'achat'
-      ${startDate ? `AND date_facture >= '${startDate}'` : ''}
-      ${endDate ? `AND date_facture <= '${endDate}'` : ''}
-    `);
+    if (!factures || factures.length === 0) {
+      return res.status(404).json({ success: false, message: 'Facture non trouvée' });
+    }
+    const facture = factures[0];
 
-    res.status(200).json({
-      success: true,
-      data: {
-        liquidite: liquidite[0] || {},
-        rotation: rotation[0] || {},
-        endettement: endettement[0] || {}
+    // 2. Récupérer les données du vendeur (NUTRIFIX)
+    const [entrepriseRows] = await db.query('SELECT * FROM parametres_entreprise LIMIT 1');
+    const entreprise = entrepriseRows[0] || {
+      nom_entreprise: 'NUTRIFIX',
+      nif: '4001234567',
+      numero_rc: 'RC/ Bujumbura / 1234',
+      telephone: '+257 22 22 22 22',
+      email: 'contact@nutrifix.bi',
+      commune: 'Mukaza',
+      quartier: 'Rohero I',
+      avenue: 'de la France',
+      numero_batiment: '10',
+      assujetti_tva: 1,
+      centre_fiscal: 'DMC',
+      secteur_activite: 'Commerce',
+      forme_juridique: 'S.U'
+    };
+
+    // 3. Récupérer les données du client
+    const [clientRows] = await db.query('SELECT * FROM clients WHERE id = ?', [facture.id_client]);
+    const client = clientRows[0] || { nom_client: 'Client Inconnu', nif: 'N/A', adresse: 'N/A' };
+
+    // 4. Récupérer les lignes de la commande
+    const [lignes] = await db.query(`
+      SELECT * FROM lignes_commande_vente WHERE id_commande_vente = ?
+    `, [facture.id_commande]);
+
+    // 5. Générer le PDF
+    const doc = new PDFDocument({ margin: 50 });
+    let filename = `Facture_${facture.numero_facture}.pdf`;
+    res.setHeader('Content-disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-type', 'application/pdf');
+
+    doc.pipe(res);
+
+    // Header: Facture n° ... du ...
+    doc.fillColor('#6D21A3').fontSize(16).font('Helvetica-Bold')
+      .text(`Facture n° ${facture.numero_facture} du ${new Date(facture.date_facture).toLocaleDateString('fr-FR')}`, { align: 'center' });
+    doc.moveDown(1);
+
+    // Section A: Identification du vendeur
+    doc.fillColor('black').fontSize(12).text('A. Identification du vendeur', { underline: true });
+    doc.fontSize(10).font('Helvetica');
+    doc.text(`Nom et prénom ou Raison sociale* : ${entreprise.nom_entreprise}`);
+    doc.text(`NIF* : ${entreprise.nif}`);
+    doc.text(`Registre de Commerce N° : ${entreprise.numero_rc}`);
+    doc.text(`B.P : ${entreprise.boite_postale || ''}, Tél : ${entreprise.telephone}`);
+    doc.text(`Commune : ${entreprise.commune}, Quartier : ${entreprise.quartier}`);
+    doc.text(`Av. : ${entreprise.avenue}, Rue : ${entreprise.rue || ''}, N° : ${entreprise.numero_batiment}`);
+    doc.text(`Assujetti à la TVA* : [${entreprise.assujetti_tva ? 'X' : ' '}] Oui [${!entreprise.assujetti_tva ? 'X' : ' '}] Non`);
+
+    // Colonne de droite (Vendeur)
+    const rightColX = 350;
+    const sellerY = doc.y - 85;
+    doc.text(`Centre fiscal : ${entreprise.centre_fiscal}`, rightColX, sellerY);
+    doc.text(`Secteur d'activités : ${entreprise.secteur_activite}`, rightColX, sellerY + 15);
+    doc.text(`Forme juridique : ${entreprise.forme_juridique || 'S.U'}`, rightColX, sellerY + 30);
+
+    doc.y = sellerY + 100; // Reset Y after columns
+    doc.moveDown(1);
+
+    // Section B: Le client
+    doc.fontSize(12).font('Helvetica-Bold').text('B. Le client: ', { underline: true });
+    doc.fontSize(10).font('Helvetica');
+    doc.text(`Nom et prénom ou Raison sociale* : ${client.nom_client}`);
+    doc.text(`NIF : ${client.numero_tva || client.nif || 'N/A'}`);
+    doc.text(`Résident à : ${client.adresse}`);
+    doc.text(`Assujetti à la TVA* : [${client.numero_tva ? 'X' : ' '}] Oui [${!client.numero_tva ? 'X' : ' '}] Non`);
+    doc.text('doit pour ce qui suit :');
+    doc.moveDown(0.5);
+
+    // Tableau des articles
+    const tableTop = doc.y;
+    const col1X = 50;
+    const col2X = 350;
+    const col3X = 420;
+    const col4X = 500;
+
+    // Table Header
+    doc.font('Helvetica-Bold');
+    doc.rect(col1X - 5, tableTop - 5, 500, 20).stroke();
+    doc.text('Nature de l\'article ou service*', col1X, tableTop);
+    doc.text('Qté*', col2X, tableTop);
+    doc.text('PU*', col3X, tableTop);
+    doc.text('PVHTVA', col4X, tableTop);
+
+    let currentY = tableTop + 20;
+    doc.font('Helvetica');
+
+    lignes.forEach((item, index) => {
+      // Check for page break
+      if (currentY > 700) {
+        doc.addPage();
+        currentY = 50;
       }
+
+      doc.text(`${index + 1}. ${item.designation}`, col1X, currentY, { width: 280 });
+      doc.text(item.quantite_commandee.toString(), col2X, currentY);
+      doc.text(item.prix_unitaire_ht.toLocaleString(), col3X, currentY);
+      const pvhtva = item.quantite_commandee * item.prix_unitaire_ht;
+      doc.text(pvhtva.toLocaleString(), col4X, currentY);
+
+      currentY += Math.max(20, doc.heightOfString(item.designation, { width: 280 }));
+      doc.moveTo(col1X - 5, currentY - 5).lineTo(col4X + 45, currentY - 5).stroke();
     });
+
+    // Totals
+    doc.font('Helvetica-Bold');
+    doc.text('PVT HTVA', col1X, currentY);
+    doc.text(Number(facture.montant_ht).toLocaleString(), col4X, currentY);
+    currentY += 20;
+
+    doc.text('TVA', col1X, currentY);
+    doc.text(Number(facture.montant_tva).toLocaleString(), col4X, currentY);
+    currentY += 20;
+
+    doc.rect(col1X - 5, currentY - 5, 500, 25).stroke();
+    doc.fontSize(12).text('Total TVAC', col1X, currentY);
+    doc.text(Number(facture.montant_ttc).toLocaleString(), col4X, currentY);
+
+    doc.moveDown(2);
+    doc.fontSize(10).fillColor('red').text('*Mention obligatoire');
+    doc.fillColor('black').text('N.B: Les non assujettis à la TVA ne remplissent pas les deux dernières lignes');
+
+    doc.end();
+
   } catch (error) {
-    console.error('Get analyses error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur lors de la récupération des analyses',
-      error: error.message
-    });
+    console.error('Export OBR PDF error:', error);
+    res.status(500).json({ success: false, message: 'Erreur lors de la génération du PDF OBR', error: error.message });
   }
 });
 

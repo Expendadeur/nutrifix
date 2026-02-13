@@ -2,9 +2,9 @@
 import api from './api';
 
 class VeterinaireService {
-  
+
   // ==================== DASHBOARD ====================
-  
+
   async getDashboardData() {
     try {
       const response = await api.get('/veterinaire/dashboard');
@@ -20,7 +20,7 @@ class VeterinaireService {
   async getAnimaux(filters = {}) {
     try {
       const params = new URLSearchParams();
-      
+
       // Ajouter tous les paramètres de filtrage
       if (filters.page) params.append('page', filters.page);
       if (filters.limit) params.append('limit', filters.limit);
@@ -72,7 +72,7 @@ class VeterinaireService {
   async getInterventions(filters = {}) {
     try {
       const params = new URLSearchParams();
-      
+
       // Ajouter tous les paramètres de filtrage
       if (filters.page) params.append('page', filters.page);
       if (filters.limit) params.append('limit', filters.limit);
@@ -169,6 +169,34 @@ class VeterinaireService {
     }
   }
 
+  // ==================== SALAIRES ====================
+
+  /**
+   * Salaires - Demander un code de vérification
+   */
+  async requestCode(salaireId) {
+    try {
+      const response = await api.post(`/veterinaire/salaires/${salaireId}/demander-code`);
+      return response.data;
+    } catch (error) {
+      console.error('Erreur requestCode:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Salaires - Confirmer la réception avec le code
+   */
+  async confirmReception(salaireId, data) {
+    try {
+      const response = await api.post(`/veterinaire/salaires/${salaireId}/confirmer-reception`, data);
+      return response.data;
+    } catch (error) {
+      console.error('Erreur confirmReception:', error);
+      throw error;
+    }
+  }
+
   // ==================== RAPPORTS ====================
 
   async generateRapportMedical(animalId, dateDebut, dateFin) {
@@ -196,7 +224,7 @@ class VeterinaireService {
       const params = new URLSearchParams();
       if (dateDebut) params.append('dateDebut', dateDebut);
       if (dateFin) params.append('dateFin', dateFin);
-      
+
       const response = await api.get(`/veterinaire/statistiques/interventions-par-type?${params.toString()}`);
       return response.data.data;
     } catch (error) {

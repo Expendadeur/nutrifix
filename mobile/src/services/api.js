@@ -8,15 +8,15 @@ const getApiUrl = () => {
   if (__DEV__) {
     // En développement
     if (Platform.OS === 'android') {
-      return 'http://10.0.2.2:5000/api'; // Émulateur Android
+      return 'https://nutrifix-1-twdf.onrender.com/api'; // Émulateur Android
     } else if (Platform.OS === 'ios') {
-      return 'http://localhost:5000/api'; // Simulateur iOS
+      return 'https://nutrifix-1-twdf.onrender.com/api'; // Simulateur iOS
     } else {
-      return 'http://localhost:5000/api'; // Web
+      return 'https://nutrifix-1-twdf.onrender.com/api'; // Web
     }
   } else {
     // En production
-    return 'https://votre-api.com/api';
+    return 'https://nutrifix-1-twdf.onrender.com/api';
   }
 };
 

@@ -30,24 +30,26 @@ import {
   IconButton,
   Badge,
   ProgressBar,
+  Snackbar
 } from 'react-native-paper';
 import { MaterialIcons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import VeterinaireService from '../../services/veterinaireService';
 
 // Configuration de l'API
-const API_BASE_URL = __DEV__ 
+const API_BASE_URL = __DEV__
   ? Platform.select({
-      ios: 'http://localhost:5000',
-      android: 'http://10.0.2.2:5000',
-      default: 'http://localhost:5000'
-    })
-  : 'https://your-production-api.com';
+    ios: 'https://nutrifix-1-twdf.onrender.com',
+    android: 'https://nutrifix-1-twdf.onrender.com',
+    default: 'https://nutrifix-1-twdf.onrender.com'
+  })
+  : 'https://nutrifix-1-twdf.onrender.com';
 
 const SalairesScreen = ({ navigation }) => {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  
+
   // Responsive
   const isTablet = windowWidth >= 768;
   const isLargeScreen = windowWidth >= 1024;
@@ -67,6 +69,17 @@ const SalairesScreen = ({ navigation }) => {
   const [hasMore, setHasMore] = useState(true);
   const [totalSalaires, setTotalSalaires] = useState(0);
 
+  // Snackbar
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarType, setSnackbarType] = useState('info');
+
+  const showSnackbar = (message, type = 'info') => {
+    setSnackbarMessage(message);
+    setSnackbarType(type);
+    setSnackbarVisible(true);
+  };
+
   // Filtres
   const [filterAnnee, setFilterAnnee] = useState(new Date().getFullYear());
   const [filterStatut, setFilterStatut] = useState('');
@@ -78,13 +91,15 @@ const SalairesScreen = ({ navigation }) => {
   const [codeVerification, setCodeVerification] = useState('');
   const [showCodeModal, setShowCodeModal] = useState(false);
   const [salaireEnConfirmation, setSalaireEnConfirmation] = useState(null);
+  const [showConfirmDemande, setShowConfirmDemande] = useState(false);
+  const [salaireIdForDemande, setSalaireIdForDemande] = useState(null);
 
   // Animation
   const [fadeAnim] = useState(new Animated.Value(0));
 
   // Données de référence
   const annees = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
-  
+
   const statutsOptions = [
     { id: '', label: 'Tous', color: '#3498DB' },
     { id: 'calculé', label: 'Calculés', color: '#F39C12' },
@@ -153,10 +168,8 @@ const SalairesScreen = ({ navigation }) => {
       }
     } catch (error) {
       console.error('Erreur chargement données:', error);
-      Alert.alert(
-        'Erreur',
-        'Impossible de charger les données. Veuillez réessayer.'
-      );
+      console.error('Erreur chargement données:', error);
+      showSnackbar('Impossible de charger les données. Veuillez réessayer.', 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -178,8 +191,14 @@ const SalairesScreen = ({ navigation }) => {
     );
 
     if (response.data.success) {
-      const newSalaires = response.data.data;
+      let newSalaires = response.data.data;
       const pagination = response.data.pagination;
+
+      // Validation
+      if (!Array.isArray(newSalaires)) {
+        console.warn('API: salaires n\'est pas un tableau', newSalaires);
+        newSalaires = [];
+      }
 
       if (reset) {
         setSalaires(newSalaires);
@@ -187,10 +206,14 @@ const SalairesScreen = ({ navigation }) => {
         setSalaires(prev => [...prev, ...newSalaires]);
       }
 
-      setTotalSalaires(pagination.total);
-      setHasMore(pagination.page < pagination.pages);
-      if (!reset) {
-        setPage(currentPage + 1);
+      if (pagination) {
+        setTotalSalaires(pagination.total || 0);
+        setHasMore(pagination.page < pagination.pages);
+        if (!reset) {
+          setPage(currentPage + 1);
+        }
+      } else {
+        setHasMore(false);
       }
     }
   };
@@ -209,8 +232,14 @@ const SalairesScreen = ({ navigation }) => {
     );
 
     if (response.data.success) {
-      const newPaiements = response.data.data;
+      let newPaiements = response.data.data;
       const pagination = response.data.pagination;
+
+      // Validation
+      if (!Array.isArray(newPaiements)) {
+        console.warn('API: paiements recus n\'est pas un tableau', newPaiements);
+        newPaiements = [];
+      }
 
       if (reset) {
         setPaiementsRecus(newPaiements);
@@ -218,10 +247,14 @@ const SalairesScreen = ({ navigation }) => {
         setPaiementsRecus(prev => [...prev, ...newPaiements]);
       }
 
-      setTotalSalaires(pagination.total);
-      setHasMore(pagination.page < pagination.pages);
-      if (!reset) {
-        setPage(currentPage + 1);
+      if (pagination) {
+        setTotalSalaires(pagination.total || 0);
+        setHasMore(pagination.page < pagination.pages);
+        if (!reset) {
+          setPage(currentPage + 1);
+        }
+      } else {
+        setHasMore(false);
       }
     }
   };
@@ -239,8 +272,14 @@ const SalairesScreen = ({ navigation }) => {
     );
 
     if (response.data.success) {
-      const newPaiements = response.data.data;
+      let newPaiements = response.data.data;
       const pagination = response.data.pagination;
+
+      // Validation
+      if (!Array.isArray(newPaiements)) {
+        console.warn('API: paiements attente n\'est pas un tableau', newPaiements);
+        newPaiements = [];
+      }
 
       if (reset) {
         setPaiementsAttente(newPaiements);
@@ -248,10 +287,14 @@ const SalairesScreen = ({ navigation }) => {
         setPaiementsAttente(prev => [...prev, ...newPaiements]);
       }
 
-      setTotalSalaires(pagination.total);
-      setHasMore(pagination.page < pagination.pages);
-      if (!reset) {
-        setPage(currentPage + 1);
+      if (pagination) {
+        setTotalSalaires(pagination.total || 0);
+        setHasMore(pagination.page < pagination.pages);
+        if (!reset) {
+          setPage(currentPage + 1);
+        }
+      } else {
+        setHasMore(false);
       }
     }
   };
@@ -260,9 +303,9 @@ const SalairesScreen = ({ navigation }) => {
   const loadStatistiques = async (config) => {
     const response = await axios.get(
       `${API_BASE_URL}/api/veterinaire/statistiques/interventions-mensuelles`,
-      { 
-        ...config, 
-        params: { annee: filterAnnee } 
+      {
+        ...config,
+        params: { annee: filterAnnee }
       }
     );
 
@@ -301,7 +344,7 @@ const SalairesScreen = ({ navigation }) => {
       }
     } catch (error) {
       console.error('Erreur détails salaire:', error);
-      Alert.alert('Erreur', 'Impossible de charger les détails.');
+      showSnackbar('Impossible de charger les détails.', 'error');
     } finally {
       setLoading(false);
     }
@@ -309,79 +352,105 @@ const SalairesScreen = ({ navigation }) => {
 
   // Demander le paiement
   const demanderPaiement = async (salaireId) => {
-    Alert.alert(
-      'Demande de paiement',
-      'Voulez-vous envoyer une demande de paiement pour ce salaire ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Confirmer',
-          onPress: async () => {
-            try {
-              setDemandeEnCours(prev => ({ ...prev, [salaireId]: true }));
-              const config = await getAxiosConfig();
-
-              const response = await axios.post(
-                `${API_BASE_URL}/api/veterinaire/salaires/${salaireId}/demander-paiement`,
-                {},
-                config
-              );
-
-              if (response.data.success) {
-                Alert.alert('Succès', 'Demande de paiement envoyée avec succès.');
-                loadData(true);
-              }
-            } catch (error) {
-              console.error('Erreur demande paiement:', error);
-              Alert.alert(
-                'Erreur',
-                error.response?.data?.message || 'Impossible d\'envoyer la demande.'
-              );
-            } finally {
-              setDemandeEnCours(prev => ({ ...prev, [salaireId]: false }));
-            }
-          }
-        }
-      ]
-    );
+    setSalaireIdForDemande(salaireId);
+    setShowConfirmDemande(true);
   };
 
-  // Confirmer la réception
-  const confirmerReception = async (salaireId, withCode = false) => {
+  const executeDemandePaiement = async (salaireId) => {
     try {
-      setConfirmationEnCours(prev => ({ ...prev, [salaireId]: true }));
+      setDemandeEnCours(prev => ({ ...prev, [salaireId]: true }));
       const config = await getAxiosConfig();
 
-      const data = withCode ? { code_verification: codeVerification } : {};
-
       const response = await axios.post(
-        `${API_BASE_URL}/api/veterinaire/salaires/${salaireId}/confirmer-reception`,
-        data,
+        `${API_BASE_URL}/api/veterinaire/salaires/${salaireId}/demander-paiement`,
+        {},
         config
       );
 
       if (response.data.success) {
-        Alert.alert('Succès', 'Réception confirmée avec succès.');
+        showSnackbar('Demande de paiement envoyée avec succès.', 'success');
+        loadData(true);
+      }
+    } catch (error) {
+      console.error('Erreur demande paiement:', error);
+      showSnackbar(
+        error.response?.data?.message || 'Impossible d\'envoyer la demande.',
+        'error'
+      );
+    } finally {
+      setDemandeEnCours(prev => ({ ...prev, [salaireId]: false }));
+    }
+  };
+
+  // Demander le code de vérification
+  const demanderCode = async (salaireId) => {
+    try {
+      setConfirmationEnCours(prev => ({ ...prev, [salaireId]: true }));
+      const result = await VeterinaireService.requestCode(salaireId);
+      if (result.success) {
+        showSnackbar('Un code de vérification a été envoyé à votre email.', 'success');
+        return true;
+      } else {
+        showSnackbar(result.message || 'Impossible d\'envoyer le code.', 'error');
+        return false;
+      }
+    } catch (error) {
+      console.error('Erreur demande code:', error);
+      showSnackbar('Une erreur est survenue lors de la demande du code.', 'error');
+      return false;
+    } finally {
+      setConfirmationEnCours(prev => ({ ...prev, [salaireId]: false }));
+    }
+  };
+
+  // Confirmer la réception
+  const confirmerReception = async (salaireId) => {
+    if (!codeVerification || codeVerification.length < 6) {
+      showSnackbar('Veuillez entrer le code à 6 chiffres.', 'error');
+      return;
+    }
+
+    try {
+      setConfirmationEnCours(prev => ({ ...prev, [salaireId]: true }));
+      const result = await VeterinaireService.confirmReception(salaireId, {
+        code_verification: codeVerification
+      });
+
+      if (result.success) {
+        showSnackbar('Réception confirmée avec succès.', 'success');
         setShowCodeModal(false);
         setCodeVerification('');
         setSalaireEnConfirmation(null);
         loadData(true);
+      } else {
+        if (result.message && result.message.includes('bloqué')) {
+          showSnackbar(result.message, 'error');
+          setTimeout(() => navigation.replace('Login'), 2000);
+        } else {
+          showSnackbar(result.message || 'Code incorrect.', 'error');
+        }
       }
     } catch (error) {
       console.error('Erreur confirmation:', error);
-      Alert.alert(
-        'Erreur',
-        error.response?.data?.message || 'Impossible de confirmer la réception.'
-      );
+      const errorMsg = error.response?.data?.message || 'Une erreur est survenue.';
+      if (errorMsg.includes('bloqué')) {
+        showSnackbar(errorMsg, 'error');
+        setTimeout(() => navigation.replace('Login'), 2000);
+      } else {
+        showSnackbar(errorMsg, 'error');
+      }
     } finally {
       setConfirmationEnCours(prev => ({ ...prev, [salaireId]: false }));
     }
   };
 
   // Ouvrir modal de confirmation avec code
-  const ouvrirModalConfirmation = (salaire) => {
-    setSalaireEnConfirmation(salaire);
-    setShowCodeModal(true);
+  const ouvrirModalConfirmation = async (salaire) => {
+    const codeSent = await demanderCode(salaire.id);
+    if (codeSent) {
+      setSalaireEnConfirmation(salaire);
+      setShowCodeModal(true);
+    }
   };
 
   // === COMPOSANTS DE RENDU === //
@@ -433,8 +502,8 @@ const SalairesScreen = ({ navigation }) => {
 
     return (
       <View style={styles.filtersContainer}>
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filtersScroll}
         >
@@ -516,9 +585,9 @@ const SalairesScreen = ({ navigation }) => {
   // Carte de salaire
   const renderSalaireCard = ({ item, index }) => {
     const numColumns = isExtraLargeScreen ? 3 : isTablet ? 2 : 1;
-    const cardWidth = isExtraLargeScreen 
+    const cardWidth = isExtraLargeScreen
       ? (windowWidth - 80) / 3 - 20
-      : isTablet 
+      : isTablet
         ? (windowWidth - 60) / 2 - 15
         : windowWidth - 30;
 
@@ -555,10 +624,10 @@ const SalairesScreen = ({ navigation }) => {
           styles.statutBadge,
           { backgroundColor: getStatutColor(item.statut_paiement) }
         ]}>
-          <MaterialIcons 
-            name={getStatutIcon(item.statut_paiement)} 
-            size={16} 
-            color="#FFF" 
+          <MaterialIcons
+            name={getStatutIcon(item.statut_paiement)}
+            size={16}
+            color="#FFF"
           />
           <Text style={styles.statutBadgeText}>
             {item.statut_paiement}
@@ -579,7 +648,7 @@ const SalairesScreen = ({ navigation }) => {
                 {item.mois}
               </Text>
             </View>
-            
+
             <View style={styles.cardHeaderInfo}>
               <Text style={styles.cardMonth}>
                 {item.mois_nom} {item.annee}
@@ -591,7 +660,7 @@ const SalairesScreen = ({ navigation }) => {
           </View>
 
           {item.demande_paiement_envoyee && (
-            <Badge 
+            <Badge
               style={styles.demandeBadge}
               size={20}
             >
@@ -612,7 +681,7 @@ const SalairesScreen = ({ navigation }) => {
                 {formatCurrency(item.salaire_brut)}
               </Text>
             </View>
-            
+
             {item.primes_total > 0 && (
               <>
                 <Divider style={styles.montantDivider} />
@@ -638,7 +707,7 @@ const SalairesScreen = ({ navigation }) => {
             )}
 
             <Divider style={styles.montantDividerBold} />
-            
+
             <View style={styles.montantRow}>
               <Text style={styles.montantLabelNet}>Salaire net</Text>
               <Text style={styles.montantValueNet}>
@@ -701,9 +770,9 @@ const SalairesScreen = ({ navigation }) => {
   // Carte de paiement en attente
   const renderPaiementAttenteCard = ({ item, index }) => {
     const numColumns = isExtraLargeScreen ? 3 : isTablet ? 2 : 1;
-    const cardWidth = isExtraLargeScreen 
+    const cardWidth = isExtraLargeScreen
       ? (windowWidth - 80) / 3 - 20
-      : isTablet 
+      : isTablet
         ? (windowWidth - 60) / 2 - 15
         : windowWidth - 30;
 
@@ -722,7 +791,7 @@ const SalairesScreen = ({ navigation }) => {
             <View style={styles.attenteIcon}>
               <MaterialCommunityIcons name="clock-alert" size={24} color="#F39C12" />
             </View>
-            
+
             <View style={styles.cardHeaderInfo}>
               <Text style={styles.cardMonth}>
                 {item.mois_nom} {item.annee}
@@ -747,10 +816,10 @@ const SalairesScreen = ({ navigation }) => {
 
           {item.demande_paiement_envoyee && item.statut_demande && (
             <View style={styles.demandeInfo}>
-              <MaterialIcons 
-                name={item.statut_demande === 'en_attente' ? 'schedule' : 'check'} 
-                size={16} 
-                color={item.statut_demande === 'en_attente' ? '#F39C12' : '#2ECC71'} 
+              <MaterialIcons
+                name={item.statut_demande === 'en_attente' ? 'schedule' : 'check'}
+                size={16}
+                color={item.statut_demande === 'en_attente' ? '#F39C12' : '#2ECC71'}
               />
               <Text style={styles.demandeInfoText}>
                 Demande {item.statut_demande === 'en_attente' ? 'en cours' : 'traitée'}
@@ -792,10 +861,10 @@ const SalairesScreen = ({ navigation }) => {
     if (data.length === 0) {
       return (
         <View style={styles.emptyContainer}>
-          <MaterialCommunityIcons 
-            name={getEmptyIcon()} 
-            size={isTablet ? 80 : 60} 
-            color="#BDC3C7" 
+          <MaterialCommunityIcons
+            name={getEmptyIcon()}
+            size={isTablet ? 80 : 60}
+            color="#BDC3C7"
           />
           <Text style={[
             styles.emptyText,
@@ -852,7 +921,7 @@ const SalairesScreen = ({ navigation }) => {
     }
 
     return (
-      <ScrollView 
+      <ScrollView
         style={styles.statsContainer}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -872,7 +941,7 @@ const SalairesScreen = ({ navigation }) => {
             <Title style={styles.statsTitle}>
               Totaux année {filterAnnee}
             </Title>
-            
+
             <View style={[
               styles.statsGrid,
               isTablet && styles.statsGridTablet
@@ -927,7 +996,7 @@ const SalairesScreen = ({ navigation }) => {
         ]}>
           <Card.Content>
             <Title style={styles.statsTitle}>Détails mensuels</Title>
-            
+
             {statistiques.par_mois?.map((mois, index) => (
               <View key={index}>
                 <TouchableOpacity
@@ -1009,24 +1078,24 @@ const SalairesScreen = ({ navigation }) => {
             styles.modalHeader,
             isTablet && styles.modalHeaderTablet
           ]}>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setDetailModalVisible(false)}
               style={styles.modalCloseButton}
             >
               <MaterialIcons name="close" size={28} color="#2C3E50" />
             </TouchableOpacity>
-            
+
             <Text style={[
               styles.modalTitle,
               isTablet && styles.modalTitleTablet
             ]}>
               Détails du salaire
             </Text>
-            
+
             <View style={{ width: 40 }} />
           </View>
 
-          <ScrollView 
+          <ScrollView
             style={styles.modalContent}
             showsVerticalScrollIndicator={false}
           >
@@ -1035,10 +1104,10 @@ const SalairesScreen = ({ navigation }) => {
                 {/* En-tête */}
                 <View style={styles.detailHeader}>
                   <View style={styles.detailHeaderLeft}>
-                    <MaterialCommunityIcons 
-                      name="cash-multiple" 
-                      size={40} 
-                      color="#2E86C1" 
+                    <MaterialCommunityIcons
+                      name="cash-multiple"
+                      size={40}
+                      color="#2E86C1"
                     />
                     <View style={styles.detailHeaderInfo}>
                       <Text style={styles.detailPeriod}>
@@ -1061,7 +1130,7 @@ const SalairesScreen = ({ navigation }) => {
                 {/* Montants détaillés */}
                 <View style={styles.detailSection}>
                   <Text style={styles.detailSectionTitle}>Détails du salaire</Text>
-                  
+
                   <View style={styles.detailMontants}>
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Salaire de base</Text>
@@ -1097,7 +1166,7 @@ const SalairesScreen = ({ navigation }) => {
                     )}
 
                     <Divider style={styles.detailDividerBold} />
-                    
+
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabelBold}>Salaire brut</Text>
                       <Text style={styles.detailValueBold}>
@@ -1118,7 +1187,7 @@ const SalairesScreen = ({ navigation }) => {
                     )}
 
                     <Divider style={styles.detailDividerBold} />
-                    
+
                     <View style={styles.detailRowNet}>
                       <Text style={styles.detailLabelNet}>Salaire net à payer</Text>
                       <Text style={styles.detailValueNet}>
@@ -1132,7 +1201,7 @@ const SalairesScreen = ({ navigation }) => {
                 {selectedSalaire.statut_paiement === 'payé' && (
                   <View style={styles.detailSection}>
                     <Text style={styles.detailSectionTitle}>Informations de paiement</Text>
-                    
+
                     <View style={styles.paiementInfo}>
                       <View style={styles.paiementRow}>
                         <MaterialCommunityIcons name="calendar-check" size={20} color="#2ECC71" />
@@ -1175,7 +1244,7 @@ const SalairesScreen = ({ navigation }) => {
                 {(selectedSalaire.calcule_par_nom || selectedSalaire.valide_par_nom) && (
                   <View style={styles.detailSection}>
                     <Text style={styles.detailSectionTitle}>Validation</Text>
-                    
+
                     {selectedSalaire.calcule_par_nom && (
                       <View style={styles.validationRow}>
                         <MaterialIcons name="calculate" size={18} color="#7F8C8D" />
@@ -1214,7 +1283,7 @@ const SalairesScreen = ({ navigation }) => {
           </View>
         </View>
       </Modal>
-    );
+    )
   };
 
   // Modal confirmation avec code
@@ -1270,7 +1339,7 @@ const SalairesScreen = ({ navigation }) => {
               mode="contained"
               onPress={() => {
                 if (salaireEnConfirmation) {
-                  confirmerReception(salaireEnConfirmation.id, true);
+                  confirmerReception(salaireEnConfirmation.id);
                 }
               }}
               disabled={codeVerification.length !== 6}
@@ -1280,21 +1349,6 @@ const SalairesScreen = ({ navigation }) => {
               Confirmer
             </Button>
           </View>
-
-          <Divider style={styles.codeModalDivider} />
-
-          <Button
-            mode="text"
-            onPress={() => {
-              if (salaireEnConfirmation) {
-                setShowCodeModal(false);
-                confirmerReception(salaireEnConfirmation.id, false);
-              }
-            }}
-            style={styles.codeModalTextButton}
-          >
-            Confirmer sans code
-          </Button>
         </View>
       </View>
     </Modal>
@@ -1331,7 +1385,7 @@ const SalairesScreen = ({ navigation }) => {
 
   const formatDate = (dateString) => {
     if (!dateString) return '-';
-    
+
     const date = new Date(dateString);
     return date.toLocaleDateString('fr-FR', {
       day: '2-digit',
@@ -1348,6 +1402,49 @@ const SalairesScreen = ({ navigation }) => {
     }).format(amount);
   };
 
+  // Modal de confirmation de demande de paiement
+  const renderConfirmDemandeModal = () => (
+    <Modal
+      visible={showConfirmDemande}
+      animationType="fade"
+      transparent={true}
+      onRequestClose={() => setShowConfirmDemande(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={[styles.confirmModalContent, isTablet && styles.confirmModalContentTablet]}>
+          <View style={styles.confirmModalHeader}>
+            <MaterialCommunityIcons name="cash-sync" size={40} color="#2E86C1" />
+            <Text style={styles.confirmModalTitle}>Confirmer la demande</Text>
+            <Text style={styles.confirmModalSubtitle}>
+              Voulez-vous vraiment envoyer cette demande de paiement pour traitement ?
+            </Text>
+          </View>
+
+          <View style={styles.confirmModalActions}>
+            <Button
+              mode="outlined"
+              onPress={() => setShowConfirmDemande(false)}
+              style={styles.confirmModalButton}
+            >
+              Annuler
+            </Button>
+
+            <Button
+              mode="contained"
+              onPress={() => {
+                setShowConfirmDemande(false);
+                executeDemandePaiement(salaireIdForDemande);
+              }}
+              style={[styles.confirmModalButton, styles.codeModalButtonPrimary]}
+            >
+              Confirmer
+            </Button>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+
   // === RENDU PRINCIPAL === //
 
   return (
@@ -1360,6 +1457,16 @@ const SalairesScreen = ({ navigation }) => {
 
         {renderDetailModal()}
         {renderCodeModal()}
+
+        <Snackbar
+          visible={snackbarVisible}
+          onDismiss={() => setSnackbarVisible(false)}
+          duration={3000}
+          style={{ backgroundColor: snackbarType === 'error' ? '#E74C3C' : '#2ECC71' }}
+        >
+          {snackbarMessage}
+        </Snackbar>
+        {renderConfirmDemandeModal()}
       </Animated.View>
     </Provider>
   );
@@ -2095,6 +2202,54 @@ const styles = StyleSheet.create({
   },
   codeModalTextButton: {
     marginTop: 5,
+  },
+
+  // Modal de confirmation universel
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  confirmModalContent: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+  },
+  confirmModalContentTablet: {
+    maxWidth: 500,
+    padding: 32,
+  },
+  confirmModalHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  confirmModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2C3E50',
+    marginTop: 15,
+    textAlign: 'center',
+  },
+  confirmModalSubtitle: {
+    fontSize: 15,
+    color: '#7F8C8D',
+    textAlign: 'center',
+    marginTop: 10,
+    lineHeight: 22,
+  },
+  confirmModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    gap: 12,
+  },
+  confirmModalButton: {
+    flex: 1,
   },
 });
 

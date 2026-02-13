@@ -32,98 +32,94 @@ const logAction = async (userId, module, action, description, details = null) =>
  * GET /api/admin/historique
  * Récupérer l'historique complet avec filtres avancés
  */
-router.get('/historique', authenticate, authorize(['admin']), async (req, res) => {
-    try {
-        const {
-            type, module, utilisateur, startDate, endDate,
-            niveau, table, limit = 500, offset = 0
-        } = req.query;
 
-        let sql = `
-            SELECT t.*,
-                   u.nom_complet as utilisateur_nom,
-                   u.role as utilisateur_role,
-                   u.photo_identite as utilisateur_photo
-            FROM traces t
-            LEFT JOIN utilisateurs u ON t.id_utilisateur = u.id
-            WHERE 1=1
-        `;
-        const params = [];
+router.get('/historique', authenticate, async (req, res) => {
+  try {
+    // Désactiver le cache (évite 304)
+    res.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
 
-        if (type && type !== 'all') {
-            sql += ' AND t.type_action = ?';
-            params.push(type);
-        }
+    const startDate = req.query.startDate || null;
+    const endDate = req.query.endDate || null;
 
-        if (module && module !== 'all') {
-            sql += ' AND t.module = ?';
-            params.push(module);
-        }
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 20;
+    const offset = (page - 1) * limit;
 
-        if (utilisateur && utilisateur !== 'all') {
-            sql += ' AND t.id_utilisateur = ?';
-            params.push(utilisateur);
-        }
+    const whereConditions = [];
+    const params = [];
 
-        if (startDate) {
-            sql += ' AND DATE(t.date_action) >= ?';
-            params.push(startDate);
-        }
-
-        if (endDate) {
-            sql += ' AND DATE(t.date_action) <= ?';
-            params.push(endDate);
-        }
-
-        if (niveau && niveau !== 'all') {
-            sql += ' AND t.niveau = ?';
-            params.push(niveau);
-        }
-
-        if (table) {
-            sql += ' AND t.table_affectee = ?';
-            params.push(table);
-        }
-
-        sql += ' ORDER BY t.date_action DESC LIMIT ? OFFSET ?';
-        params.push(parseInt(limit), parseInt(offset));
-
-        const historique = await db.query(sql, params);
-
-        // Statistiques
-        const [stats] = await db.query(`
-            SELECT 
-                COUNT(*) as total,
-                COUNT(CASE WHEN niveau = 'critical' THEN 1 END) as critiques,
-                COUNT(CASE WHEN niveau = 'error' THEN 1 END) as erreurs,
-                COUNT(CASE WHEN niveau = 'warning' THEN 1 END) as warnings,
-                COUNT(CASE WHEN niveau = 'info' THEN 1 END) as infos,
-                COUNT(DISTINCT id_utilisateur) as utilisateurs_actifs,
-                COUNT(DISTINCT module) as modules_actifs
-            FROM traces
-            WHERE DATE(date_action) >= COALESCE(?, DATE_SUB(NOW(), INTERVAL 30 DAY))
-              AND DATE(date_action) <= COALESCE(?, NOW())
-        `, [startDate, endDate]);
-
-        res.status(200).json({
-            success: true,
-            data: historique,
-            stats: stats,
-            pagination: {
-                limit: parseInt(limit),
-                offset: parseInt(offset),
-                total: stats.total
-            }
-        });
-    } catch (error) {
-        console.error('Get historique error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Erreur lors de la récupération de l\'historique.',
-            error: error.message
-        });
+    if (startDate) {
+      whereConditions.push('DATE(t.date_action) >= ?');
+      params.push(startDate);
     }
+
+    if (endDate) {
+      whereConditions.push('DATE(t.date_action) <= ?');
+      params.push(endDate);
+    }
+
+    const whereClause =
+      whereConditions.length > 0
+        ? 'AND ' + whereConditions.join(' AND ')
+        : '';
+
+    const sql = `
+      SELECT 
+        t.*,
+        u.nom_complet AS utilisateur_nom,
+        u.role AS utilisateur_role,
+        u.photo_identite AS utilisateur_photo
+      FROM traces t
+      LEFT JOIN utilisateurs u ON t.id_utilisateur = u.id
+      WHERE 1=1
+      ${whereClause}
+      ORDER BY t.date_action DESC
+      LIMIT ? OFFSET ?
+    `;
+
+    const queryParams = [
+      ...params,
+      limit,   // OBLIGATOIREMENT Number
+      offset   // OBLIGATOIREMENT Number
+    ];
+
+    const [rows] = await db.query(sql, queryParams);
+
+    // Total pour pagination
+    const countSql = `
+      SELECT COUNT(*) AS total
+      FROM traces t
+      WHERE 1=1
+      ${whereClause}
+    `;
+
+    const [[countResult]] = await db.query(countSql, params);
+
+    res.json({
+      success: true,
+      data: rows,
+      pagination: {
+        total: countResult.total,
+        page,
+        limit,
+        pages: Math.ceil(countResult.total / limit)
+      }
+    });
+
+  } catch (error) {
+    console.error('Get historique error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la récupération de l’historique',
+      message: error.message
+    });
+  }
 });
+
 
 /**
  * GET /api/admin/historique/:id
@@ -1018,6 +1014,91 @@ router.put('/general-settings', authenticate, authorize(['admin']), async (req, 
         });
     }
 });
+
+// ============================================
+// PARAMÈTRES DE L'ENTREPRISE
+// ============================================
+
+/**
+ * GET /api/admin/company-settings
+ * Récupérer les paramètres de l'entreprise
+ */
+router.get('/company-settings', authenticate, async (req, res) => {
+    try {
+        const [settings] = await db.query(
+            'SELECT * FROM parametres_entreprise WHERE id = 1'
+        );
+
+        if (!settings) {
+            return res.status(404).json({
+                success: false,
+                message: 'Paramètres de l\'entreprise non trouvés.'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: settings
+        });
+    } catch (error) {
+        console.error('Get company settings error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors de la récupération des paramètres de l\'entreprise.',
+            error: error.message
+        });
+    }
+});
+
+/**
+ * PUT /api/admin/company-settings
+ * Mettre à jour les paramètres de l'entreprise
+ */
+router.put('/company-settings', authenticate, authorize(['admin']), async (req, res) => {
+    try {
+        const {
+            nom_entreprise, nif, numero_rc, boite_postale, telephone, email,
+            commune, quartier, avenue, rue, numero_batiment,
+            assujetti_tva, taux_tva_defaut, centre_fiscal, secteur_activite
+        } = req.body;
+
+        await db.query(`
+            UPDATE parametres_entreprise SET
+                nom_entreprise = ?, nif = ?, numero_rc = ?, boite_postale = ?,
+                telephone = ?, email = ?, commune = ?, quartier = ?,
+                avenue = ?, rue = ?, numero_batiment = ?,
+                assujetti_tva = ?, taux_tva_defaut = ?,
+                centre_fiscal = ?, secteur_activite = ?
+            WHERE id = 1
+        `, [
+            nom_entreprise, nif, numero_rc, boite_postale, telephone, email,
+            commune, quartier, avenue, rue, numero_batiment,
+            assujetti_tva, taux_tva_defaut, centre_fiscal, secteur_activite
+        ]);
+
+        // Logging
+        await logAction(
+            req.userId,
+            'parametres',
+            'modification',
+            'Mise à jour des paramètres de l\'entreprise',
+            req.body
+        );
+
+        res.status(200).json({
+            success: true,
+            message: 'Paramètres de l\'entreprise mis à jour avec succès.'
+        });
+    } catch (error) {
+        console.error('Update company settings error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors de la mise à jour des paramètres de l\'entreprise.',
+            error: error.message
+        });
+    }
+});
+
 
 // ============================================
 // BACKUP & MAINTENANCE

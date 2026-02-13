@@ -346,7 +346,8 @@ router.get('/presences', authenticate, async (req, res) => {
             countParams.push(endDate);
         }
 
-        const [countResult] = await db.query(countSql, countParams);
+        const resultsCountAll = await db.query(countSql, countParams);
+        const countResult = (resultsCountAll && resultsCountAll.length > 0) ? resultsCountAll[0] : { total: 0 };
 
         res.status(200).json({
             success: true,
@@ -495,7 +496,8 @@ router.get('/conges', authenticate, async (req, res) => {
             countParams.push(statut);
         }
 
-        const [countResult] = await db.query(countSql, countParams);
+        const resultsCountLeave = await db.query(countSql, countParams);
+        const countResult = (resultsCountLeave && resultsCountLeave.length > 0) ? resultsCountLeave[0] : { total: 0 };
 
         res.status(200).json({
             success: true,
@@ -556,7 +558,8 @@ router.put('/conges/:id/validation', authenticate, authorize('admin', 'manager')
 
         // Get leave info for notification
         const leaveSql = `SELECT id_utilisateur FROM conges WHERE id = ?`;
-        const [leave] = await db.query(leaveSql, [congeId]);
+        const leaveResults = await db.query(leaveSql, [congeId]);
+        const leave = (leaveResults && leaveResults.length > 0) ? leaveResults[0] : null;
 
         if (leave && req.io) {
             req.io.to(`user-${leave.id_utilisateur}`).emit('new-notification', {
@@ -646,7 +649,8 @@ router.get('/salaires', authenticate, authorize('admin', 'comptable'), async (re
             countParams.push(annee);
         }
 
-        const [countResult] = await db.query(countSql, countParams);
+        const resultsCountSal = await db.query(countSql, countParams);
+        const countResult = (resultsCountSal && resultsCountSal.length > 0) ? resultsCountSal[0] : { total: 0 };
 
         res.status(200).json({
             success: true,
@@ -784,7 +788,8 @@ router.get('/statistiques', authenticate, authorize('admin', 'manager'), async (
             AND YEAR(date) = ?
         `;
 
-        const [presenceStats] = await db.query(presenceSql, [currentMonth, currentYear]);
+        const presenceStatsResults = await db.query(presenceSql, [currentMonth, currentYear]);
+        const presenceStats = (presenceStatsResults && presenceStatsResults.length > 0) ? presenceStatsResults[0] : {};
 
         // Leave statistics
         const leaveSql = `

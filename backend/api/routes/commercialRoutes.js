@@ -38,6 +38,8 @@ router.get('/clients', authenticate, authorize('admin', 'manager', 'employe', 'c
                 COALESCE(SUM(CASE WHEN cv.statut IN ('livree_complete', 'payee') 
                     THEN cv.montant_total ELSE 0 END), 0) as total_achats,
                 COALESCE(MAX(cv.date_commande), NULL) as derniere_commande,
+                COALESCE(SUM(CASE WHEN cv.statut NOT IN ('livree_complete', 'payee', 'annulee') 
+                    THEN cv.montant_total ELSE 0 END), 0) as total_encours,
                 COALESCE(SUM(CASE WHEN f.statut_paiement IN ('impayee', 'partiellement_payee') 
                     THEN f.montant_du ELSE 0 END), 0) as dette_actuelle
             FROM clients c
@@ -124,6 +126,8 @@ router.get('/clients/:id', authenticate, authorize('admin', 'manager', 'employe'
                 COUNT(DISTINCT cv.id) as nombre_commandes,
                 COALESCE(SUM(CASE WHEN cv.statut IN ('livree_complete', 'payee') 
                     THEN cv.montant_total ELSE 0 END), 0) as total_achats,
+                COALESCE(SUM(CASE WHEN cv.statut NOT IN ('livree_complete', 'payee', 'annulee') 
+                    THEN cv.montant_total ELSE 0 END), 0) as total_encours,
                 COALESCE(AVG(cv.montant_total), 0) as moyenne_commande,
                 COALESCE(MAX(cv.date_commande), NULL) as derniere_commande
             FROM clients c
@@ -182,7 +186,7 @@ router.post('/clients', authenticate, authorize('admin', 'manager', 'employe'), 
     try {
         const {
             nom_client, type, contact_principal, telephone, email, adresse, ville, pays,
-            secteur_activite, numero_tva, banque, numero_compte, limite_credit,
+            secteur_activite, numero_tva, nif, cni, photo_profil, banque, numero_compte, limite_credit,
             delai_paiement_jours, niveau_fidelite, statut
         } = req.body;
 
@@ -205,18 +209,18 @@ router.post('/clients', authenticate, authorize('admin', 'manager', 'employe'), 
         const sql = `
             INSERT INTO clients (
                 code_client, nom_client, type, contact_principal, telephone, email,
-                adresse, ville, pays, secteur_activite, numero_tva, banque, numero_compte,
-                limite_credit, delai_paiement_jours, niveau_fidelite, statut,
-                premier_achat
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                adresse, ville, pays, secteur_activite, numero_tva, nif, cni, photo_profil, 
+                banque, numero_compte, limite_credit, delai_paiement_jours, 
+                niveau_fidelite, statut, premier_achat
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
         `;
 
         const result = await db.query(sql, [
             code_client, nom_client, type || 'particulier', contact_principal,
             telephone, email, adresse, ville, pays || 'Burundi', secteur_activite,
-            numero_tva, banque, numero_compte, limite_credit || 0,
-            delai_paiement_jours || 30, niveau_fidelite || 'nouveau',
-            statut || 'actif'
+            numero_tva, nif, cni, photo_profil, banque, numero_compte,
+            limite_credit || 0, delai_paiement_jours || 30,
+            niveau_fidelite || 'nouveau', statut || 'actif'
         ]);
 
         const insertId = Array.isArray(result) ? (result[0]?.insertId || result.insertId) : result.insertId;
@@ -254,8 +258,8 @@ router.put('/clients/:id', authenticate, authorize('admin', 'manager', 'employe'
         const { id } = req.params;
         const {
             nom_client, type, contact_principal, telephone, email, adresse, ville, pays,
-            secteur_activite, numero_tva, banque, numero_compte, limite_credit,
-            delai_paiement_jours, niveau_fidelite, statut
+            secteur_activite, numero_tva, nif, cni, photo_profil, banque,
+            numero_compte, limite_credit, delai_paiement_jours, niveau_fidelite, statut
         } = req.body;
 
         // Récupérer les anciennes données
@@ -273,15 +277,16 @@ router.put('/clients/:id', authenticate, authorize('admin', 'manager', 'employe'
             UPDATE clients SET
                 nom_client = ?, type = ?, contact_principal = ?, telephone = ?,
                 email = ?, adresse = ?, ville = ?, pays = ?, secteur_activite = ?,
-                numero_tva = ?, banque = ?, numero_compte = ?, limite_credit = ?,
-                delai_paiement_jours = ?, niveau_fidelite = ?, statut = ?
+                numero_tva = ?, nif = ?, cni = ?, photo_profil = ?, banque = ?, 
+                numero_compte = ?, limite_credit = ?, delai_paiement_jours = ?, 
+                niveau_fidelite = ?, statut = ?
             WHERE id = ?
         `;
 
         await db.query(sql, [
             nom_client, type, contact_principal, telephone, email, adresse, ville, pays,
-            secteur_activite, numero_tva, banque, numero_compte, limite_credit,
-            delai_paiement_jours, niveau_fidelite, statut, id
+            secteur_activite, numero_tva, nif, cni, photo_profil, banque,
+            numero_compte, limite_credit, delai_paiement_jours, niveau_fidelite, statut, id
         ]);
 
         // Traçabilité
@@ -376,7 +381,9 @@ router.get('/fournisseurs', authenticate, authorize('admin', 'manager', 'comptab
                 f.*,
                 COUNT(DISTINCT ca.id) as nombre_commandes,
                 COALESCE(SUM(CASE WHEN ca.statut IN ('livree_complete', 'payee') 
-                    THEN ca.montant_total ELSE 0 END), 0) as total_achats
+                    THEN ca.montant_total ELSE 0 END), 0) as total_achats,
+                COALESCE(SUM(CASE WHEN ca.statut NOT IN ('livree_complete', 'payee', 'annulee') 
+                    THEN ca.montant_total ELSE 0 END), 0) as total_encours
             FROM fournisseurs f
             LEFT JOIN commandes_achat ca ON ca.id_fournisseur = f.id
             WHERE 1=1
@@ -423,8 +430,8 @@ router.post('/fournisseurs', authenticate, authorize('admin', 'manager'), async 
     try {
         const {
             nom_fournisseur, type, contact_principal, telephone, email, adresse,
-            ville, pays, numero_registre, numero_tva, banque, numero_compte,
-            conditions_paiement, statut
+            ville, pays, numero_registre, numero_tva, nif, cni, photo_profil,
+            banque, numero_compte, conditions_paiement, statut
         } = req.body;
 
         if (!nom_fournisseur || !telephone) {
@@ -445,16 +452,16 @@ router.post('/fournisseurs', authenticate, authorize('admin', 'manager'), async 
         const sql = `
             INSERT INTO fournisseurs (
                 code_fournisseur, nom_fournisseur, type, contact_principal, telephone,
-                email, adresse, ville, pays, numero_registre, numero_tva, banque,
-                numero_compte, conditions_paiement, statut
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                email, adresse, ville, pays, numero_registre, numero_tva, 
+                nif, cni, photo_profil, banque, numero_compte, conditions_paiement, statut
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         const result = await db.query(sql, [
             code_fournisseur, nom_fournisseur, type || 'general', contact_principal,
             telephone, email, adresse, ville, pays || 'Burundi', numero_registre,
-            numero_tva, banque, numero_compte, conditions_paiement || '30 jours',
-            statut || 'actif'
+            numero_tva, nif, cni, photo_profil, banque, numero_compte,
+            conditions_paiement || '30 jours', statut || 'actif'
         ]);
 
         const insertId = Array.isArray(result) ? (result[0]?.insertId || result.insertId) : result.insertId;
@@ -487,23 +494,23 @@ router.put('/fournisseurs/:id', authenticate, authorize('admin', 'manager'), asy
         const { id } = req.params;
         const {
             nom_fournisseur, type, contact_principal, telephone, email, adresse,
-            ville, pays, numero_registre, numero_tva, banque, numero_compte,
-            conditions_paiement, note_evaluation, statut
+            ville, pays, numero_registre, numero_tva, nif, cni, photo_profil,
+            banque, numero_compte, conditions_paiement, note_evaluation, statut
         } = req.body;
 
         const sql = `
             UPDATE fournisseurs SET
                 nom_fournisseur = ?, type = ?, contact_principal = ?, telephone = ?,
                 email = ?, adresse = ?, ville = ?, pays = ?, numero_registre = ?,
-                numero_tva = ?, banque = ?, numero_compte = ?, conditions_paiement = ?,
-                note_evaluation = ?, statut = ?
+                numero_tva = ?, nif = ?, cni = ?, photo_profil = ?, banque = ?, 
+                numero_compte = ?, conditions_paiement = ?, note_evaluation = ?, statut = ?
             WHERE id = ?
         `;
 
         await db.query(sql, [
             nom_fournisseur, type, contact_principal, telephone, email, adresse,
-            ville, pays, numero_registre, numero_tva, banque, numero_compte,
-            conditions_paiement, note_evaluation, statut, id
+            ville, pays, numero_registre, numero_tva, nif, cni, photo_profil,
+            banque, numero_compte, conditions_paiement, note_evaluation, statut, id
         ]);
 
         res.status(200).json({
@@ -549,9 +556,11 @@ router.get('/commandes-vente', authenticate, authorize('admin', 'manager', 'empl
         let sql = `
             SELECT 
                 cv.*,
+                cv.statut as statut,
                 c.nom_client,
                 c.telephone as client_telephone,
                 u.nom_complet as cree_par_nom,
+                (SELECT id FROM factures WHERE id_commande = cv.id LIMIT 1) as id_facture,
                 (SELECT COUNT(*) FROM lignes_commande_vente WHERE id_commande_vente = cv.id) as nombre_lignes
             FROM commandes_vente cv
             JOIN clients c ON cv.id_client = c.id
@@ -711,9 +720,9 @@ router.post('/commandes-vente', authenticate, authorize('admin', 'manager', 'emp
             montant_ht += montant_ligne;
         }
 
-        const montant_tva = montant_ht * (tva_pourcent || 0) / 100;
+        const montant_tva = montant_ht * (parseFloat(tva_pourcent) || 0) / 100;
         const montant_ttc = montant_ht + montant_tva;
-        const montant_total = montant_ttc + (frais_livraison || 0) - (remise || 0);
+        const montant_total = montant_ttc + (parseFloat(frais_livraison) || 0) - (parseFloat(remise) || 0);
 
         // Insérer commande
         const commandeResult = await connection.query(`
@@ -882,8 +891,8 @@ router.put('/commandes-vente/:id/statut', authenticate, authorize('admin', 'mana
         }
 
         // Récupérer la commande et ses lignes
-        const commandeResult = await connection.query('SELECT * FROM commandes_vente WHERE id = ?', [id]);
-        const commande = Array.isArray(commandeResult) ? commandeResult[0] : null;
+        const [commandeRows] = await connection.query('SELECT * FROM commandes_vente WHERE id = ?', [id]);
+        const commande = commandeRows[0];
 
         if (!commande) {
             await connection.rollback();
@@ -893,11 +902,10 @@ router.put('/commandes-vente/:id/statut', authenticate, authorize('admin', 'mana
             });
         }
 
-        const lignesResult = await connection.query(
+        const [lignes] = await connection.query(
             'SELECT * FROM lignes_commande_vente WHERE id_commande_vente = ?',
             [id]
         );
-        const lignes = Array.isArray(lignesResult) ? lignesResult : [];
 
         // NOUVEAU : Si livraison complète, déduire du stock
         if (statut === 'livree_complete' && commande.statut !== 'livree_complete') {
@@ -942,6 +950,52 @@ router.put('/commandes-vente/:id/statut', authenticate, authorize('admin', 'mana
             }
         }
 
+        // NOUVEAU : Si annulation
+        if (statut === 'annulee' && commande.statut !== 'annulee') {
+            // 1. Restaurer les stocks
+            for (const ligne of lignes) {
+                if (commande.statut === 'livree_complete') {
+                    // Si déjà livré, on remet dans le stock disponible
+                    await connection.query(`
+                        UPDATE stocks SET quantite_disponible = quantite_disponible + ?
+                        WHERE type_article = ? AND id_article = ?
+                    `, [ligne.quantite_commandee, ligne.type_produit, ligne.id_produit]);
+
+                    // Mouvement de stock de retour
+                    await connection.query(`
+                        INSERT INTO mouvements_stock (
+                            id_stock, type_mouvement, quantite, unite_mesure,
+                            type_reference, id_reference, raison, commentaire,
+                            effectue_par, date_mouvement
+                        )
+                        SELECT s.id, 'entree', ?, ?, 'commande_vente', ?, 'annulation',
+                        CONCAT('Annulation - Commande ', ?), ?, CURDATE()
+                        FROM stocks s WHERE s.type_article = ? AND s.id_article = ? LIMIT 1
+                    `, [ligne.quantite_commandee, ligne.unite, id, commande.numero_commande, req.user?.id || req.userId, ligne.type_produit, ligne.id_produit]);
+                } else if (['confirmee', 'en_preparation', 'livree_partielle'].includes(commande.statut)) {
+                    // Si seulement réservé, on libère la réservation
+                    await connection.query(`
+                        UPDATE stocks SET quantite_reservee = GREATEST(0, quantite_reservee - ?)
+                        WHERE type_article = ? AND id_article = ?
+                    `, [ligne.quantite_commandee, ligne.type_produit, ligne.id_produit]);
+                }
+            }
+
+            // 2. Si c'était déjà dans le journal comptable (livraison complète), on annule l'écriture
+            if (commande.statut === 'livree_complete' || commande.statut === 'payee') {
+                const [clientRows] = await connection.query('SELECT nom_client FROM clients WHERE id = ?', [commande.id_client]);
+                const clientNom = (clientRows && clientRows[0]) ? clientRows[0].nom_client : 'Client';
+
+                await connection.query('CALL enregistrer_journal_comptable(?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+                    'vente', 'depense', `ANNULATION Vente - ${commande.numero_commande}`,
+                    `Annulation commande client: ${commande.numero_commande}`, commande.montant_total,
+                    '707 - Ventes', '411 - Clients', 'commandes_vente', id, 'client',
+                    commande.id_client, clientNom, req.user?.id || req.userId,
+                    commande.numero_commande, JSON_OBJECT('annulation', true)
+                ]);
+            }
+        }
+
         // Mettre à jour le statut
         await connection.query(`
             UPDATE commandes_vente 
@@ -949,29 +1003,41 @@ router.put('/commandes-vente/:id/statut', authenticate, authorize('admin', 'mana
             WHERE id = ?
         `, [statut, req.user?.id || req.userId, id]);
 
-        // Créer facture si confirmée
-        if (statut === 'confirmee' && commande.statut === 'brouillon') {
-            const lastFactureResult = await connection.query(
-                'SELECT numero_facture FROM factures ORDER BY id DESC LIMIT 1'
-            );
-            const lastFacture = Array.isArray(lastFactureResult) ? lastFactureResult[0] : null;
-            const lastNum = lastFacture ? parseInt(lastFacture.numero_facture.split('-')[1]) : 0;
-            const numero_facture = `FAC-${String(lastNum + 1).padStart(6, '0')}`;
+        // Créer/Mettre à jour facture
+        if (statut === 'payee' || (statut === 'confirmee' && (commande.statut === 'brouillon' || !commande.statut))) {
+            // Check if facture already exists
+            const [existingRows] = await connection.query('SELECT id FROM factures WHERE id_commande = ?', [id]);
+            const existing = existingRows[0];
 
-            const dateEcheance = new Date();
-            dateEcheance.setDate(dateEcheance.getDate() + 30);
+            if (!existing) {
+                const [lastFactureRows] = await connection.query('SELECT numero_facture FROM factures ORDER BY id DESC LIMIT 1');
+                const lastFacture = lastFactureRows[0];
+                const lastNum = lastFacture && lastFacture.numero_facture ? parseInt(lastFacture.numero_facture.split('-')[1]) : 0;
+                const numero_facture = `FAC-${String(lastNum + 1).padStart(6, '0')}`;
 
-            await connection.query(`
-                INSERT INTO factures (
-                    numero_facture, type_facture, id_commande, id_client,
-                    date_facture, date_echeance, montant_ht, montant_tva,
-                    montant_ttc, montant_du, statut_paiement, cree_par
-                ) VALUES (?, 'vente', ?, ?, NOW(), ?, ?, ?, ?, ?, 'impayee', ?)
-            `, [
-                numero_facture, id, commande.id_client, dateEcheance,
-                commande.montant_ht, commande.montant_tva, commande.montant_ttc,
-                commande.montant_ttc, req.user?.id || req.userId
-            ]);
+                const dateEcheance = new Date();
+                dateEcheance.setDate(dateEcheance.getDate() + 30);
+
+                await connection.query(`
+                    INSERT INTO factures (
+                        numero_facture, type_facture, id_commande, id_client,
+                        date_facture, date_echeance, montant_ht, montant_tva,
+                        montant_ttc, montant_du, montant_regle, statut_paiement, cree_par
+                    ) VALUES (?, 'vente', ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?)
+                `, [
+                    numero_facture, id, commande.id_client, dateEcheance,
+                    commande.montant_ht, commande.montant_tva, commande.montant_ttc,
+                    statut === 'payee' ? 0 : commande.montant_ttc,
+                    statut === 'payee' ? commande.montant_ttc : 0,
+                    statut === 'payee' ? 'payee' : 'impayee',
+                    req.user?.id || req.userId
+                ]);
+            } else if (statut === 'payee') {
+                await connection.query(`
+                    UPDATE factures SET statut_paiement = 'payee', montant_regle = montant_ttc, montant_du = 0
+                    WHERE id_commande = ?
+                `, [id]);
+            }
         }
 
         await connection.commit();
@@ -1110,9 +1176,9 @@ router.post('/commandes-achat', authenticate, authorize('admin', 'manager'), asy
             montant_ht += montant_ligne;
         }
 
-        const montant_tva = montant_ht * (tva_pourcent || 0) / 100;
+        const montant_tva = montant_ht * (parseFloat(tva_pourcent) || 0) / 100;
         const montant_ttc = montant_ht + montant_tva;
-        const montant_total = montant_ttc + (frais_livraison || 0) - (remise || 0);
+        const montant_total = montant_ttc + (parseFloat(frais_livraison) || 0) - (parseFloat(remise) || 0);
 
         // Insérer commande
         const commandeResult = await connection.query(`
@@ -1415,12 +1481,13 @@ router.get('/statistiques', authenticate, authorize('admin', 'manager', 'comptab
         const statsVentesResult = await db.query(`
             SELECT 
                 COUNT(*) as nombre_commandes,
-                COALESCE(SUM(montant_total), 0) as total_ventes,
+                COALESCE(SUM(CASE WHEN statut IN ('livree_complete', 'payee') THEN montant_total ELSE 0 END), 0) as total_ventes,
+                COALESCE(SUM(CASE WHEN statut NOT IN ('livree_complete', 'payee', 'annulee') THEN montant_total ELSE 0 END), 0) as total_ventes_encours,
                 COALESCE(AVG(montant_total), 0) as moyenne_commande,
                 COUNT(DISTINCT id_client) as nombre_clients
             FROM commandes_vente
             WHERE date_commande BETWEEN ? AND ?
-            AND statut IN ('confirmee', 'livree_complete', 'payee')
+            AND statut != 'annulee'
         `, [dateDebut, dateFin]);
         const statsVentes = Array.isArray(statsVentesResult) ? statsVentesResult[0] : statsVentesResult;
 
@@ -1428,11 +1495,12 @@ router.get('/statistiques', authenticate, authorize('admin', 'manager', 'comptab
         const statsAchatsResult = await db.query(`
             SELECT 
                 COUNT(*) as nombre_commandes,
-                COALESCE(SUM(montant_total), 0) as total_achats,
+                COALESCE(SUM(CASE WHEN statut IN ('livree_complete', 'payee') THEN montant_total ELSE 0 END), 0) as total_achats,
+                COALESCE(SUM(CASE WHEN statut NOT IN ('livree_complete', 'payee', 'annulee') THEN montant_total ELSE 0 END), 0) as total_achats_encours,
                 COUNT(DISTINCT id_fournisseur) as nombre_fournisseurs
             FROM commandes_achat
             WHERE date_commande BETWEEN ? AND ?
-            AND statut IN ('confirmee', 'livree_complete', 'payee')
+            AND statut != 'annulee'
         `, [dateDebut, dateFin]);
         const statsAchats = Array.isArray(statsAchatsResult) ? statsAchatsResult[0] : statsAchatsResult;
 
@@ -1457,6 +1525,7 @@ router.get('/statistiques', authenticate, authorize('admin', 'manager', 'comptab
             FROM clients c
             LEFT JOIN commandes_vente cv ON cv.id_client = c.id 
                 AND cv.date_commande BETWEEN ? AND ?
+                AND cv.statut != 'annulee'
             GROUP BY c.id
             ORDER BY total_achats DESC
             LIMIT 5

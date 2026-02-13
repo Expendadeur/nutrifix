@@ -1,0 +1,57 @@
+﻿Field	Type	Null	Key	Default	Extra
+id	int	NO	PRI	NULL	auto_increment
+numero_facture	varchar(50)	NO	UNI	NULL	
+type_facture	enum('achat','vente','avoir')	NO	MUL	NULL	
+id_commande	int	YES		NULL	
+id_fournisseur	int	YES	MUL	NULL	
+id_client	int	YES	MUL	NULL	
+date_facture	date	NO	MUL	NULL	
+date_echeance	date	NO	MUL	NULL	
+montant_ht	decimal(12,2)	NO		0.00	
+montant_tva	decimal(12,2)	NO		0.00	
+montant_ttc	decimal(12,2)	NO		0.00	
+montant_regle	decimal(12,2)	YES		0.00	
+montant_du	decimal(12,2)	YES		0.00	
+statut_paiement	enum('impayee','partiellement_payee','payee','en_retard')	YES	MUL	impayee	
+date_dernier_paiement	date	YES		NULL	
+mode_reglement	varchar(50)	YES		NULL	
+nombre_relances	int	YES		0	
+date_derniere_relance	date	YES		NULL	
+chemin_fichier	varchar(255)	YES		NULL	
+scan_quittance	varchar(255)	YES		NULL	
+cree_par	int	NO	MUL	NULL	
+date_creation	timestamp	YES		CURRENT_TIMESTAMP	DEFAULT_GENERATED
+modifie_par	int	YES		NULL	
+date_modification	timestamp	YES		CURRENT_TIMESTAMP	DEFAULT_GENERATED on update CURRENT_TIMESTAMP
+Field	Type	Null	Key	Default	Extra
+id	int	NO	PRI	NULL	auto_increment
+code_client	varchar(30)	NO	UNI	NULL	
+nom_client	varchar(150)	NO	MUL	NULL	
+type	enum('particulier','entreprise','revendeur','grossiste','institutionnel')	NO	MUL	NULL	
+contact_principal	varchar(100)	YES		NULL	
+telephone	varchar(20)	NO		NULL	
+email	varchar(100)	YES		NULL	
+adresse	text	YES		NULL	
+ville	varchar(100)	YES		NULL	
+pays	varchar(50)	YES		RDC	
+secteur_activite	varchar(100)	YES		NULL	
+numero_tva	varchar(50)	YES		NULL	
+nif	varchar(50)	YES		NULL	
+cni	varchar(50)	YES		NULL	
+photo_profil	text	YES		NULL	
+banque	varchar(100)	YES		NULL	
+numero_compte	varchar(50)	YES		NULL	
+premier_achat	date	YES		NULL	
+dernier_achat	date	YES		NULL	
+nombre_achats	int	YES		0	
+montant_total_achats	decimal(15,2)	YES		0.00	
+moyenne_achat	decimal(12,2)	YES		0.00	
+limite_credit	decimal(12,2)	YES		0.00	
+solde_du	decimal(12,2)	YES		0.00	
+delai_paiement_jours	int	YES		30	
+niveau_fidelite	enum('nouveau','occasionnel','regulier','fidele','vip')	YES	MUL	nouveau	
+points_fidelite	int	YES		0	
+statut	enum('actif','inactif','suspendu')	YES	MUL	actif	
+motif_suspension	text	YES		NULL	
+date_creation	timestamp	YES		CURRENT_TIMESTAMP	DEFAULT_GENERATED
+date_modification	timestamp	YES		CURRENT_TIMESTAMP	DEFAULT_GENERATED on update CURRENT_TIMESTAMP

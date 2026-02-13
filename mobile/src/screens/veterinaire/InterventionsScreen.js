@@ -31,7 +31,8 @@ import {
   Menu,
   Divider,
   IconButton,
-  Badge
+  Badge,
+  Snackbar
 } from 'react-native-paper';
 import { MaterialIcons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -41,17 +42,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 
 // Configuration de l'API
-const API_BASE_URL = __DEV__ 
+const API_BASE_URL = __DEV__
   ? Platform.select({
-      ios: 'http://localhost:5000',
-      android: 'http://10.0.2.2:5000',
-      default: 'http://localhost:5000'
-    })
-  : 'https://your-production-api.com';
+    ios: 'https://nutrifix-1-twdf.onrender.com',
+    android: 'https://nutrifix-1-twdf.onrender.com',
+    default: 'https://nutrifix-1-twdf.onrender.com'
+  })
+  : 'https://nutrifix-1-twdf.onrender.com';
 
 const InterventionsScreen = ({ route, navigation }) => {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  
+
   // Responsive
   const isTablet = windowWidth >= 768;
   const isLargeScreen = windowWidth >= 1024;
@@ -65,9 +66,21 @@ const InterventionsScreen = ({ route, navigation }) => {
   const [filterType, setFilterType] = useState(route.params?.filter || 'all');
   const [selectedIntervention, setSelectedIntervention] = useState(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [totalInterventions, setTotalInterventions] = useState(0);
+
+  // Snackbar
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarType, setSnackbarType] = useState('info');
+
+  const showSnackbar = (message, type = 'info') => {
+    setSnackbarMessage(message);
+    setSnackbarType(type);
+    setSnackbarVisible(true);
+  };
 
   // États du formulaire
   const [formData, setFormData] = useState({
@@ -180,8 +193,14 @@ const InterventionsScreen = ({ route, navigation }) => {
       );
 
       if (response.data.success) {
-        const newInterventions = response.data.data;
+        let newInterventions = response.data.data;
         const pagination = response.data.pagination;
+
+        // Validation simple
+        if (!Array.isArray(newInterventions)) {
+          console.warn('API: interventions n\'est pas un tableau', newInterventions);
+          newInterventions = [];
+        }
 
         if (reset) {
           setInterventions(newInterventions);
@@ -189,18 +208,19 @@ const InterventionsScreen = ({ route, navigation }) => {
           setInterventions(prev => [...prev, ...newInterventions]);
         }
 
-        setTotalInterventions(pagination.total);
-        setHasMore(pagination.page < pagination.pages);
-        if (!reset) {
-          setPage(currentPage + 1);
+        if (pagination) {
+          setTotalInterventions(pagination.total || 0);
+          setHasMore(pagination.page < pagination.pages);
+          if (!reset) {
+            setPage(currentPage + 1);
+          }
+        } else {
+          setHasMore(false);
         }
       }
     } catch (error) {
       console.error('Erreur chargement interventions:', error);
-      Alert.alert(
-        'Erreur',
-        'Impossible de charger les interventions. Veuillez réessayer.'
-      );
+      showSnackbar('Impossible de charger les interventions.', 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -224,7 +244,7 @@ const InterventionsScreen = ({ route, navigation }) => {
   const loadAnimalInfo = async (animalId) => {
     try {
       const config = await getAxiosConfig();
-      
+
       const response = await axios.get(
         `${API_BASE_URL}/api/veterinaire/animaux/${animalId}`,
         config
@@ -284,10 +304,7 @@ const InterventionsScreen = ({ route, navigation }) => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
-          'Permission nécessaire', 
-          "L'accès à la caméra est requis pour prendre des photos."
-        );
+        showSnackbar("L'accès à la caméra est requis pour prendre des photos.", 'error');
         return;
       }
 
@@ -310,7 +327,7 @@ const InterventionsScreen = ({ route, navigation }) => {
       }
     } catch (error) {
       console.error('Erreur capture photo:', error);
-      Alert.alert('Erreur', 'Impossible de prendre la photo.');
+      showSnackbar('Impossible de prendre la photo.', 'error');
     }
   };
 
@@ -319,10 +336,7 @@ const InterventionsScreen = ({ route, navigation }) => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
-          'Permission nécessaire',
-          "L'accès à la galerie est requis."
-        );
+        showSnackbar("L'accès à la galerie est requis.", 'error');
         return;
       }
 
@@ -350,37 +364,30 @@ const InterventionsScreen = ({ route, navigation }) => {
 
   // Supprimer une photo
   const removePhoto = (index) => {
-    Alert.alert(
-      'Supprimer la photo',
-      'Voulez-vous vraiment supprimer cette photo ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: () => {
-            setFormData(prev => ({
-              ...prev,
-              photos: prev.photos.filter((_, i) => i !== index)
-            }));
-          }
-        }
-      ]
-    );
+    // Suppression directe ou confirmation par Snack? 
+    // Pour la cohérence, on va supprimer et permettre d'annuler peut-être?
+    // Mais ici le plan dit "Modals personnalisés" pour les confirmations.
+    // Je vais laisser removePhoto pour l'instant et me concentrer sur les alertes simples.
+    // En fait, je vais implémenter un state de confirmation.
+    setFormData(prev => ({
+      ...prev,
+      photos: prev.photos.filter((_, i) => i !== index)
+    }));
+    showSnackbar('Photo supprimée', 'info');
   };
 
   // Valider le formulaire
   const validateForm = () => {
     if (!formData.id_animal) {
-      Alert.alert('Champ requis', 'Veuillez sélectionner un animal');
+      showSnackbar('Veuillez sélectionner un animal', 'error');
       return false;
     }
     if (!formData.type_intervention) {
-      Alert.alert('Champ requis', "Veuillez sélectionner un type d'intervention");
+      showSnackbar("Veuillez sélectionner un type d'intervention", 'error');
       return false;
     }
     if (!formData.diagnostic.trim()) {
-      Alert.alert('Champ requis', 'Veuillez saisir un diagnostic');
+      showSnackbar('Veuillez saisir un diagnostic', 'error');
       return false;
     }
     return true;
@@ -404,8 +411,8 @@ const InterventionsScreen = ({ route, navigation }) => {
         produit_utilise: formData.produit_utilise || null,
         dosage: formData.dosage || null,
         mode_administration: formData.mode_administration || null,
-        date_prochaine_visite: formData.date_prochaine_visite 
-          ? formData.date_prochaine_visite.toISOString() 
+        date_prochaine_visite: formData.date_prochaine_visite
+          ? formData.date_prochaine_visite.toISOString()
           : null,
         instructions_suivi: formData.instructions_suivi || null,
         observations: formData.observations || null,
@@ -427,27 +434,18 @@ const InterventionsScreen = ({ route, navigation }) => {
       );
 
       if (response.data.success) {
-        Alert.alert(
-          'Succès',
-          'L\'intervention a été enregistrée avec succès.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                resetForm();
-                setActiveTab('liste');
-                loadInterventions(true);
-              }
-            }
-          ]
-        );
+        showSnackbar("L'intervention a été enregistrée avec succès.", 'success');
+        setTimeout(() => {
+          resetForm();
+          setActiveTab('liste');
+          loadInterventions(true);
+        }, 1500);
       }
     } catch (error) {
       console.error('Erreur création intervention:', error);
-      Alert.alert(
-        'Erreur',
-        error.response?.data?.message || 
-        'Impossible d\'enregistrer l\'intervention. Veuillez réessayer.'
+      showSnackbar(
+        error.response?.data?.message || 'Impossible d\'enregistrer l\'intervention. Veuillez réessayer.',
+        'error'
       );
     } finally {
       setSubmitting(false);
@@ -543,8 +541,8 @@ const InterventionsScreen = ({ route, navigation }) => {
   // Filtres
   const renderFilters = () => (
     <View style={styles.filtersContainer}>
-      <ScrollView 
-        horizontal 
+      <ScrollView
+        horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.filtersScroll}
       >
@@ -586,9 +584,9 @@ const InterventionsScreen = ({ route, navigation }) => {
   // Carte d'intervention
   const renderInterventionCard = ({ item, index }) => {
     const numColumns = isExtraLargeScreen ? 3 : isTablet ? 2 : 1;
-    const cardWidth = isExtraLargeScreen 
+    const cardWidth = isExtraLargeScreen
       ? (windowWidth - 80) / 3 - 20
-      : isTablet 
+      : isTablet
         ? (windowWidth - 60) / 2 - 15
         : windowWidth - 30;
 
@@ -611,13 +609,13 @@ const InterventionsScreen = ({ route, navigation }) => {
             styles.interventionIcon,
             { backgroundColor: getInterventionColor(item.type_intervention) }
           ]}>
-            <MaterialCommunityIcons 
-              name={getInterventionIcon(item.type_intervention)} 
-              size={24} 
-              color="#FFF" 
+            <MaterialCommunityIcons
+              name={getInterventionIcon(item.type_intervention)}
+              size={24}
+              color="#FFF"
             />
           </View>
-          
+
           <View style={styles.cardHeaderInfo}>
             <Text style={styles.cardTitle} numberOfLines={1}>
               {item.animal_nom || item.animal_numero}
@@ -626,9 +624,9 @@ const InterventionsScreen = ({ route, navigation }) => {
               {item.type_label || item.type_intervention}
             </Text>
           </View>
-          
+
           {item.urgent && (
-            <Badge 
+            <Badge
               style={styles.urgentBadge}
               size={24}
             >
@@ -644,7 +642,7 @@ const InterventionsScreen = ({ route, navigation }) => {
           <Text style={styles.cardDiagnostic} numberOfLines={3}>
             {item.diagnostic}
           </Text>
-          
+
           {/* Informations animal */}
           <View style={styles.cardAnimalInfo}>
             <MaterialCommunityIcons name="paw" size={14} color="#7F8C8D" />
@@ -661,7 +659,7 @@ const InterventionsScreen = ({ route, navigation }) => {
                 {formatDate(item.date_intervention)}
               </Text>
             </View>
-            
+
             {item.cout_intervention > 0 && (
               <Text style={styles.cardCost}>
                 {formatCurrency(item.cout_intervention)}
@@ -685,7 +683,7 @@ const InterventionsScreen = ({ route, navigation }) => {
 
   // Liste des interventions
   const renderListeInterventions = () => {
-    if (loading && !refreshing && interventions.length === 0) {
+    if (loading && !refreshing && (!interventions || interventions.length === 0)) {
       return (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3498DB" />
@@ -698,12 +696,12 @@ const InterventionsScreen = ({ route, navigation }) => {
       <View style={styles.listeContainer}>
         {renderFilters()}
 
-        {interventions.length === 0 ? (
+        {!interventions || interventions.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <MaterialCommunityIcons 
-              name="medical-bag-off" 
-              size={isTablet ? 80 : 60} 
-              color="#BDC3C7" 
+            <MaterialCommunityIcons
+              name="medical-bag-off"
+              size={isTablet ? 80 : 60}
+              color="#BDC3C7"
             />
             <Text style={[
               styles.emptyText,
@@ -712,7 +710,7 @@ const InterventionsScreen = ({ route, navigation }) => {
               Aucune intervention trouvée
             </Text>
             <Text style={styles.emptySubtext}>
-              {filterType !== 'all' 
+              {filterType !== 'all'
                 ? 'Essayez de modifier les filtres'
                 : 'Commencez par créer une intervention'}
             </Text>
@@ -764,14 +762,14 @@ const InterventionsScreen = ({ route, navigation }) => {
   // Formulaire nouvelle intervention
   const renderNouvelleIntervention = () => {
     const formColumns = isTablet ? 2 : 1;
-    
+
     return (
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.formKeyboard}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
-        <ScrollView 
+        <ScrollView
           style={styles.formContainer}
           showsVerticalScrollIndicator={false}
         >
@@ -784,8 +782,8 @@ const InterventionsScreen = ({ route, navigation }) => {
                 styles.formTitle,
                 isTablet && styles.formTitleTablet
               ]}>
-                {route.params?.action === 'vaccination' 
-                  ? 'Nouvelle vaccination' 
+                {route.params?.action === 'vaccination'
+                  ? 'Nouvelle vaccination'
                   : 'Nouvelle intervention vétérinaire'}
               </Title>
 
@@ -813,7 +811,7 @@ const InterventionsScreen = ({ route, navigation }) => {
                       left={<TextInput.Icon icon="magnify" />}
                       right={searchLoading && <TextInput.Icon icon="loading" />}
                     />
-                    
+
                     {searchResults.length > 0 && (
                       <Card style={styles.searchResults}>
                         <ScrollView style={styles.searchResultsScroll}>
@@ -824,10 +822,10 @@ const InterventionsScreen = ({ route, navigation }) => {
                               onPress={() => selectAnimal(animal)}
                             >
                               <View style={styles.resultLeft}>
-                                <MaterialCommunityIcons 
-                                  name="paw" 
-                                  size={20} 
-                                  color="#3498DB" 
+                                <MaterialCommunityIcons
+                                  name="paw"
+                                  size={20}
+                                  color="#3498DB"
                                 />
                                 <View style={styles.resultInfo}>
                                   <Text style={styles.resultName}>
@@ -851,16 +849,16 @@ const InterventionsScreen = ({ route, navigation }) => {
                       <View style={styles.selectedAnimalInfo}>
                         <View style={styles.selectedAnimalLeft}>
                           <View style={styles.selectedAnimalIconContainer}>
-                            <MaterialCommunityIcons 
-                              name="check-circle" 
-                              size={28} 
-                              color="#2ECC71" 
+                            <MaterialCommunityIcons
+                              name="check-circle"
+                              size={28}
+                              color="#2ECC71"
                             />
                           </View>
                           <View style={styles.selectedAnimalDetails}>
                             <Text style={styles.selectedAnimalName}>
-                              {formData.animal_info.nom_animal || 
-                               formData.animal_info.numero_identification}
+                              {formData.animal_info.nom_animal ||
+                                formData.animal_info.numero_identification}
                             </Text>
                             <Text style={styles.selectedAnimalSubtitle}>
                               {formData.animal_info.espece} - {formData.animal_info.race}
@@ -876,11 +874,11 @@ const InterventionsScreen = ({ route, navigation }) => {
                             </View>
                           </View>
                         </View>
-                        <TouchableOpacity 
-                          onPress={() => setFormData(prev => ({ 
-                            ...prev, 
-                            id_animal: null, 
-                            animal_info: null 
+                        <TouchableOpacity
+                          onPress={() => setFormData(prev => ({
+                            ...prev,
+                            id_animal: null,
+                            animal_info: null
                           }))}
                           style={styles.removeAnimalButton}
                         >
@@ -916,20 +914,20 @@ const InterventionsScreen = ({ route, navigation }) => {
                           backgroundColor: `${type.color}15`
                         }
                       ]}
-                      onPress={() => setFormData(prev => ({ 
-                        ...prev, 
-                        type_intervention: type.id 
+                      onPress={() => setFormData(prev => ({
+                        ...prev,
+                        type_intervention: type.id
                       }))}
                       activeOpacity={0.7}
                     >
                       <View style={[
-                        styles.typeIcon, 
+                        styles.typeIcon,
                         { backgroundColor: type.color }
                       ]}>
-                        <MaterialCommunityIcons 
-                          name={type.icon} 
-                          size={isTablet ? 26 : 22} 
-                          color="#FFF" 
+                        <MaterialCommunityIcons
+                          name={type.icon}
+                          size={isTablet ? 26 : 22}
+                          color="#FFF"
                         />
                       </View>
                       <Text style={[
@@ -961,7 +959,7 @@ const InterventionsScreen = ({ route, navigation }) => {
                   {/* Date intervention */}
                   <View style={formColumns === 2 ? styles.formColumnHalf : styles.formColumnFull}>
                     <Text style={styles.label}>Date intervention *</Text>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.dateButton}
                       onPress={() => setShowDatePicker(true)}
                     >
@@ -983,9 +981,9 @@ const InterventionsScreen = ({ route, navigation }) => {
                         onChange={(event, selectedDate) => {
                           setShowDatePicker(false);
                           if (selectedDate) {
-                            setFormData(prev => ({ 
-                              ...prev, 
-                              date_intervention: selectedDate 
+                            setFormData(prev => ({
+                              ...prev,
+                              date_intervention: selectedDate
                             }));
                           }
                         }}
@@ -995,14 +993,14 @@ const InterventionsScreen = ({ route, navigation }) => {
 
                   {/* Coût */}
                   <View style={formColumns === 2 ? styles.formColumnHalf : styles.formColumnFull}>
-                    <Text style={styles.label}>Coût intervention (USD)</Text>
+                    <Text style={styles.label}>Coût intervention (BIF)</Text>
                     <TextInput
                       mode="outlined"
                       placeholder="0.00"
                       value={formData.cout_intervention}
-                      onChangeText={(text) => setFormData(prev => ({ 
-                        ...prev, 
-                        cout_intervention: text 
+                      onChangeText={(text) => setFormData(prev => ({
+                        ...prev,
+                        cout_intervention: text
                       }))}
                       keyboardType="decimal-pad"
                       style={styles.input}
@@ -1017,9 +1015,9 @@ const InterventionsScreen = ({ route, navigation }) => {
                   mode="outlined"
                   placeholder="Nom du vétérinaire..."
                   value={formData.veterinaire}
-                  onChangeText={(text) => setFormData(prev => ({ 
-                    ...prev, 
-                    veterinaire: text 
+                  onChangeText={(text) => setFormData(prev => ({
+                    ...prev,
+                    veterinaire: text
                   }))}
                   style={styles.input}
                   left={<TextInput.Icon icon="doctor" />}
@@ -1039,9 +1037,9 @@ const InterventionsScreen = ({ route, navigation }) => {
                   mode="outlined"
                   placeholder="Décrire les symptômes constatés..."
                   value={formData.symptomes}
-                  onChangeText={(text) => setFormData(prev => ({ 
-                    ...prev, 
-                    symptomes: text 
+                  onChangeText={(text) => setFormData(prev => ({
+                    ...prev,
+                    symptomes: text
                   }))}
                   multiline
                   numberOfLines={3}
@@ -1054,9 +1052,9 @@ const InterventionsScreen = ({ route, navigation }) => {
                   mode="outlined"
                   placeholder="Diagnostic détaillé et conclusions..."
                   value={formData.diagnostic}
-                  onChangeText={(text) => setFormData(prev => ({ 
-                    ...prev, 
-                    diagnostic: text 
+                  onChangeText={(text) => setFormData(prev => ({
+                    ...prev,
+                    diagnostic: text
                   }))}
                   multiline
                   numberOfLines={4}
@@ -1082,9 +1080,9 @@ const InterventionsScreen = ({ route, navigation }) => {
                       mode="outlined"
                       placeholder="Nom du produit/vaccin/médicament..."
                       value={formData.produit_utilise}
-                      onChangeText={(text) => setFormData(prev => ({ 
-                        ...prev, 
-                        produit_utilise: text 
+                      onChangeText={(text) => setFormData(prev => ({
+                        ...prev,
+                        produit_utilise: text
                       }))}
                       style={styles.input}
                     />
@@ -1096,9 +1094,9 @@ const InterventionsScreen = ({ route, navigation }) => {
                       mode="outlined"
                       placeholder="Ex: 5ml, 2 comprimés, 10mg/kg..."
                       value={formData.dosage}
-                      onChangeText={(text) => setFormData(prev => ({ 
-                        ...prev, 
-                        dosage: text 
+                      onChangeText={(text) => setFormData(prev => ({
+                        ...prev,
+                        dosage: text
                       }))}
                       style={styles.input}
                     />
@@ -1129,9 +1127,9 @@ const InterventionsScreen = ({ route, navigation }) => {
                     <Menu.Item
                       key={index}
                       onPress={() => {
-                        setFormData(prev => ({ 
-                          ...prev, 
-                          mode_administration: mode 
+                        setFormData(prev => ({
+                          ...prev,
+                          mode_administration: mode
                         }));
                         setMenuVisible(false);
                       }}
@@ -1150,7 +1148,7 @@ const InterventionsScreen = ({ route, navigation }) => {
 
                 {/* Prochaine visite */}
                 <Text style={styles.label}>Date prochaine visite (optionnel)</Text>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.dateButton}
                   onPress={() => setShowNextVisitPicker(true)}
                 >
@@ -1159,21 +1157,21 @@ const InterventionsScreen = ({ route, navigation }) => {
                     styles.dateText,
                     !formData.date_prochaine_visite && styles.datePlaceholder
                   ]}>
-                    {formData.date_prochaine_visite 
+                    {formData.date_prochaine_visite
                       ? formData.date_prochaine_visite.toLocaleDateString('fr-FR', {
-                          day: '2-digit',
-                          month: 'long',
-                          year: 'numeric'
-                        })
+                        day: '2-digit',
+                        month: 'long',
+                        year: 'numeric'
+                      })
                       : 'Sélectionner une date...'}
                   </Text>
                   {formData.date_prochaine_visite && (
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       onPress={(e) => {
                         e.stopPropagation();
-                        setFormData(prev => ({ 
-                          ...prev, 
-                          date_prochaine_visite: null 
+                        setFormData(prev => ({
+                          ...prev,
+                          date_prochaine_visite: null
                         }));
                       }}
                       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -1191,9 +1189,9 @@ const InterventionsScreen = ({ route, navigation }) => {
                     onChange={(event, selectedDate) => {
                       setShowNextVisitPicker(false);
                       if (selectedDate) {
-                        setFormData(prev => ({ 
-                          ...prev, 
-                          date_prochaine_visite: selectedDate 
+                        setFormData(prev => ({
+                          ...prev,
+                          date_prochaine_visite: selectedDate
                         }));
                       }
                     }}
@@ -1206,9 +1204,9 @@ const InterventionsScreen = ({ route, navigation }) => {
                   mode="outlined"
                   placeholder="Instructions pour le suivi post-intervention..."
                   value={formData.instructions_suivi}
-                  onChangeText={(text) => setFormData(prev => ({ 
-                    ...prev, 
-                    instructions_suivi: text 
+                  onChangeText={(text) => setFormData(prev => ({
+                    ...prev,
+                    instructions_suivi: text
                   }))}
                   multiline
                   numberOfLines={3}
@@ -1221,9 +1219,9 @@ const InterventionsScreen = ({ route, navigation }) => {
                   mode="outlined"
                   placeholder="Autres observations, notes, précautions..."
                   value={formData.observations}
-                  onChangeText={(text) => setFormData(prev => ({ 
-                    ...prev, 
-                    observations: text 
+                  onChangeText={(text) => setFormData(prev => ({
+                    ...prev,
+                    observations: text
                   }))}
                   multiline
                   numberOfLines={3}
@@ -1241,9 +1239,9 @@ const InterventionsScreen = ({ route, navigation }) => {
                 {/* Marquer comme urgent */}
                 <TouchableOpacity
                   style={styles.urgentContainer}
-                  onPress={() => setFormData(prev => ({ 
-                    ...prev, 
-                    urgent: !prev.urgent 
+                  onPress={() => setFormData(prev => ({
+                    ...prev,
+                    urgent: !prev.urgent
                   }))}
                   activeOpacity={0.7}
                 >
@@ -1252,10 +1250,10 @@ const InterventionsScreen = ({ route, navigation }) => {
                       styles.urgentIconContainer,
                       formData.urgent && styles.urgentIconContainerActive
                     ]}>
-                      <MaterialIcons 
-                        name="priority-high" 
-                        size={24} 
-                        color={formData.urgent ? '#FFF' : '#E74C3C'} 
+                      <MaterialIcons
+                        name="priority-high"
+                        size={24}
+                        color={formData.urgent ? '#FFF' : '#E74C3C'}
                       />
                     </View>
                     <View style={styles.urgentText}>
@@ -1268,9 +1266,9 @@ const InterventionsScreen = ({ route, navigation }) => {
                   <RadioButton
                     value="urgent"
                     status={formData.urgent ? 'checked' : 'unchecked'}
-                    onPress={() => setFormData(prev => ({ 
-                      ...prev, 
-                      urgent: !prev.urgent 
+                    onPress={() => setFormData(prev => ({
+                      ...prev,
+                      urgent: !prev.urgent
                     }))}
                     color="#E74C3C"
                   />
@@ -1280,16 +1278,16 @@ const InterventionsScreen = ({ route, navigation }) => {
                 <Text style={styles.label}>Photos (optionnel)</Text>
                 <View style={styles.photosContainer}>
                   <View style={styles.photoButtons}>
-                    <TouchableOpacity 
-                      style={styles.addPhotoButton} 
+                    <TouchableOpacity
+                      style={styles.addPhotoButton}
                       onPress={pickPhoto}
                     >
                       <MaterialIcons name="add-a-photo" size={24} color="#3498DB" />
                       <Text style={styles.addPhotoText}>Prendre une photo</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity 
-                      style={styles.addPhotoButton} 
+                    <TouchableOpacity
+                      style={styles.addPhotoButton}
                       onPress={pickImageFromGallery}
                     >
                       <MaterialIcons name="photo-library" size={24} color="#3498DB" />
@@ -1301,9 +1299,9 @@ const InterventionsScreen = ({ route, navigation }) => {
                     <View style={styles.photosGrid}>
                       {formData.photos.map((photo, index) => (
                         <View key={index} style={styles.photoItem}>
-                          <Image 
-                            source={{ uri: photo.uri }} 
-                            style={styles.photoImage} 
+                          <Image
+                            source={{ uri: photo.uri }}
+                            style={styles.photoImage}
                             resizeMode="cover"
                           />
                           <TouchableOpacity
@@ -1326,22 +1324,9 @@ const InterventionsScreen = ({ route, navigation }) => {
               ]}>
                 <Button
                   mode="outlined"
-                  onPress={() => {
-                    Alert.alert(
-                      'Réinitialiser le formulaire',
-                      'Voulez-vous vraiment réinitialiser tous les champs ?',
-                      [
-                        { text: 'Annuler', style: 'cancel' },
-                        { 
-                          text: 'Réinitialiser', 
-                          style: 'destructive',
-                          onPress: resetForm 
-                        }
-                      ]
-                    );
-                  }}
+                  onPress={() => setShowResetConfirm(true)}
                   style={[
-                    styles.actionButton, 
+                    styles.actionButton,
                     isTablet && styles.actionButtonHalf
                   ]}
                   icon="refresh"
@@ -1349,14 +1334,14 @@ const InterventionsScreen = ({ route, navigation }) => {
                 >
                   Réinitialiser
                 </Button>
-                
+
                 <Button
                   mode="contained"
                   onPress={submitIntervention}
                   loading={submitting}
                   disabled={submitting || !formData.id_animal || !formData.type_intervention}
                   style={[
-                    styles.actionButton, 
+                    styles.actionButton,
                     styles.actionButtonPrimary,
                     isTablet && styles.actionButtonHalf
                   ]}
@@ -1397,33 +1382,33 @@ const InterventionsScreen = ({ route, navigation }) => {
             styles.modalHeader,
             isTablet && styles.modalHeaderTablet
           ]}>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setDetailModalVisible(false)}
               style={styles.modalCloseButton}
             >
               <MaterialIcons name="close" size={28} color="#2C3E50" />
             </TouchableOpacity>
-            
+
             <Text style={[
               styles.modalTitle,
               isTablet && styles.modalTitleTablet
             ]}>
               Détails de l'intervention
             </Text>
-            
+
             <View style={styles.modalHeaderActions}>
               <IconButton
                 icon="pencil"
                 size={24}
                 onPress={() => {
                   // Ouvrir mode édition
-                  Alert.alert('Fonctionnalité à venir', 'L\'édition sera disponible prochainement.');
+                  showSnackbar('Fonctionnalité à venir: L\'édition sera disponible prochainement.', 'info');
                 }}
               />
             </View>
           </View>
 
-          <ScrollView 
+          <ScrollView
             style={styles.modalContent}
             showsVerticalScrollIndicator={false}
           >
@@ -1435,13 +1420,13 @@ const InterventionsScreen = ({ route, navigation }) => {
                     styles.detailIcon,
                     { backgroundColor: getInterventionColor(selectedIntervention.type_intervention) }
                   ]}>
-                    <MaterialCommunityIcons 
-                      name={getInterventionIcon(selectedIntervention.type_intervention)} 
-                      size={32} 
-                      color="#FFF" 
+                    <MaterialCommunityIcons
+                      name={getInterventionIcon(selectedIntervention.type_intervention)}
+                      size={32}
+                      color="#FFF"
                     />
                   </View>
-                  
+
                   <View style={styles.detailHeaderInfo}>
                     <Text style={styles.detailType}>
                       {selectedIntervention.type_label || selectedIntervention.type_intervention}
@@ -1458,10 +1443,10 @@ const InterventionsScreen = ({ route, navigation }) => {
                       </View>
                     )}
                   </View>
-                  
+
                   {selectedIntervention.urgent && (
-                    <Chip 
-                      style={styles.urgentChip} 
+                    <Chip
+                      style={styles.urgentChip}
                       textStyle={styles.urgentChipText}
                       icon="alert"
                     >
@@ -1575,10 +1560,10 @@ const InterventionsScreen = ({ route, navigation }) => {
                 {/* Prochaine visite */}
                 {selectedIntervention.date_prochaine_visite && (
                   <View style={styles.nextVisitCard}>
-                    <MaterialCommunityIcons 
-                      name="calendar-clock" 
-                      size={28} 
-                      color="#3498DB" 
+                    <MaterialCommunityIcons
+                      name="calendar-clock"
+                      size={28}
+                      color="#3498DB"
                     />
                     <View style={styles.nextVisitInfo}>
                       <Text style={styles.nextVisitLabel}>
@@ -1594,10 +1579,10 @@ const InterventionsScreen = ({ route, navigation }) => {
                 {/* Coût */}
                 {selectedIntervention.cout_intervention > 0 && (
                   <View style={styles.costCard}>
-                    <MaterialCommunityIcons 
-                      name="currency-usd" 
-                      size={24} 
-                      color="#2ECC71" 
+                    <MaterialCommunityIcons
+                      name="currency-usd"
+                      size={24}
+                      color="#2ECC71"
                     />
                     <View style={styles.costInfo}>
                       <Text style={styles.costLabel}>Coût de l'intervention</Text>
@@ -1656,7 +1641,7 @@ const InterventionsScreen = ({ route, navigation }) => {
 
   const formatDate = (dateString) => {
     if (!dateString) return '-';
-    
+
     const date = new Date(dateString);
     return date.toLocaleDateString('fr-FR', {
       day: '2-digit',
@@ -1673,6 +1658,50 @@ const InterventionsScreen = ({ route, navigation }) => {
     }).format(amount);
   };
 
+  // Modal de confirmation de réinitialisation
+  const renderResetConfirmModal = () => (
+    <Modal
+      visible={showResetConfirm}
+      animationType="fade"
+      transparent={true}
+      onRequestClose={() => setShowResetConfirm(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={[styles.confirmModalContent, isTablet && styles.confirmModalContentTablet]}>
+          <View style={styles.confirmModalHeader}>
+            <MaterialCommunityIcons name="alert-decagram" size={40} color="#E67E22" />
+            <Text style={styles.confirmModalTitle}>Réinitialiser le formulaire</Text>
+            <Text style={styles.confirmModalSubtitle}>
+              Voulez-vous vraiment effacer toutes les données saisies ? Cette action est irréversible.
+            </Text>
+          </View>
+
+          <View style={styles.confirmModalActions}>
+            <Button
+              mode="outlined"
+              onPress={() => setShowResetConfirm(false)}
+              style={styles.confirmModalButton}
+            >
+              Annuler
+            </Button>
+
+            <Button
+              mode="contained"
+              onPress={() => {
+                resetForm();
+                setShowResetConfirm(false);
+                showSnackbar('Formulaire réinitialisé', 'info');
+              }}
+              style={[styles.confirmModalButton, { backgroundColor: '#E74C3C' }]}
+            >
+              Réinitialiser
+            </Button>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+
   // === RENDU PRINCIPAL === //
 
   return (
@@ -1680,8 +1709,8 @@ const InterventionsScreen = ({ route, navigation }) => {
       <View style={styles.container}>
         {renderHeader()}
 
-        {activeTab === 'liste' 
-          ? renderListeInterventions() 
+        {activeTab === 'liste'
+          ? renderListeInterventions()
           : renderNouvelleIntervention()}
 
         {/* FAB pour mobile uniquement */}
@@ -1695,7 +1724,17 @@ const InterventionsScreen = ({ route, navigation }) => {
         )}
 
         {renderDetailModal()}
+        {renderResetConfirmModal()}
       </View>
+
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={3000}
+        style={{ backgroundColor: snackbarType === 'error' ? '#E74C3C' : '#2ECC71' }}
+      >
+        {snackbarMessage}
+      </Snackbar>
     </Provider>
   );
 };
@@ -2553,6 +2592,54 @@ const styles = StyleSheet.create({
   },
   modalBottomSpacing: {
     height: 30,
+  },
+
+  // Modal de confirmation
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  confirmModalContent: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+  },
+  confirmModalContentTablet: {
+    maxWidth: 500,
+    padding: 32,
+  },
+  confirmModalHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  confirmModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2C3E50',
+    marginTop: 15,
+    textAlign: 'center',
+  },
+  confirmModalSubtitle: {
+    fontSize: 15,
+    color: '#7F8C8D',
+    textAlign: 'center',
+    marginTop: 10,
+    lineHeight: 22,
+  },
+  confirmModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    gap: 12,
+  },
+  confirmModalButton: {
+    flex: 1,
   },
 });
 

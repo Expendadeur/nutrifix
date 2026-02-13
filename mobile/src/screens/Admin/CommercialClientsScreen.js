@@ -11,7 +11,8 @@ import {
   Alert,
   Dimensions,
   Platform,
-  RefreshControl
+  RefreshControl,
+  Linking
 } from 'react-native';
 import {
   Card,
@@ -29,13 +30,16 @@ import {
   Menu,
   Divider,
   ActivityIndicator,
-  Badge
+  Badge,
+  Snackbar
 } from 'react-native-paper';
 import { LineChart } from 'react-native-chart-kit';
 import { MaterialIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 import { requireAuth } from '../../utils/authGuard';
+import ArticleSelector from './ArticleSelector';
 
 const COLORS = {
   primary: '#2E86C1',
@@ -180,7 +184,8 @@ const CommercialScreen = ({ navigation, route }) => {
 
   // Factures
   const [factures, setFactures] = useState([]);
-  const [factureModalVisible, setFactureModalVisible] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [invoiceModalVisible, setInvoiceModalVisible] = useState(false);
 
   // Paiements
   const [paiements, setPaiements] = useState([]);
@@ -201,9 +206,25 @@ const CommercialScreen = ({ navigation, route }) => {
   const [exportMenuVisible, setExportMenuVisible] = useState(false);
 
   // Ligne Commande
-  const [ligneModalVisible, setLigneModalVisible] = useState(false);
-  const [ligneForm, setLigneForm] = useState(getEmptyLigneForm());
+  const [articleSelectorVisible, setArticleSelectorVisible] = useState(false);
+  const [currentCommandeType, setCurrentCommandeType] = useState('vente');
   const [ligneType, setLigneType] = useState('vente');
+
+  // Snackbar
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarType, setSnackbarType] = useState('success');
+
+  // Confirmation Modal
+  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState({
+    title: '',
+    message: '',
+    onConfirm: () => { },
+    confirmText: 'Confirmer',
+    cancelText: 'Annuler',
+    type: 'default'
+  });
 
   // ============================================
   // FORM TEMPLATES
@@ -220,6 +241,9 @@ const CommercialScreen = ({ navigation, route }) => {
       pays: 'Burundi',
       secteur_activite: '',
       numero_tva: '',
+      nif: '',
+      cni: '',
+      photo_profil: '',
       banque: '',
       numero_compte: '',
       limite_credit: '0',
@@ -241,6 +265,9 @@ const CommercialScreen = ({ navigation, route }) => {
       pays: 'Burundi',
       numero_registre: '',
       numero_tva: '',
+      nif: '',
+      cni: '',
+      photo_profil: '',
       banque: '',
       numero_compte: '',
       conditions_paiement: '30 jours',
@@ -313,6 +340,71 @@ const CommercialScreen = ({ navigation, route }) => {
       tva_pourcent: '16'
     };
   }
+
+  const handlePickImage = async (onImagePicked) => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        showError('Permission d\'accès aux photos refusée');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const imageUri = result.assets[0].uri;
+        setLoading(true);
+        const uploadedUrl = await uploadImage(imageUri);
+        if (uploadedUrl) {
+          onImagePicked(uploadedUrl);
+          showSuccess('Image téléchargée');
+        }
+      }
+    } catch (error) {
+      console.error('Pick image error:', error);
+      showError('Erreur lors de la sélection de l\'image');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const uploadImage = async (uri) => {
+    try {
+      const formData = new FormData();
+      const filename = uri.split('/').pop();
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : `image`;
+
+      formData.append('photo', { uri, name: filename, type });
+
+      const token = await AsyncStorage.getItem('userToken');
+      const response = await fetch(`${API_URL}/upload`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        return result.url;
+      } else {
+        throw new Error(result.message || 'Erreur lors de l\'upload');
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      showError('Erreur lors du téléchargement de l\'image');
+      return null;
+    }
+  };
 
   // ============================================
   // DATA LOADING - DÉCLARÉ AVANT useEffect
@@ -495,6 +587,19 @@ const CommercialScreen = ({ navigation, route }) => {
         return;
       }
 
+      // NIF required for Entreprise
+      if (clientForm.type === 'entreprise' && !clientForm.nif) {
+        showError('NIF requis pour une entreprise');
+        return;
+      }
+
+      // CNI required for individuals/particuliers
+      const requiresCNI = ['particulier', 'individuel', 'general'].includes(clientForm.type);
+      if (requiresCNI && !clientForm.cni) {
+        showError('CNI requis pour ce type de client');
+        return;
+      }
+
       setLoading(true);
       let response;
 
@@ -517,31 +622,29 @@ const CommercialScreen = ({ navigation, route }) => {
   };
 
   const handleDeleteClient = (client) => {
-    Alert.alert(
-      'Confirmation',
-      `Supprimer le client ${client.nom_client} ?`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setLoading(true);
-              const response = await apiCall(`/commercial/clients/${client.id}`, 'DELETE');
-              if (response.success) {
-                showSuccess('Client supprimé');
-                loadClients();
-              }
-            } catch (error) {
-              showError(error.message || 'Impossible de supprimer le client');
-            } finally {
-              setLoading(false);
-            }
+    setConfirmConfig({
+      title: 'Confirmation',
+      message: `Supprimer le client ${client.nom_client} ? Cette action est irréversible.`,
+      confirmText: 'Supprimer',
+      cancelText: 'Annuler',
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          setConfirmModalVisible(false);
+          setLoading(true);
+          const response = await apiCall(`/commercial/clients/${client.id}`, 'DELETE');
+          if (response.success) {
+            showSuccess('Client supprimé');
+            loadClients();
           }
+        } catch (error) {
+          showError(error.message || 'Impossible de supprimer le client');
+        } finally {
+          setLoading(false);
         }
-      ]
-    );
+      }
+    });
+    setConfirmModalVisible(true);
   };
 
   // ============================================
@@ -565,6 +668,18 @@ const CommercialScreen = ({ navigation, route }) => {
     try {
       if (!fournisseurForm.nom_fournisseur || !fournisseurForm.telephone) {
         showError('Nom et téléphone requis');
+        return;
+      }
+
+      // NIF required for Specialized or Enterprise
+      if ((fournisseurForm.type === 'specialise' || fournisseurForm.type === 'entreprise') && !fournisseurForm.nif) {
+        showError('NIF requis pour ce type de fournisseur');
+        return;
+      }
+
+      // CNI for General
+      if (fournisseurForm.type === 'general' && !fournisseurForm.cni) {
+        showError('CNI requis pour un fournisseur général');
         return;
       }
 
@@ -640,6 +755,9 @@ const CommercialScreen = ({ navigation, route }) => {
         showSuccess('Commande créée');
         setCommandeVenteModalVisible(false);
         loadCommandesVente();
+        // Refresh extra data to update indicators
+        loadClients();
+        loadStatistiques();
       }
     } catch (error) {
       showError(error.message || 'Erreur lors de la sauvegarde');
@@ -655,11 +773,33 @@ const CommercialScreen = ({ navigation, route }) => {
       if (response.success) {
         showSuccess('Statut mis à jour');
         loadCommandesVente();
+        // Refresh extra data
+        loadClients();
+        loadStatistiques();
+        if (statut === 'payee' || statut === 'facturee') loadFactures();
       }
     } catch (error) {
       showError(error.message || 'Erreur lors de la mise à jour du statut');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleViewOBRInvoice = async (factureId) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        showError('Session expirée');
+        return;
+      }
+
+      const url = `${API_URL}/finance/factures/${factureId}/pdf?token=${token}`;
+      Linking.openURL(url).catch(err => {
+        console.error('Linking error:', err);
+        showError('Impossible d\'ouvrir le PDF');
+      });
+    } catch (error) {
+      showError('Erreur lors de l\'ouverture de la facture');
     }
   };
 
@@ -693,6 +833,9 @@ const CommercialScreen = ({ navigation, route }) => {
         showSuccess('Commande créée');
         setCommandeAchatModalVisible(false);
         loadCommandesAchat();
+        // Refresh extra data
+        loadFournisseurs();
+        loadStatistiques();
       }
     } catch (error) {
       showError(error.message || 'Erreur lors de la sauvegarde');
@@ -705,47 +848,23 @@ const CommercialScreen = ({ navigation, route }) => {
   // LIGNE COMMANDE ACTIONS
   // ============================================
   const handleAddLigneCommande = (type) => {
-    setLigneType(type);
-    setLigneForm(getEmptyLigneForm());
-    setLigneModalVisible(true);
+    setCurrentCommandeType(type);
+    setArticleSelectorVisible(true);
   };
 
-  const handleSaveLigneCommande = () => {
-    if (!ligneForm.designation || !ligneForm.quantite_commandee || !ligneForm.prix_unitaire_ht) {
-      showError('Veuillez remplir tous les champs obligatoires');
-      return;
-    }
-
-    const quantite = parseFloat(ligneForm.quantite_commandee);
-    const prixUnitaire = parseFloat(ligneForm.prix_unitaire_ht);
-    const remise = parseFloat(ligneForm.remise_pourcent || 0);
-    const tva = parseFloat(ligneForm.tva_pourcent || 0);
-
-    const montant_ht = quantite * prixUnitaire * (1 - remise / 100);
-    const montant_tva = montant_ht * (tva / 100);
-    const montant_ttc = montant_ht + montant_tva;
-
-    const nouvelleLigne = {
-      ...ligneForm,
-      montant_ht: montant_ht.toFixed(2),
-      montant_tva: montant_tva.toFixed(2),
-      montant_ttc: montant_ttc.toFixed(2)
-    };
-
-    if (ligneType === 'vente') {
+  const handleArticleSelected = (ligneCommande) => {
+    if (currentCommandeType === 'vente') {
       setCommandeVenteForm({
         ...commandeVenteForm,
-        lignes: [...commandeVenteForm.lignes, nouvelleLigne]
+        lignes: [...commandeVenteForm.lignes, ligneCommande]
       });
     } else {
       setCommandeAchatForm({
         ...commandeAchatForm,
-        lignes: [...commandeAchatForm.lignes, nouvelleLigne]
+        lignes: [...commandeAchatForm.lignes, ligneCommande]
       });
     }
-
-    setLigneModalVisible(false);
-    setLigneForm(getEmptyLigneForm());
+    setArticleSelectorVisible(false);
   };
 
   const handleRemoveLigneCommande = (index, type) => {
@@ -786,6 +905,10 @@ const CommercialScreen = ({ navigation, route }) => {
         setPaiementModalVisible(false);
         loadPaiements();
         if (activeTab === 'factures') loadFactures();
+        // Refresh extra data
+        loadClients();
+        loadFournisseurs();
+        loadStatistiques();
       }
     } catch (error) {
       showError(error.message || 'Erreur lors de l\'enregistrement du paiement');
@@ -801,6 +924,10 @@ const CommercialScreen = ({ navigation, route }) => {
       if (response.success) {
         showSuccess('Paiement validé');
         loadPaiements();
+        // Refresh extra data
+        loadClients();
+        loadFournisseurs();
+        loadStatistiques();
       }
     } catch (error) {
       showError(error.message || 'Erreur lors de la validation');
@@ -813,19 +940,37 @@ const CommercialScreen = ({ navigation, route }) => {
   // CALCUL FUNCTIONS
   // ============================================
   const calculerMontantHT = (lignes) => {
-    return lignes.reduce((sum, ligne) => sum + parseFloat(ligne.montant_ht || 0), 0);
+    if (!lignes || !Array.isArray(lignes)) return 0;
+    return lignes.reduce((sum, ligne) => {
+      const montant = parseFloat(ligne.montant_ht || 0);
+      return sum + (isNaN(montant) ? 0 : montant);
+    }, 0);
   };
 
   const calculerMontantTotal = (type) => {
     const form = type === 'vente' ? commandeVenteForm : commandeAchatForm;
-    const lignes = form.lignes;
+    const lignes = form.lignes || [];
 
-    const montantHT = calculerMontantHT(lignes);
-    const tva = (montantHT * parseFloat(form.tva_pourcent || 0)) / 100;
-    const fraisLivraison = parseFloat(form.frais_livraison || 0);
-    const remise = parseFloat(form.remise || 0);
+    // Sum up per-line amounts to ensure precision and handle multiple VAT rates if any
+    const totalHT = lignes.reduce((sum, l) => sum + parseFloat(l.montant_ht || 0), 0);
+    const totalTVA = lignes.reduce((sum, l) => sum + parseFloat(l.montant_tva || 0), 0);
+    const totalArticlesTTC = lignes.reduce((sum, l) => sum + parseFloat(l.montant_ttc || 0), 0);
 
-    return montantHT + tva + fraisLivraison - remise;
+    const fraisLivraison = parseFloat(form.frais_livraison || 0) || 0;
+    const remise = parseFloat(form.remise || 0) || 0;
+
+    // The order total is the sum of all lines (TTC) + global fees - global discount
+    const finalTotal = totalArticlesTTC + fraisLivraison - remise;
+
+    return Math.round(finalTotal * 100) / 100;
+  };
+
+  const calculerSommeTVA = (lignes) => {
+    if (!lignes || !Array.isArray(lignes)) return 0;
+    return lignes.reduce((sum, ligne) => {
+      const tva = parseFloat(ligne.montant_tva || 0);
+      return sum + (isNaN(tva) ? 0 : tva);
+    }, 0);
   };
 
   // ============================================
@@ -902,23 +1047,24 @@ const CommercialScreen = ({ navigation, route }) => {
   // UTILITY FUNCTIONS
   // ============================================
   const showSuccess = (message) => {
-    if (Platform.OS === 'web') {
-      alert(message);
-    } else {
-      Alert.alert('Succès', message);
-    }
+    setSnackbarMessage(message);
+    setSnackbarType('success');
+    setSnackbarVisible(true);
   };
 
   const showError = (message) => {
-    if (Platform.OS === 'web') {
-      alert(message);
-    } else {
-      Alert.alert('Erreur', message);
-    }
+    setSnackbarMessage(message);
+    setSnackbarType('error');
+    setSnackbarVisible(true);
+  };
+  const showInfo = (message) => {
+    setSnackbarMessage(message);
+    setSnackbarType('info');
+    setSnackbarVisible(true);
   };
 
   const formatCurrency = (amount) => {
-    return `$${parseFloat(amount || 0).toFixed(2)}`;
+    return `BIF${parseFloat(amount || 0).toFixed(2)}`;
   };
 
   const formatDate = (date) => {
@@ -941,7 +1087,8 @@ const CommercialScreen = ({ navigation, route }) => {
       payee: '#27AE60',
       annulee: '#E74C3C',
       impayee: '#E74C3C',
-      partiellement_payee: '#F39C12'
+      partiellement_payee: '#F39C12',
+      bénéficiaire: '#10B981'
     };
     return colors[statut] || '#95A5A6';
   };
@@ -1039,6 +1186,14 @@ const CommercialScreen = ({ navigation, route }) => {
               {formatCurrency(item.total_achats)}
             </Text>
           </View>
+          {parseFloat(item.total_encours || 0) > 0 && (
+            <View style={styles.cardStats}>
+              <Text style={styles.statLabel}>Encours:</Text>
+              <Text style={[styles.statValue, { color: '#F39C12' }]}>
+                {formatCurrency(item.total_encours)}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.cardActions}>
@@ -1138,7 +1293,6 @@ const CommercialScreen = ({ navigation, route }) => {
               <Text style={styles.commandeDate}>{formatDate(item.date_commande)}</Text>
             </View>
             <View style={styles.commandeRight}>
-              <Text style={styles.commandeMontant}>{formatCurrency(item.montant_total)}</Text>
               {getStatutBadge(item.statut)}
             </View>
           </View>
@@ -1147,11 +1301,20 @@ const CommercialScreen = ({ navigation, route }) => {
 
           <View style={styles.commandeDetails}>
             <Text style={styles.detailText}>
-              Produits: {item.nombre_lignes || 0}
+              📦 Produits: {item.nombre_lignes || 0}
             </Text>
             <Text style={styles.detailText}>
-              Paiement: {item.mode_paiement}
+              💳 {item.mode_paiement}
             </Text>
+          </View>
+
+          <View style={styles.commandeMontants}>
+            <Text style={styles.commandeMontant}>{formatCurrency(item.montant_total)}</Text>
+            {item.frais_livraison && parseFloat(item.frais_livraison) > 0 && (
+              <Text style={styles.fraisLivraison}>
+                🚚 Livraison: {formatCurrency(item.frais_livraison)}
+              </Text>
+            )}
           </View>
 
           <View style={styles.commandeActions}>
@@ -1161,8 +1324,46 @@ const CommercialScreen = ({ navigation, route }) => {
                 onPress={() => handleUpdateStatutCommandeVente(item, 'confirmee')}
                 buttonColor="#27AE60"
                 compact
+                style={{ flex: 1, marginRight: 5 }}
               >
                 Confirmer
+              </Button>
+            )}
+            {(item.statut === 'confirmee' || item.statut === 'livree_complete') && (
+              <>
+                <Button
+                  mode="contained"
+                  onPress={() => handleUpdateStatutCommandeVente(item, 'payee')}
+                  buttonColor="#2ECC71"
+                  compact
+                  style={{ flex: 1, marginRight: 5 }}
+                  icon="cash"
+                >
+                  Payer
+                </Button>
+                <Button
+                  mode="outlined"
+                  onPress={() => handleUpdateStatutCommandeVente(item, 'annulee')}
+                  textColor="#E74C3C"
+                  compact
+                  style={{ flex: 1, marginRight: 5, borderColor: '#E74C3C' }}
+                  icon="cancel"
+                >
+                  Annuler
+                </Button>
+              </>
+            )}
+            {(item.statut === 'payee' || item.statut === 'facturee' || item.statut === 'livree_complete' || item.statut === 'confirmee') && item.id_facture && (
+              <Button
+                mode="contained-tonal"
+                onPress={() => handleViewOBRInvoice(item.id_facture)}
+                buttonColor="#E74C3C"
+                textColor="#FFFFFF"
+                compact
+                style={{ flex: 1, marginRight: 5 }}
+                icon="file-pdf-box"
+              >
+                Facture OBR
               </Button>
             )}
             <IconButton
@@ -1172,51 +1373,6 @@ const CommercialScreen = ({ navigation, route }) => {
               onPress={() => handleEditCommandeVente(item)}
             />
           </View>
-        </Card.Content>
-      </Card>
-    );
-  };
-
-  const renderFactureCard = ({ item }) => {
-    return (
-      <Card style={styles.commandeCard}>
-        <Card.Content>
-          <View style={styles.commandeHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.commandeNumero}>{item.numero_facture}</Text>
-              <Text style={styles.commandeClient}>{item.tiers_nom}</Text>
-              <Text style={styles.commandeDate}>
-                Échéance: {formatDate(item.date_echeance)}
-              </Text>
-            </View>
-            <View style={styles.commandeRight}>
-              <Text style={styles.commandeMontant}>{formatCurrency(item.montant_ttc)}</Text>
-              {getStatutBadge(item.statut_paiement)}
-            </View>
-          </View>
-
-          <Divider style={styles.divider} />
-
-          <View style={styles.commandeDetails}>
-            <Text style={styles.detailText}>
-              Payé: {formatCurrency(item.montant_regle)}
-            </Text>
-            <Text style={[styles.detailText, { color: '#E74C3C', fontWeight: 'bold' }]}>
-              Dû: {formatCurrency(item.montant_du)}
-            </Text>
-          </View>
-
-          {item.statut_paiement !== 'payee' && (
-            <Button
-              mode="contained"
-              onPress={() => handleAddPaiement(item)}
-              buttonColor="#27AE60"
-              style={{ marginTop: 10 }}
-              compact
-            >
-              Enregistrer Paiement
-            </Button>
-          )}
         </Card.Content>
       </Card>
     );
@@ -1234,149 +1390,298 @@ const CommercialScreen = ({ navigation, route }) => {
                 Mode: {item.mode_paiement}
               </Text>
             </View>
-            <View style={styles.commandeRight}>
-              <Text style={styles.commandeMontant}>{formatCurrency(item.montant)}</Text>
-              {getStatutBadge(item.statut)}
-            </View>
           </View>
-
-          {item.statut === 'en_attente' && (
-            <Button
-              mode="contained"
-              onPress={() => handleValiderPaiement(item)}
-              buttonColor="#27AE60"
-              style={{ marginTop: 10 }}
-              compact
-            >
-              Valider
-            </Button>
-          )}
         </Card.Content>
       </Card>
     );
   };
 
+  const renderFactureCard = ({ item }) => (
+    <Card style={styles.card}>
+      <Card.Content>
+        <View style={styles.commandeHeader}>
+          <View>
+            <Text style={styles.commandeNum}>{item.numero_facture}</Text>
+            <Text style={styles.commandeDate}>{formatDate(item.date_facture)}</Text>
+          </View>
+          <View style={styles.commandeStatus}>
+            <Chip
+              mode="outlined"
+              compact
+              style={{
+                borderColor: item.statut_paiement === 'payee' ? '#27AE60' : '#E74C3C',
+                backgroundColor: 'transparent'
+              }}
+              textStyle={{ color: item.statut_paiement === 'payee' ? '#27AE60' : '#E74C3C', fontSize: 10 }}
+            >
+              {item.statut_paiement?.toUpperCase()}
+            </Chip>
+          </View>
+        </View>
+
+        <Divider style={styles.divider} />
+
+        <View style={styles.commandeBody}>
+          <View style={styles.commandeRow}>
+            <MaterialIcons name="person" size={16} color={COLORS.gray} />
+            <Text style={styles.commandeText} numberOfLines={1}>{item.tiers_nom}</Text>
+          </View>
+          <View style={styles.commandeRow}>
+            <MaterialIcons name="event-note" size={16} color={COLORS.gray} />
+            <Text style={styles.commandeText}>Échéance: {formatDate(item.date_echeance)}</Text>
+          </View>
+        </View>
+
+        <View style={styles.commandeFooter}>
+          <View>
+            <Text style={styles.statLabel}>Montant TTC</Text>
+            <Text style={styles.commandeMontant}>{formatCurrency(item.montant_ttc)}</Text>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={styles.statLabel}>Reste à payer</Text>
+            <Text style={[styles.commandeMontant, { color: item.montant_restant > 0 ? '#E74C3C' : '#27AE60' }]}>
+              {formatCurrency(item.montant_restant)}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.cardActions}>
+          <IconButton
+            icon="file-pdf-box"
+            size={24}
+            iconColor="#E74C3C"
+            onPress={() => handleViewOBRInvoice(item.id)}
+            accessibilityLabel="Facture OBR"
+          />
+          <IconButton
+            icon="eye"
+            size={20}
+            iconColor={COLORS.primary}
+            onPress={() => handleViewFacture(item)}
+          />
+          <IconButton
+            icon="printer"
+            size={20}
+            iconColor={COLORS.secondary}
+            onPress={() => handlePrintFacture(item)}
+          />
+        </View>
+      </Card.Content>
+    </Card>
+  );
+
   // ============================================
   // RENDER LIGNE MODAL
   // ============================================
-  const renderLigneModal = () => (
-    <Portal>
-      <Modal
-        visible={ligneModalVisible}
-        onDismiss={() => setLigneModalVisible(false)}
-        contentContainerStyle={[
-          styles.modal,
-          responsive.isDesktop && styles.modalDesktop
-        ]}
-      >
-        <View style={styles.modalHeader}>
-          <Title style={styles.modalTitle}>Ajouter un Article</Title>
-          <IconButton
-            icon="close"
-            size={24}
-            onPress={() => setLigneModalVisible(false)}
-          />
-        </View>
+  const renderArticleSelector = () => (
+    <ArticleSelector
+      visible={articleSelectorVisible}
+      onDismiss={() => setArticleSelectorVisible(false)}
+      onSelect={handleArticleSelected}
+      responsive={responsive}
+    />
+  );
 
-        <ScrollView style={styles.modalContent}>
-          <TextInput
-            label="Désignation *"
-            value={ligneForm.designation}
-            onChangeText={(text) =>
-              setLigneForm({ ...ligneForm, designation: text })
-            }
-            style={styles.input}
-            mode="outlined"
-          />
+  const handleViewFacture = async (facture) => {
+    try {
+      setLoading(true);
+      const data = await apiCall(`/finance/factures/${facture.id}`);
+      setSelectedInvoice(data);
+      setInvoiceModalVisible(true);
+    } catch (error) {
+      showError('Erreur lors du chargement de la facture');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-          <TextInput
-            label="Description"
-            value={ligneForm.description}
-            onChangeText={(text) =>
-              setLigneForm({ ...ligneForm, description: text })
-            }
-            style={styles.input}
-            mode="outlined"
-            multiline
-            numberOfLines={2}
-          />
+  const handlePrintFacture = (facture) => {
+    showSuccess('Préparation de l\'impression...');
+    // Real printing logic would go here
+  };
 
-          <View style={styles.formRow}>
-            <TextInput
-              label="Quantité *"
-              value={ligneForm.quantite_commandee}
-              onChangeText={(text) =>
-                setLigneForm({ ...ligneForm, quantite_commandee: text })
-              }
-              style={[styles.input, styles.inputHalf]}
-              mode="outlined"
-              keyboardType="decimal-pad"
-            />
+  const renderInvoiceModal = () => {
+    if (!selectedInvoice) return null;
 
-            <TextInput
-              label="Unité"
-              value={ligneForm.unite}
-              onChangeText={(text) =>
-                setLigneForm({ ...ligneForm, unite: text })
-              }
-              style={[styles.input, styles.inputHalf]}
-              mode="outlined"
-            />
-          </View>
+    return (
+      <Portal>
+        <Modal
+          visible={invoiceModalVisible}
+          onDismiss={() => setInvoiceModalVisible(false)}
+          contentContainerStyle={[styles.modal, styles.modalLarge]}
+        >
+          <ScrollView contentContainerStyle={styles.obrInvoiceScroll}>
+            <View style={styles.obrHeader}>
+              <View style={styles.obrVendorSection}>
+                <Text style={styles.obrMainTitle}>A. Identification du vendeur</Text>
+                <View style={styles.obrDetailRow}>
+                  <Text style={styles.obrLabel}>Nom et prénom ou Raison sociale* : </Text>
+                  <Text style={styles.obrValue}>NUTRIFIX</Text>
+                </View>
+                <View style={styles.obrDetailRow}>
+                  <Text style={styles.obrLabel}>NIF* : </Text>
+                  <Text style={styles.obrValue}>4001234567</Text>
+                </View>
+                <View style={styles.obrDetailRow}>
+                  <Text style={styles.obrLabel}>Registre de Commerce N°: </Text>
+                  <Text style={styles.obrValue}>RC/ Bujumbura / 1234</Text>
+                </View>
+                <View style={styles.obrDetailRow}>
+                  <Text style={styles.obrLabel}>B.P : </Text>
+                  <Text style={styles.obrValue}>1234 Bujumbura</Text>
+                  <Text style={styles.obrLabel}>, Tél : </Text>
+                  <Text style={styles.obrValue}>+257 22 22 22 22</Text>
+                </View>
+                <View style={styles.obrDetailRow}>
+                  <Text style={styles.obrLabel}>Commune : </Text>
+                  <Text style={styles.obrValue}>Mukaza</Text>
+                  <Text style={styles.obrLabel}>, Quartier : </Text>
+                  <Text style={styles.obrValue}>Rohero I</Text>
+                </View>
+                <View style={styles.obrDetailRow}>
+                  <Text style={styles.obrLabel}>Av. : </Text>
+                  <Text style={styles.obrValue}>de la France</Text>
+                  <Text style={styles.obrLabel}>, Rue : </Text>
+                  <Text style={styles.obrValue}>n/a</Text>
+                  <Text style={styles.obrLabel}>, N° : </Text>
+                  <Text style={styles.obrValue}>10</Text>
+                </View>
+                <View style={styles.obrDetailRow}>
+                  <Text style={styles.obrLabel}>Assujetti à la TVA* : </Text>
+                  <Text style={styles.obrValue}>[x] Oui [ ] Non</Text>
+                </View>
+              </View>
 
-          <View style={styles.formRow}>
-            <TextInput
-              label="Prix Unitaire HT *"
-              value={ligneForm.prix_unitaire_ht}
-              onChangeText={(text) =>
-                setLigneForm({ ...ligneForm, prix_unitaire_ht: text })
-              }
-              style={[styles.input, styles.inputHalf]}
-              mode="outlined"
-              keyboardType="decimal-pad"
-            />
+              <View style={styles.obrInvoiceMeta}>
+                <Text style={styles.obrInvoiceTitle}>Facture n° {selectedInvoice.numero_facture}</Text>
+                <Text style={styles.obrInvoiceDate}>du {formatDate(selectedInvoice.date_facture)}</Text>
+                <View style={{ marginTop: 20 }}>
+                  <Text style={styles.obrLabel}>Centre fiscal : </Text>
+                  <Text style={styles.obrValue}>DMC</Text>
+                  <Text style={styles.obrLabel}>Secteur d’activités : </Text>
+                  <Text style={styles.obrValue}>Commerce</Text>
+                  <Text style={styles.obrLabel}>Forme juridique : </Text>
+                  <Text style={styles.obrValue}>SA</Text>
+                </View>
+              </View>
+            </View>
 
-            <TextInput
-              label="Remise (%)"
-              value={ligneForm.remise_pourcent}
-              onChangeText={(text) =>
-                setLigneForm({ ...ligneForm, remise_pourcent: text })
-              }
-              style={[styles.input, styles.inputHalf]}
-              mode="outlined"
-              keyboardType="decimal-pad"
-            />
-          </View>
+            <Divider style={styles.obrDivider} />
 
-          <TextInput
-            label="TVA (%)"
-            value={ligneForm.tva_pourcent}
-            onChangeText={(text) =>
-              setLigneForm({ ...ligneForm, tva_pourcent: text })
-            }
-            style={styles.input}
-            mode="outlined"
-            keyboardType="decimal-pad"
-          />
+            <View style={styles.obrClientSection}>
+              <Text style={styles.obrMainTitle}>B. Le client:</Text>
+              <View style={styles.obrDetailRow}>
+                <Text style={styles.obrLabel}>Nom et prénom ou Raison sociale* : </Text>
+                <Text style={styles.obrValue}>{selectedInvoice.nom_client || selectedInvoice.tiers_nom}</Text>
+              </View>
+              <View style={styles.obrDetailRow}>
+                <Text style={styles.obrLabel}>NIF : </Text>
+                <Text style={styles.obrValue}>{selectedInvoice.client_nif || '................'}</Text>
+              </View>
+              <View style={styles.obrDetailRow}>
+                <Text style={styles.obrLabel}>Résident à : </Text>
+                <Text style={styles.obrValue}>{selectedInvoice.client_adresse || '................'}</Text>
+              </View>
+              <View style={styles.obrDetailRow}>
+                <Text style={styles.obrLabel}>Assujetti à la TVA* : </Text>
+                <Text style={styles.obrValue}>{selectedInvoice.client_tva ? '[x] Oui [ ] Non' : '[ ] Oui [x] Non'}</Text>
+              </View>
+              <Text style={styles.obrDoitPour}>doit pour ce qui suit :</Text>
+            </View>
 
-          <View style={styles.modalActions}>
+            <View style={styles.obrTable}>
+              <View style={styles.obrTableHeader}>
+                <Text style={[styles.obrTableHeaderCell, { flex: 2 }]}>Nature de l’article ou service*</Text>
+                <Text style={[styles.obrTableHeaderCell, { flex: 0.5 }]}>Qté*</Text>
+                <Text style={[styles.obrTableHeaderCell, { flex: 0.8 }]}>PU*</Text>
+                <Text style={[styles.obrTableHeaderCell, { flex: 1 }]}>PVHTVA</Text>
+              </View>
+
+              {selectedInvoice.lignes && selectedInvoice.lignes.map((item, index) => (
+                <View key={index} style={styles.obrTableRow}>
+                  <Text style={[styles.obrTableCell, { flex: 2 }]}>{index + 1}. {item.designation}</Text>
+                  <Text style={[styles.obrTableCell, { flex: 0.5, textAlign: 'center' }]}>{item.quantite}</Text>
+                  <Text style={[styles.obrTableCell, { flex: 0.8, textAlign: 'right' }]}>{formatCurrency(item.prix_unitaire)}</Text>
+                  <Text style={[styles.obrTableCell, { flex: 1, textAlign: 'right' }]}>{formatCurrency(item.total_ht)}</Text>
+                </View>
+              ))}
+
+              {/* Pad with empty lines if needed, like the PDF template shows numbers 1-6 */}
+              {(!selectedInvoice.lignes || selectedInvoice.lignes.length < 3) && [1, 2].map((_, i) => (
+                <View key={`empty-${i}`} style={styles.obrTableRow}>
+                  <Text style={[styles.obrTableCell, { flex: 2 }]}> </Text>
+                  <Text style={[styles.obrTableCell, { flex: 0.5 }]}></Text>
+                  <Text style={[styles.obrTableCell, { flex: 0.8 }]}></Text>
+                  <Text style={[styles.obrTableCell, { flex: 1 }]}></Text>
+                </View>
+              ))}
+
+              <View style={styles.obrTotalRow}>
+                <Text style={[styles.obrTableCell, { flex: 3.3, fontWeight: 'bold' }]}>PVT HTVA</Text>
+                <Text style={[styles.obrTableCell, { flex: 1, textAlign: 'right', fontWeight: 'bold' }]}>{formatCurrency(selectedInvoice.montant_ht)}</Text>
+              </View>
+              <View style={styles.obrTotalRow}>
+                <Text style={[styles.obrTableCell, { flex: 3.3, fontWeight: 'bold' }]}>TVA</Text>
+                <Text style={[styles.obrTableCell, { flex: 1, textAlign: 'right', fontWeight: 'bold' }]}>{formatCurrency(selectedInvoice.montant_tva)}</Text>
+              </View>
+              <View style={styles.obrTotalRow}>
+                <Text style={[styles.obrTableCell, { flex: 3.3, fontWeight: 'bold' }]}>Total TVAC</Text>
+                <Text style={[styles.obrTableCell, { flex: 1, textAlign: 'right', fontWeight: 'bold' }]}>{formatCurrency(selectedInvoice.montant_ttc)}</Text>
+              </View>
+            </View>
+
+            <View style={styles.obrMentionSection}>
+              <Text style={styles.obrMention}>*Mention obligatoire</Text>
+              <Text style={styles.obrMention}>N.B: Les non assujettis à la TVA ne remplissent pas les deux dernières lignes</Text>
+            </View>
+
             <Button
               mode="contained"
-              onPress={handleSaveLigneCommande}
-              buttonColor="#27AE60"
-              style={styles.modalButton}
+              onPress={() => handlePrintFacture(selectedInvoice)}
+              icon="printer"
+              style={{ marginTop: 30, marginBottom: 20 }}
+              buttonColor={COLORS.primary}
             >
-              Ajouter
+              Imprimer Facture (PDF)
+            </Button>
+          </ScrollView>
+        </Modal>
+      </Portal>
+    );
+  };
+
+  const renderConfirmModal = () => (
+    <Portal>
+      <Modal
+        visible={confirmModalVisible}
+        onDismiss={() => setConfirmModalVisible(false)}
+        contentContainerStyle={styles.confirmModal}
+      >
+        <Card style={{ elevation: 0 }}>
+          <Card.Content>
+            <Title style={styles.confirmTitle}>{confirmConfig.title}</Title>
+            <Text style={styles.confirmMessage}>{confirmConfig.message}</Text>
+          </Card.Content>
+          <Card.Actions style={styles.confirmActions}>
+            <Button
+              mode="text"
+              onPress={() => setConfirmModalVisible(false)}
+              disabled={loading}
+              textColor={COLORS.gray}
+            >
+              {confirmConfig.cancelText}
             </Button>
             <Button
-              mode="outlined"
-              onPress={() => setLigneModalVisible(false)}
-              style={styles.modalButton}
+              mode="contained"
+              onPress={confirmConfig.onConfirm}
+              loading={loading}
+              disabled={loading}
+              buttonColor={confirmConfig.type === 'danger' ? COLORS.danger : COLORS.primary}
             >
-              Annuler
+              {confirmConfig.confirmText}
             </Button>
-          </View>
-        </ScrollView>
+          </Card.Actions>
+        </Card>
       </Modal>
     </Portal>
   );
@@ -1602,21 +1907,56 @@ const CommercialScreen = ({ navigation, route }) => {
               style={styles.searchBar}
             />
 
-            <FlatList
-              data={commandesVente}
-              renderItem={renderCommandeVenteCard}
-              keyExtractor={(item) => item.id.toString()}
-              contentContainerStyle={styles.listContent}
-              refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-              }
-              ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <MaterialIcons name="shopping-cart" size={80} color="#BDC3C7" />
-                  <Text style={styles.emptyText}>Aucune commande</Text>
+            {responsive.isDesktop ? (
+              <ScrollView
+                contentContainerStyle={[
+                  styles.gridContainer,
+                  { padding: 20 }
+                ]}
+                refreshControl={
+                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+              >
+                <View style={styles.gridRow}>
+                  {commandesVente.map((item) => (
+                    <View
+                      key={item.id}
+                      style={[
+                        styles.gridItem,
+                        { width: responsive.cardWidth(responsive.getColumns()) }
+                      ]}
+                    >
+                      {renderCommandeVenteCard({ item })}
+                    </View>
+                  ))}
                 </View>
-              }
-            />
+                {commandesVente.length === 0 && (
+                  <View style={styles.emptyContainer}>
+                    <MaterialIcons name="shopping-cart" size={80} color="#BDC3C7" />
+                    <Text style={styles.emptyText}>Aucune commande</Text>
+                  </View>
+                )}
+              </ScrollView>
+            ) : (
+              <FlatList
+                data={commandesVente}
+                renderItem={renderCommandeVenteCard}
+                keyExtractor={(item) => item.id.toString()}
+                numColumns={responsive.getColumns()}
+                key={responsive.getColumns()}
+                columnWrapperStyle={responsive.getColumns() > 1 ? styles.gridRow : null}
+                contentContainerStyle={styles.listContent}
+                refreshControl={
+                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+                ListEmptyComponent={
+                  <View style={styles.emptyContainer}>
+                    <MaterialIcons name="shopping-cart" size={80} color="#BDC3C7" />
+                    <Text style={styles.emptyText}>Aucune commande</Text>
+                  </View>
+                }
+              />
+            )}
           </View>
         );
 
@@ -1630,21 +1970,56 @@ const CommercialScreen = ({ navigation, route }) => {
               style={styles.searchBar}
             />
 
-            <FlatList
-              data={commandesAchat}
-              renderItem={({ item }) => renderCommandeVenteCard({ item })}
-              keyExtractor={(item) => item.id.toString()}
-              contentContainerStyle={styles.listContent}
-              refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-              }
-              ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <MaterialIcons name="shopping-bag" size={80} color="#BDC3C7" />
-                  <Text style={styles.emptyText}>Aucun bon de commande</Text>
+            {responsive.isDesktop ? (
+              <ScrollView
+                contentContainerStyle={[
+                  styles.gridContainer,
+                  { padding: 20 }
+                ]}
+                refreshControl={
+                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+              >
+                <View style={styles.gridRow}>
+                  {commandesAchat.map((item) => (
+                    <View
+                      key={item.id}
+                      style={[
+                        styles.gridItem,
+                        { width: responsive.cardWidth(responsive.getColumns()) }
+                      ]}
+                    >
+                      {renderCommandeVenteCard({ item })}
+                    </View>
+                  ))}
                 </View>
-              }
-            />
+                {commandesAchat.length === 0 && (
+                  <View style={styles.emptyContainer}>
+                    <MaterialIcons name="shopping-bag" size={80} color="#BDC3C7" />
+                    <Text style={styles.emptyText}>Aucun bon de commande</Text>
+                  </View>
+                )}
+              </ScrollView>
+            ) : (
+              <FlatList
+                data={commandesAchat}
+                renderItem={({ item }) => renderCommandeVenteCard({ item })}
+                keyExtractor={(item) => item.id.toString()}
+                numColumns={responsive.getColumns()}
+                key={responsive.getColumns()}
+                columnWrapperStyle={responsive.getColumns() > 1 ? styles.gridRow : null}
+                contentContainerStyle={styles.listContent}
+                refreshControl={
+                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+                ListEmptyComponent={
+                  <View style={styles.emptyContainer}>
+                    <MaterialIcons name="shopping-bag" size={80} color="#BDC3C7" />
+                    <Text style={styles.emptyText}>Aucun bon de commande</Text>
+                  </View>
+                }
+              />
+            )}
           </View>
         );
 
@@ -1755,6 +2130,21 @@ const CommercialScreen = ({ navigation, route }) => {
               </Card.Content>
             </Card>
 
+            {/* Ventes en Cours */}
+            <Card style={styles.dashboardCard}>
+              <Card.Content style={styles.dashboardCardContent}>
+                <View>
+                  <Text style={[styles.dashboardCardValue, { color: '#F39C12' }]}>
+                    {formatCurrency(statistiques?.ventes?.total_ventes_encours || 0)}
+                  </Text>
+                  <Text style={styles.dashboardCardLabel}>Ventes en cours</Text>
+                </View>
+                <View style={[styles.dashboardIconContainer, { backgroundColor: '#FFF7E6' }]}>
+                  <MaterialIcons name="hourglass-empty" size={24} color="#F39C12" />
+                </View>
+              </Card.Content>
+            </Card>
+
             {/* Total Achats */}
             <Card style={styles.dashboardCard}>
               <Card.Content style={styles.dashboardCardContent}>
@@ -1766,6 +2156,21 @@ const CommercialScreen = ({ navigation, route }) => {
                 </View>
                 <View style={[styles.dashboardIconContainer, { backgroundColor: '#FDEDEC' }]}>
                   <MaterialIcons name="shopping-bag" size={24} color="#E74C3C" />
+                </View>
+              </Card.Content>
+            </Card>
+
+            {/* Achats en Cours */}
+            <Card style={styles.dashboardCard}>
+              <Card.Content style={styles.dashboardCardContent}>
+                <View>
+                  <Text style={[styles.dashboardCardValue, { color: '#F39C12' }]}>
+                    {formatCurrency(statistiques?.achats?.total_achats_encours || 0)}
+                  </Text>
+                  <Text style={styles.dashboardCardLabel}>Achats en cours</Text>
+                </View>
+                <View style={[styles.dashboardIconContainer, { backgroundColor: '#FFF7E6' }]}>
+                  <MaterialIcons name="pending-actions" size={24} color="#F39C12" />
                 </View>
               </Card.Content>
             </Card>
@@ -1929,6 +2334,71 @@ const CommercialScreen = ({ navigation, route }) => {
     );
   };
 
+  const renderLigneCardImproved = (ligne, index, type) => (
+    <Card key={index} style={styles.ligneCard}>
+      <Card.Content>
+        <View style={styles.ligneHeader}>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={styles.ligneDesignation}>{ligne.designation}</Text>
+              <Chip
+                mode="flat"
+                compact
+                style={styles.sourceChip}
+                textStyle={styles.sourceChipText}
+              >
+                {ligne.type_produit || ligne.type_article || 'Article'}
+              </Chip>
+            </View>
+            {ligne.description && (
+              <Text style={styles.ligneDescription}>{ligne.description}</Text>
+            )}
+            {ligne.stock_initial && (
+              <Text style={styles.stockInfo}>
+                Stock initial: {ligne.stock_initial} {ligne.unite}
+              </Text>
+            )}
+          </View>
+          <IconButton
+            icon="delete"
+            size={20}
+            iconColor="#E74C3C"
+            onPress={() => handleRemoveLigneCommande(index, type)}
+          />
+        </View>
+
+        <View style={styles.ligneDetails}>
+          <View style={styles.ligneDetailItem}>
+            <Text style={styles.ligneDetailLabel}>Quantité:</Text>
+            <Text style={styles.ligneDetailValue}>
+              {ligne.quantite_commandee} {ligne.unite}
+            </Text>
+          </View>
+          <View style={styles.ligneDetailItem}>
+            <Text style={styles.ligneDetailLabel}>Prix Unit.:</Text>
+            <Text style={styles.ligneDetailValue}>
+              {formatCurrency(ligne.prix_unitaire_ht)}
+            </Text>
+          </View>
+          {ligne.remise_pourcent > 0 && (
+            <View style={styles.ligneDetailItem}>
+              <Text style={styles.ligneDetailLabel}>Remise:</Text>
+              <Text style={styles.ligneDetailValue}>
+                {ligne.remise_pourcent}%
+              </Text>
+            </View>
+          )}
+          <View style={styles.ligneDetailItem}>
+            <Text style={styles.ligneDetailLabel}>Total:</Text>
+            <Text style={[styles.ligneDetailValue, styles.ligneTotal]}>
+              {formatCurrency(ligne.montant_ttc)}
+            </Text>
+          </View>
+        </View>
+      </Card.Content>
+    </Card>
+  );
+
   // ============================================
   // RENDER MODALS
   // ============================================
@@ -1971,6 +2441,9 @@ const CommercialScreen = ({ navigation, route }) => {
                 <DetailItem label="Adresse" value={selectedClient.adresse} />
                 <DetailItem label="Ville" value={selectedClient.ville} />
                 <DetailItem label="Pays" value={selectedClient.pays} />
+                <DetailItem label="Secteur" value={selectedClient.secteur_activite} />
+                <DetailItem label="NIF" value={selectedClient.nif} />
+                <DetailItem label="CNI" value={selectedClient.cni} />
                 <DetailItem
                   label="Crédit Limite"
                   value={formatCurrency(selectedClient.limite_credit)}
@@ -1986,6 +2459,10 @@ const CommercialScreen = ({ navigation, route }) => {
                 <DetailItem
                   label="Nombre Commandes"
                   value={selectedClient.nombre_commandes}
+                />
+                <DetailItem
+                  label="En cours (Brouillons/Conf.)"
+                  value={formatCurrency(selectedClient.total_encours)}
                 />
                 <DetailItem
                   label="Dernière Commande"
@@ -2074,7 +2551,9 @@ const CommercialScreen = ({ navigation, route }) => {
                 }
                 buttons={[
                   { value: 'particulier', label: 'Particulier' },
-                  { value: 'entreprise', label: 'Entreprise' }
+                  { value: 'individuel', label: 'Individuel' },
+                  { value: 'entreprise', label: 'Entreprise' },
+                  { value: 'general', label: 'Général' }
                 ]}
                 style={styles.segmentedButtons}
               />
@@ -2123,6 +2602,47 @@ const CommercialScreen = ({ navigation, route }) => {
                 numberOfLines={2}
               />
 
+              <View style={styles.formSection}>
+                {clientForm.type === 'entreprise' ? (
+                  <TextInput
+                    label="NIF *"
+                    value={clientForm.nif}
+                    onChangeText={(text) =>
+                      setClientForm({ ...clientForm, nif: text })
+                    }
+                    style={styles.input}
+                    mode="outlined"
+                    placeholder="Numéro d'Identification Fiscale"
+                  />
+                ) : (
+                  <View style={styles.formRow}>
+                    <TextInput
+                      label="CNI *"
+                      value={clientForm.cni}
+                      onChangeText={(text) =>
+                        setClientForm({ ...clientForm, cni: text })
+                      }
+                      style={[styles.input, { flex: 1 }]}
+                      mode="outlined"
+                      placeholder="Carte Nationale d'Identité"
+                    />
+                    <TouchableOpacity
+                      onPress={() => handlePickImage((url) => setClientForm({ ...clientForm, photo_profil: url }))}
+                      style={styles.imagePickerButtonSmall}
+                    >
+                      {clientForm.photo_profil ? (
+                        <Avatar.Image size={54} source={{ uri: `${API_URL.replace('/api', '')}/${clientForm.photo_profil}` }} />
+                      ) : (
+                        <View style={styles.imagePlaceholderSmall}>
+                          <MaterialIcons name="add-a-photo" size={20} color={COLORS.gray} />
+                          <Text style={{ fontSize: 9 }}>Photo</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+
               <View style={styles.formRow}>
                 <TextInput
                   label="Ville"
@@ -2147,7 +2667,7 @@ const CommercialScreen = ({ navigation, route }) => {
 
               <View style={styles.formRow}>
                 <TextInput
-                  label="Limite de Crédit ($)"
+                  label="Limite de Crédit (BIF)"
                   value={clientForm.limite_credit}
                   onChangeText={(text) =>
                     setClientForm({ ...clientForm, limite_credit: text })
@@ -2236,7 +2756,8 @@ const CommercialScreen = ({ navigation, route }) => {
               }
               buttons={[
                 { value: 'general', label: 'Général' },
-                { value: 'specialise', label: 'Spécialisé' }
+                { value: 'specialise', label: 'Spécialisé' },
+                { value: 'entreprise', label: 'Entreprise' }
               ]}
               style={styles.segmentedButtons}
             />
@@ -2284,6 +2805,47 @@ const CommercialScreen = ({ navigation, route }) => {
               multiline
               numberOfLines={2}
             />
+
+            <View style={styles.formSection}>
+              {fournisseurForm.type === 'specialise' || fournisseurForm.type === 'entreprise' ? (
+                <TextInput
+                  label="NIF *"
+                  value={fournisseurForm.nif}
+                  onChangeText={(text) =>
+                    setFournisseurForm({ ...fournisseurForm, nif: text })
+                  }
+                  style={styles.input}
+                  mode="outlined"
+                  placeholder="Numéro d'Identification Fiscale"
+                />
+              ) : (
+                <View style={styles.formRow}>
+                  <TextInput
+                    label="CNI *"
+                    value={fournisseurForm.cni}
+                    onChangeText={(text) =>
+                      setFournisseurForm({ ...fournisseurForm, cni: text })
+                    }
+                    style={[styles.input, { flex: 1 }]}
+                    mode="outlined"
+                    placeholder="Carte Nationale d'Identité"
+                  />
+                  <TouchableOpacity
+                    onPress={() => handlePickImage((url) => setFournisseurForm({ ...fournisseurForm, photo_profil: url }))}
+                    style={styles.imagePickerButtonSmall}
+                  >
+                    {fournisseurForm.photo_profil ? (
+                      <Avatar.Image size={54} source={{ uri: `${API_URL.replace('/api', '')}/${fournisseurForm.photo_profil}` }} />
+                    ) : (
+                      <View style={styles.imagePlaceholderSmall}>
+                        <MaterialIcons name="add-a-photo" size={20} color={COLORS.gray} />
+                        <Text style={{ fontSize: 9 }}>Photo</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
 
             <View style={styles.modalActions}>
               <Button
@@ -2425,7 +2987,9 @@ const CommercialScreen = ({ navigation, route }) => {
       </Modal>
     </Portal>
   );
-
+  // ============================================
+  // RENDER COMMANDE VENTE MODAL - COMPLET
+  // ============================================
   const renderCommandeVenteModal = () => (
     <Portal>
       <Modal
@@ -2450,6 +3014,7 @@ const CommercialScreen = ({ navigation, route }) => {
           </View>
 
           <View style={styles.modalContent}>
+            {/* Client Selection */}
             <Text style={styles.inputLabel}>Client *</Text>
             <Menu
               visible={clientMenuVisible}
@@ -2485,6 +3050,7 @@ const CommercialScreen = ({ navigation, route }) => {
               </ScrollView>
             </Menu>
 
+            {/* Dates */}
             <View style={styles.formRow}>
               <TouchableOpacity
                 style={[styles.input, styles.inputHalf]}
@@ -2509,6 +3075,7 @@ const CommercialScreen = ({ navigation, route }) => {
               </TouchableOpacity>
             </View>
 
+            {/* Lieu de livraison */}
             <TextInput
               label="Lieu de Livraison"
               value={commandeVenteForm.lieu_livraison}
@@ -2521,6 +3088,7 @@ const CommercialScreen = ({ navigation, route }) => {
 
             <Divider style={styles.divider} />
 
+            {/* Section Produits */}
             <View style={styles.produitsSection}>
               <View style={styles.produitsSectionHeader}>
                 <Text style={styles.sectionTitle}>Produits ({commandeVenteForm.lignes.length})</Text>
@@ -2530,73 +3098,34 @@ const CommercialScreen = ({ navigation, route }) => {
                   onPress={() => handleAddLigneCommande('vente')}
                   compact
                   buttonColor="#27AE60"
+                  disabled={loading}
                 >
                   Ajouter
                 </Button>
               </View>
 
-              {commandeVenteForm.lignes.length === 0 ? (
+              {loading ? (
+                <View style={styles.loadingLignesContainer}>
+                  <ActivityIndicator size="large" color="#2E86C1" />
+                  <Text style={styles.loadingText}>Chargement...</Text>
+                </View>
+              ) : commandeVenteForm.lignes.length === 0 ? (
                 <View style={styles.emptyLignes}>
                   <MaterialIcons name="shopping-cart" size={40} color="#BDC3C7" />
                   <Text style={styles.emptyLignesText}>Aucun produit ajouté</Text>
                 </View>
               ) : (
                 <View style={styles.lignesList}>
-                  {commandeVenteForm.lignes.map((ligne, index) => (
-                    <Card key={index} style={styles.ligneCard}>
-                      <Card.Content>
-                        <View style={styles.ligneHeader}>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.ligneDesignation}>{ligne.designation}</Text>
-                            {ligne.description && (
-                              <Text style={styles.ligneDescription}>{ligne.description}</Text>
-                            )}
-                          </View>
-                          <IconButton
-                            icon="delete"
-                            size={20}
-                            iconColor="#E74C3C"
-                            onPress={() => handleRemoveLigneCommande(index, 'vente')}
-                          />
-                        </View>
-
-                        <View style={styles.ligneDetails}>
-                          <View style={styles.ligneDetailItem}>
-                            <Text style={styles.ligneDetailLabel}>Quantité:</Text>
-                            <Text style={styles.ligneDetailValue}>
-                              {ligne.quantite_commandee} {ligne.unite}
-                            </Text>
-                          </View>
-                          <View style={styles.ligneDetailItem}>
-                            <Text style={styles.ligneDetailLabel}>Prix Unit.:</Text>
-                            <Text style={styles.ligneDetailValue}>
-                              {formatCurrency(ligne.prix_unitaire_ht)}
-                            </Text>
-                          </View>
-                          {ligne.remise_pourcent > 0 && (
-                            <View style={styles.ligneDetailItem}>
-                              <Text style={styles.ligneDetailLabel}>Remise:</Text>
-                              <Text style={styles.ligneDetailValue}>
-                                {ligne.remise_pourcent}%
-                              </Text>
-                            </View>
-                          )}
-                          <View style={styles.ligneDetailItem}>
-                            <Text style={styles.ligneDetailLabel}>Total:</Text>
-                            <Text style={[styles.ligneDetailValue, styles.ligneTotal]}>
-                              {formatCurrency(ligne.montant_ttc)}
-                            </Text>
-                          </View>
-                        </View>
-                      </Card.Content>
-                    </Card>
-                  ))}
+                  {commandeVenteForm.lignes.map((ligne, index) =>
+                    renderLigneCardImproved(ligne, index, 'vente')
+                  )}
                 </View>
               )}
             </View>
 
             <Divider style={styles.divider} />
 
+            {/* Section Totaux */}
             <View style={styles.totauxSection}>
               <View style={styles.formRow}>
                 <TextInput
@@ -2608,10 +3137,11 @@ const CommercialScreen = ({ navigation, route }) => {
                   style={[styles.input, styles.inputThird]}
                   mode="outlined"
                   keyboardType="decimal-pad"
+                  disabled={loading}
                 />
 
                 <TextInput
-                  label="Frais Livraison ($)"
+                  label="Frais Livraison (BIF)"
                   value={commandeVenteForm.frais_livraison}
                   onChangeText={(text) =>
                     setCommandeVenteForm({ ...commandeVenteForm, frais_livraison: text })
@@ -2619,10 +3149,11 @@ const CommercialScreen = ({ navigation, route }) => {
                   style={[styles.input, styles.inputThird]}
                   mode="outlined"
                   keyboardType="decimal-pad"
+                  disabled={loading}
                 />
 
                 <TextInput
-                  label="Remise ($)"
+                  label="Remise (BIF)"
                   value={commandeVenteForm.remise}
                   onChangeText={(text) =>
                     setCommandeVenteForm({ ...commandeVenteForm, remise: text })
@@ -2630,6 +3161,7 @@ const CommercialScreen = ({ navigation, route }) => {
                   style={[styles.input, styles.inputThird]}
                   mode="outlined"
                   keyboardType="decimal-pad"
+                  disabled={loading}
                 />
               </View>
 
@@ -2644,11 +3176,7 @@ const CommercialScreen = ({ navigation, route }) => {
                   <View style={styles.totalRow}>
                     <Text style={styles.totalLabel}>TVA:</Text>
                     <Text style={styles.totalValue}>
-                      {formatCurrency(
-                        (calculerMontantHT(commandeVenteForm.lignes) *
-                          parseFloat(commandeVenteForm.tva_pourcent || 0)) /
-                        100
-                      )}
+                      {formatCurrency(calculerSommeTVA(commandeVenteForm.lignes))}
                     </Text>
                   </View>
                   <View style={styles.totalRow}>
@@ -2676,6 +3204,7 @@ const CommercialScreen = ({ navigation, route }) => {
 
             <Divider style={styles.divider} />
 
+            {/* Mode de Paiement */}
             <Text style={styles.inputLabel}>Mode de Paiement</Text>
             <SegmentedButtons
               value={commandeVenteForm.mode_paiement}
@@ -2688,8 +3217,10 @@ const CommercialScreen = ({ navigation, route }) => {
                 { value: 'mobile', label: 'Mobile Money', icon: 'cellphone' }
               ]}
               style={styles.segmentedButtons}
+              disabled={loading}
             />
 
+            {/* Conditions de Paiement */}
             <TextInput
               label="Conditions de Paiement"
               value={commandeVenteForm.conditions_paiement}
@@ -2698,8 +3229,10 @@ const CommercialScreen = ({ navigation, route }) => {
               }
               style={styles.input}
               mode="outlined"
+              disabled={loading}
             />
 
+            {/* Observations */}
             <TextInput
               label="Observations / Notes"
               value={commandeVenteForm.observations_livraison}
@@ -2710,8 +3243,10 @@ const CommercialScreen = ({ navigation, route }) => {
               mode="outlined"
               multiline
               numberOfLines={3}
+              disabled={loading}
             />
 
+            {/* Actions */}
             <View style={styles.modalActions}>
               <Button
                 mode="contained"
@@ -2719,10 +3254,10 @@ const CommercialScreen = ({ navigation, route }) => {
                 buttonColor="#27AE60"
                 style={styles.modalButton}
                 loading={loading}
-                disabled={loading || commandeVenteForm.lignes.length === 0}
+                disabled={loading || commandeVenteForm.lignes.length === 0 || !commandeVenteForm.id_client}
                 icon="content-save"
               >
-                {commandeVenteMode === 'add' ? 'Créer Commande' : 'Enregistrer'}
+                {loading ? 'Enregistrement...' : (commandeVenteMode === 'add' ? 'Créer Commande' : 'Enregistrer')}
               </Button>
               <Button
                 mode="outlined"
@@ -2739,6 +3274,9 @@ const CommercialScreen = ({ navigation, route }) => {
     </Portal>
   );
 
+  // ============================================
+  // RENDER COMMANDE ACHAT MODAL - COMPLET
+  // ============================================
   const renderCommandeAchatModal = () => (
     <Portal>
       <Modal
@@ -2761,6 +3299,7 @@ const CommercialScreen = ({ navigation, route }) => {
           </View>
 
           <View style={styles.modalContent}>
+            {/* Fournisseur Selection */}
             <Text style={styles.inputLabel}>Fournisseur *</Text>
             <Menu
               visible={fournisseurMenuVisible}
@@ -2797,6 +3336,46 @@ const CommercialScreen = ({ navigation, route }) => {
               </ScrollView>
             </Menu>
 
+            {/* Dates */}
+            <View style={styles.formRow}>
+              <TouchableOpacity
+                style={[styles.input, styles.inputHalf]}
+                onPress={() => openDatePicker('date_commande_achat', commandeAchatForm.date_commande)}
+              >
+                <Text style={styles.inputLabel}>Date Commande</Text>
+                <Text style={styles.inputValue}>
+                  {formatDate(commandeAchatForm.date_commande)}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.input, styles.inputHalf]}
+                onPress={() => openDatePicker('date_livraison_prevue_achat', commandeAchatForm.date_livraison_prevue)}
+              >
+                <Text style={styles.inputLabel}>Livraison Prévue</Text>
+                <Text style={styles.inputValue}>
+                  {commandeAchatForm.date_livraison_prevue
+                    ? formatDate(commandeAchatForm.date_livraison_prevue)
+                    : 'Non définie'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Lieu de livraison */}
+            <TextInput
+              label="Lieu de Livraison"
+              value={commandeAchatForm.lieu_livraison}
+              onChangeText={(text) =>
+                setCommandeAchatForm({ ...commandeAchatForm, lieu_livraison: text })
+              }
+              style={styles.input}
+              mode="outlined"
+              disabled={loading}
+            />
+
+            <Divider style={styles.divider} />
+
+            {/* Section Articles */}
             <View style={styles.produitsSection}>
               <View style={styles.produitsSectionHeader}>
                 <Text style={styles.sectionTitle}>Articles ({commandeAchatForm.lignes.length})</Text>
@@ -2806,74 +3385,168 @@ const CommercialScreen = ({ navigation, route }) => {
                   onPress={() => handleAddLigneCommande('achat')}
                   compact
                   buttonColor="#27AE60"
+                  disabled={loading}
                 >
                   Ajouter
                 </Button>
               </View>
 
-              {commandeAchatForm.lignes.length === 0 ? (
+              {loading ? (
+                <View style={styles.loadingLignesContainer}>
+                  <ActivityIndicator size="large" color="#2E86C1" />
+                  <Text style={styles.loadingText}>Chargement...</Text>
+                </View>
+              ) : commandeAchatForm.lignes.length === 0 ? (
                 <View style={styles.emptyLignes}>
                   <MaterialIcons name="shopping-bag" size={40} color="#BDC3C7" />
                   <Text style={styles.emptyLignesText}>Aucun article ajouté</Text>
                 </View>
               ) : (
                 <View style={styles.lignesList}>
-                  {commandeAchatForm.lignes.map((ligne, index) => (
-                    <Card key={index} style={styles.ligneCard}>
-                      <Card.Content>
-                        <View style={styles.ligneHeader}>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.ligneDesignation}>{ligne.designation}</Text>
-                            {ligne.description && (
-                              <Text style={styles.ligneDescription}>{ligne.description}</Text>
-                            )}
-                          </View>
-                          <IconButton
-                            icon="delete"
-                            size={20}
-                            iconColor="#E74C3C"
-                            onPress={() => handleRemoveLigneCommande(index, 'achat')}
-                          />
-                        </View>
-
-                        <View style={styles.ligneDetails}>
-                          <View style={styles.ligneDetailItem}>
-                            <Text style={styles.ligneDetailLabel}>Quantité:</Text>
-                            <Text style={styles.ligneDetailValue}>
-                              {ligne.quantite_commandee} {ligne.unite}
-                            </Text>
-                          </View>
-                          <View style={styles.ligneDetailItem}>
-                            <Text style={styles.ligneDetailLabel}>Prix Unit.:</Text>
-                            <Text style={styles.ligneDetailValue}>
-                              {formatCurrency(ligne.prix_unitaire_ht)}
-                            </Text>
-                          </View>
-                          <View style={styles.ligneDetailItem}>
-                            <Text style={styles.ligneDetailLabel}>Total:</Text>
-                            <Text style={[styles.ligneDetailValue, styles.ligneTotal]}>
-                              {formatCurrency(ligne.montant_ttc)}
-                            </Text>
-                          </View>
-                        </View>
-                      </Card.Content>
-                    </Card>
-                  ))}
+                  {commandeAchatForm.lignes.map((ligne, index) =>
+                    renderLigneCardImproved(ligne, index, 'achat')
+                  )}
                 </View>
               )}
             </View>
 
-            <Card style={styles.totauxCard}>
-              <Card.Content>
-                <View style={[styles.totalRow, styles.totalFinal]}>
-                  <Text style={styles.totalLabelFinal}>TOTAL TTC:</Text>
-                  <Text style={styles.totalValueFinal}>
-                    {formatCurrency(calculerMontantTotal('achat'))}
-                  </Text>
-                </View>
-              </Card.Content>
-            </Card>
+            <Divider style={styles.divider} />
 
+            {/* Section Totaux */}
+            <View style={styles.totauxSection}>
+              <View style={styles.formRow}>
+                <TextInput
+                  label="TVA (%)"
+                  value={commandeAchatForm.tva_pourcent}
+                  onChangeText={(text) =>
+                    setCommandeAchatForm({ ...commandeAchatForm, tva_pourcent: text })
+                  }
+                  style={[styles.input, styles.inputThird]}
+                  mode="outlined"
+                  keyboardType="decimal-pad"
+                  disabled={loading}
+                />
+
+                <TextInput
+                  label="Frais Livraison (BIF)"
+                  value={commandeAchatForm.frais_livraison}
+                  onChangeText={(text) =>
+                    setCommandeAchatForm({ ...commandeAchatForm, frais_livraison: text })
+                  }
+                  style={[styles.input, styles.inputThird]}
+                  mode="outlined"
+                  keyboardType="decimal-pad"
+                  disabled={loading}
+                />
+
+                <TextInput
+                  label="Remise (BIF)"
+                  value={commandeAchatForm.remise}
+                  onChangeText={(text) =>
+                    setCommandeAchatForm({ ...commandeAchatForm, remise: text })
+                  }
+                  style={[styles.input, styles.inputThird]}
+                  mode="outlined"
+                  keyboardType="decimal-pad"
+                  disabled={loading}
+                />
+              </View>
+
+              <Card style={styles.totauxCard}>
+                <Card.Content>
+                  <View style={styles.totalRow}>
+                    <Text style={styles.totalLabel}>Montant HT:</Text>
+                    <Text style={styles.totalValue}>
+                      {formatCurrency(calculerMontantHT(commandeAchatForm.lignes))}
+                    </Text>
+                  </View>
+                  <View style={styles.totalRow}>
+                    <Text style={styles.totalLabel}>TVA:</Text>
+                    <Text style={styles.totalValue}>
+                      {formatCurrency(calculerSommeTVA(commandeAchatForm.lignes))}
+                    </Text>
+                  </View>
+                  <View style={styles.totalRow}>
+                    <Text style={styles.totalLabel}>Frais Livraison:</Text>
+                    <Text style={styles.totalValue}>
+                      {formatCurrency(commandeAchatForm.frais_livraison)}
+                    </Text>
+                  </View>
+                  <View style={styles.totalRow}>
+                    <Text style={styles.totalLabel}>Remise:</Text>
+                    <Text style={[styles.totalValue, { color: '#E74C3C' }]}>
+                      -{formatCurrency(commandeAchatForm.remise)}
+                    </Text>
+                  </View>
+                  <Divider style={styles.divider} />
+                  <View style={[styles.totalRow, styles.totalFinal]}>
+                    <Text style={styles.totalLabelFinal}>TOTAL TTC:</Text>
+                    <Text style={styles.totalValueFinal}>
+                      {formatCurrency(calculerMontantTotal('achat'))}
+                    </Text>
+                  </View>
+                </Card.Content>
+              </Card>
+            </View>
+
+            <Divider style={styles.divider} />
+
+            {/* Mode de Paiement */}
+            <Text style={styles.inputLabel}>Mode de Paiement</Text>
+            <SegmentedButtons
+              value={commandeAchatForm.mode_paiement}
+              onValueChange={(value) =>
+                setCommandeAchatForm({ ...commandeAchatForm, mode_paiement: value })
+              }
+              buttons={[
+                { value: 'especes', label: 'Espèces', icon: 'cash' },
+                { value: 'credit', label: 'Crédit', icon: 'credit-card' },
+                { value: 'mobile', label: 'Mobile Money', icon: 'cellphone' }
+              ]}
+              style={styles.segmentedButtons}
+              disabled={loading}
+            />
+
+            {/* Conditions de Paiement */}
+            <TextInput
+              label="Conditions de Paiement"
+              value={commandeAchatForm.conditions_paiement}
+              onChangeText={(text) =>
+                setCommandeAchatForm({ ...commandeAchatForm, conditions_paiement: text })
+              }
+              style={styles.input}
+              mode="outlined"
+              disabled={loading}
+            />
+
+            {/* Délai de Paiement */}
+            <TextInput
+              label="Délai de Paiement (jours)"
+              value={commandeAchatForm.delai_paiement_jours}
+              onChangeText={(text) =>
+                setCommandeAchatForm({ ...commandeAchatForm, delai_paiement_jours: text })
+              }
+              style={styles.input}
+              mode="outlined"
+              keyboardType="numeric"
+              disabled={loading}
+            />
+
+            {/* Observations */}
+            <TextInput
+              label="Observations / Notes"
+              value={commandeAchatForm.observations_livraison}
+              onChangeText={(text) =>
+                setCommandeAchatForm({ ...commandeAchatForm, observations_livraison: text })
+              }
+              style={styles.input}
+              mode="outlined"
+              multiline
+              numberOfLines={3}
+              disabled={loading}
+            />
+
+            {/* Actions */}
             <View style={styles.modalActions}>
               <Button
                 mode="contained"
@@ -2881,10 +3554,10 @@ const CommercialScreen = ({ navigation, route }) => {
                 buttonColor="#27AE60"
                 style={styles.modalButton}
                 loading={loading}
-                disabled={loading || commandeAchatForm.lignes.length === 0}
+                disabled={loading || commandeAchatForm.lignes.length === 0 || !commandeAchatForm.id_fournisseur}
                 icon="content-save"
               >
-                Créer Bon
+                {loading ? 'Enregistrement...' : 'Créer Bon'}
               </Button>
               <Button
                 mode="outlined"
@@ -2994,7 +3667,16 @@ const CommercialScreen = ({ navigation, route }) => {
       {renderPaiementModal()}
       {renderCommandeVenteModal()}
       {renderCommandeAchatModal()}
-      {renderLigneModal()}
+      {renderArticleSelector()}
+      {renderConfirmModal()}
+      {renderInvoiceModal()}
+
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingOverlayText}>Traitement en cours...</Text>
+        </View>
+      )}
 
       {
         showDatePicker && (
@@ -3018,11 +3700,31 @@ const CommercialScreen = ({ navigation, route }) => {
               else if (activeTab === 'commandes_vente') handleAddCommandeVente();
               else if (activeTab === 'commandes_achat') handleAddCommandeAchat();
               else if (activeTab === 'paiements') handleAddPaiement();
+              else if (activeTab === 'factures') {
+                setActiveTab('commandes_vente');
+                showInfo('Créez une vente pour générer une facture');
+              }
             }}
             color="#FFFFFF"
           />
         )
       }
+
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={3000}
+        style={{
+          backgroundColor: snackbarType === 'success' ? '#27AE60' : '#E74C3C',
+          marginBottom: responsive.isMobile ? 80 : 20
+        }}
+        action={{
+          label: 'OK',
+          onPress: () => setSnackbarVisible(false),
+        }}
+      >
+        {snackbarMessage}
+      </Snackbar>
     </View >
   );
 };
@@ -3144,13 +3846,23 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: '#FFFFFF',
+    color: 'black',
+    borderWidth: 2,           // ✅ borderWidth au lieu de border
+    borderColor: 'black',     // ✅ borderColor séparé
     borderRadius: 12,
     ...Platform.select({
       web: {
         boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
       },
       default: {
-        elevation: 3
+        elevation: 3,
+        shadowColor: '#000',        // ✅ Ajout pour iOS
+        shadowOffset: {             // ✅ Ajout pour iOS
+          width: 0,
+          height: 2,
+        },
+        shadowOpacity: 0.1,         // ✅ Ajout pour iOS
+        shadowRadius: 8,            // ✅ Ajout pour iOS
       }
     })
   },
@@ -3434,6 +4146,29 @@ const styles = StyleSheet.create({
         elevation: 5
       }
     })
+  },
+
+  sourceChip: {
+    height: 20,
+    backgroundColor: '#E8F4F8'
+  },
+  sourceChipText: {
+    fontSize: 10,
+    color: '#2E86C1'
+  },
+  stockInfo: {
+    fontSize: 11,
+    color: '#7F8C8D',
+    fontStyle: 'italic',
+    marginTop: 4
+  },
+
+  loadingLignesContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 8
   },
   modalLarge: {
     maxHeight: '95%',
@@ -3732,6 +4467,182 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#27AE60'
-  }
+  },
+  imagePickerButton: {
+    marginTop: 10,
+    alignSelf: 'center',
+  },
+  imagePlaceholder: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#ECF0F1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#7F8C8D',
+    borderStyle: 'dashed',
+  },
+  formSection: {
+    marginBottom: 15
+  },
+  imagePickerButtonSmall: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#7F8C8D',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 10,
+    backgroundColor: '#F8F9FA'
+  },
+  imagePlaceholderSmall: {
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  // New Styles
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999
+  },
+  loadingOverlayText: {
+    marginTop: 10,
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: '600'
+  },
+  confirmModal: {
+    backgroundColor: 'white',
+    padding: 0,
+    margin: 20,
+    borderRadius: 12,
+    overflow: 'hidden'
+  },
+  confirmTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.dark,
+    marginBottom: 10
+  },
+  confirmMessage: {
+    fontSize: 14,
+    color: COLORS.gray,
+    lineHeight: 20
+  },
+  confirmActions: {
+    justifyContent: 'flex-end',
+    padding: 10,
+    backgroundColor: '#F8F9FA'
+  },
+  // OBR Invoice Styles
+  obrInvoiceScroll: {
+    padding: 25,
+    backgroundColor: '#FFFFFF',
+  },
+  obrHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  obrVendorSection: {
+    flex: 2,
+  },
+  obrInvoiceMeta: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  obrMainTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 10,
+    textDecorationLine: 'underline',
+  },
+  obrInvoiceTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#6200EE', // Specific purple from PDF
+    marginBottom: 5,
+  },
+  obrInvoiceDate: {
+    fontSize: 14,
+    color: '#000',
+  },
+  obrDetailRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 4,
+  },
+  obrLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#333',
+  },
+  obrValue: {
+    fontSize: 12,
+    color: '#333',
+    fontStyle: 'italic',
+  },
+  obrDivider: {
+    marginVertical: 15,
+    height: 1,
+  },
+  obrClientSection: {
+    marginBottom: 20,
+  },
+  obrDoitPour: {
+    marginTop: 10,
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  obrTable: {
+    borderWidth: 1,
+    borderColor: '#000',
+    marginTop: 10,
+  },
+  obrTableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#f2f2f2',
+    borderBottomWidth: 1,
+    borderColor: '#000',
+  },
+  obrTableHeaderCell: {
+    padding: 8,
+    fontSize: 12,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    borderRightWidth: 1,
+    borderColor: '#000',
+  },
+  obrTableRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderColor: '#000',
+    minHeight: 30,
+  },
+  obrTableCell: {
+    padding: 8,
+    fontSize: 12,
+    borderRightWidth: 1,
+    borderColor: '#000',
+  },
+  obrTotalRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderColor: '#000',
+  },
+  obrMentionSection: {
+    marginTop: 10,
+  },
+  obrMention: {
+    fontSize: 10,
+    fontStyle: 'italic',
+    color: '#666',
+  },
 });
 export default CommercialScreen;

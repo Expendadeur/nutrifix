@@ -25,8 +25,8 @@ import axios from 'axios';
 
 // Configuration API
 const API_BASE_URL = Platform.select({
-    web: process.env.REACT_APP_API_URL || 'http://localhost:3000',
-    default: 'http://localhost:3000'
+    web: process.env.REACT_APP_API_URL || 'https://nutrifix-1-twdf.onrender.com',
+    default: 'https://nutrifix-1-twdf.onrender.com'
 });
 
 // Types d'opérations (ÉTENDU pour inclure Salaire)
@@ -70,7 +70,7 @@ const OperationsFraisScreen = ({ navigation }) => {
     const [observationsLivraison, setObservationsLivraison] = useState('');
     const [currentLocation, setCurrentLocation] = useState(null);
     const [locationAddress, setLocationAddress] = useState('');
-    
+
     // ============================================
     // ÉTATS FRAIS
     // ============================================
@@ -83,7 +83,7 @@ const OperationsFraisScreen = ({ navigation }) => {
     const [paymentMethod, setPaymentMethod] = useState('especes');
     const [quantiteCarburant, setQuantiteCarburant] = useState('');
     const [justificatifs, setJustificatifs] = useState([]);
-    
+
     // ============================================
     // ÉTATS SALAIRE
     // ============================================
@@ -95,7 +95,7 @@ const OperationsFraisScreen = ({ navigation }) => {
     const [confirmingReception, setConfirmingReception] = useState(false);
     const [verificationCode, setVerificationCode] = useState('');
     const [showCodeInput, setShowCodeInput] = useState(false);
-    
+
     // États UI
     const [loading, setLoading] = useState(false);
     const [loadingLocation, setLoadingLocation] = useState(false);
@@ -103,18 +103,18 @@ const OperationsFraisScreen = ({ navigation }) => {
     const [submittingOperation, setSubmittingOperation] = useState(false);
     const [submittingFrais, setSubmittingFrais] = useState(false);
     const [uploadingFiles, setUploadingFiles] = useState(false);
-    
+
     // Données
     const [vehicle, setVehicle] = useState(null);
     const [currentMission, setCurrentMission] = useState(null);
     const [authToken, setAuthToken] = useState(null);
-    
+
     // Modal
     const [confirmModalVisible, setConfirmModalVisible] = useState(false);
     const [modalData, setModalData] = useState(null);
     const [imagePreviewVisible, setImagePreviewVisible] = useState(false);
     const [selectedImageUri, setSelectedImageUri] = useState(null);
-    
+
     // Validation errors
     const [operationErrors, setOperationErrors] = useState({});
     const [fraisErrors, setFraisErrors] = useState({});
@@ -197,7 +197,7 @@ const OperationsFraisScreen = ({ navigation }) => {
     const apiCall = async (endpoint, method = 'GET', data = null, isFormData = false) => {
         try {
             const token = authToken || await getAuthToken();
-            
+
             if (!token) {
                 throw new Error('Token d\'authentification manquant');
             }
@@ -224,14 +224,14 @@ const OperationsFraisScreen = ({ navigation }) => {
             return response.data;
         } catch (error) {
             console.error(`API Error [${endpoint}]:`, error);
-            
+
             if (error.response?.status === 401) {
                 await AsyncStorage.removeItem('authToken');
                 if (navigation) {
                     navigation.replace('Login');
                 }
             }
-            
+
             throw error;
         }
     };
@@ -301,13 +301,13 @@ const OperationsFraisScreen = ({ navigation }) => {
         setLoadingLocation(true);
         try {
             const { status } = await Location.requestForegroundPermissionsAsync();
-            
+
             if (status === 'granted') {
                 const location = await Location.getCurrentPositionAsync({
                     accuracy: Location.Accuracy.High,
                     timeout: 10000
                 });
-                
+
                 setCurrentLocation(location.coords);
 
                 // Reverse geocoding
@@ -399,7 +399,7 @@ const OperationsFraisScreen = ({ navigation }) => {
                         setRequestingPayment(true);
                         try {
                             const result = await apiCall('/salary/request-payment', 'POST');
-                            
+
                             if (result.success) {
                                 Alert.alert(
                                     'Succès',
@@ -440,22 +440,41 @@ const OperationsFraisScreen = ({ navigation }) => {
             return;
         }
 
-        // Demander le code de vérification (optionnel)
-        setShowCodeInput(true);
+        // Demander le code de vérification
+        setConfirmingReception(true);
+        try {
+            const result = await apiCall('/salary/request-code', 'POST');
+            if (result.success) {
+                setShowCodeInput(true);
+                Alert.alert('Code Envoyé', 'Un code de vérification a été envoyé à votre email');
+            } else {
+                Alert.alert('Erreur', result.message || 'Impossible d\'envoyer le code');
+            }
+        } catch (error) {
+            console.error('Request code error:', error);
+            Alert.alert('Erreur', 'Impossible de demander le code de vérification');
+        } finally {
+            setConfirmingReception(false);
+        }
     };
 
     const submitConfirmReception = async () => {
+        if (!verificationCode.trim() || verificationCode.trim().length < 4) {
+            Alert.alert('Erreur', 'Veuillez entrer un code de vérification valide');
+            return;
+        }
+
         setConfirmingReception(true);
         try {
-            const data = verificationCode.trim() ? { code_verification: verificationCode.trim() } : {};
+            const data = { code_verification: verificationCode.trim() };
             const result = await apiCall('/salary/confirm-reception', 'POST', data);
-            
+
             if (result.success) {
                 Alert.alert(
                     'Succès',
                     'Réception de salaire confirmée avec succès',
-                    [{ 
-                        text: 'OK', 
+                    [{
+                        text: 'OK',
                         onPress: () => {
                             setShowCodeInput(false);
                             setVerificationCode('');
@@ -464,14 +483,24 @@ const OperationsFraisScreen = ({ navigation }) => {
                     }]
                 );
             } else {
-                Alert.alert('Erreur', result.message || 'Impossible de confirmer la réception');
+                if (result.message && result.message.includes('bloqué')) {
+                    Alert.alert('Compte Bloqué', result.message, [
+                        { text: 'OK', onPress: () => navigation.replace('Login') }
+                    ]);
+                } else {
+                    Alert.alert('Erreur', result.message || 'Impossible de confirmer la réception');
+                }
             }
         } catch (error) {
             console.error('Confirm reception error:', error);
-            Alert.alert(
-                'Erreur',
-                error.response?.data?.message || 'Une erreur est survenue'
-            );
+            const errorMsg = error.response?.data?.message || 'Une erreur est survenue';
+            if (errorMsg.includes('bloqué')) {
+                Alert.alert('Compte Bloqué', errorMsg, [
+                    { text: 'OK', onPress: () => navigation.replace('Login') }
+                ]);
+            } else {
+                Alert.alert('Erreur', errorMsg);
+            }
         } finally {
             setConfirmingReception(false);
         }
@@ -545,8 +574,8 @@ const OperationsFraisScreen = ({ navigation }) => {
                 Alert.alert(
                     'Mission Démarrée',
                     `Mission vers ${destination} enregistrée avec succès`,
-                    [{ 
-                        text: 'OK', 
+                    [{
+                        text: 'OK',
                         onPress: () => {
                             resetOperationsForm();
                             loadVehicleAndMission();
@@ -582,7 +611,7 @@ const OperationsFraisScreen = ({ navigation }) => {
             onConfirm: async () => {
                 setSubmittingOperation(true);
                 setConfirmModalVisible(false);
-                
+
                 try {
                     const retourData = {
                         id_mouvement: currentMission?.id,
@@ -596,8 +625,8 @@ const OperationsFraisScreen = ({ navigation }) => {
                         Alert.alert(
                             'Mission Terminée',
                             `Distance parcourue: ${kmParcourus.toFixed(2)} km`,
-                            [{ 
-                                text: 'OK', 
+                            [{
+                                text: 'OK',
                                 onPress: () => {
                                     resetOperationsForm();
                                     loadVehicleAndMission();
@@ -618,7 +647,7 @@ const OperationsFraisScreen = ({ navigation }) => {
                 }
             }
         });
-        
+
         setConfirmModalVisible(true);
     };
 
@@ -673,7 +702,7 @@ const OperationsFraisScreen = ({ navigation }) => {
             formData.append('montant', parseFloat(montant));
             formData.append('description', descriptionFrais.trim());
             formData.append('date', dateFrais.toISOString().split('T')[0]);
-            
+
             if (idMouvement) {
                 formData.append('id_mouvement', idMouvement);
             } else if (currentMission) {
@@ -701,7 +730,7 @@ const OperationsFraisScreen = ({ navigation }) => {
 
             if (result.success) {
                 const typeLabel = FRAIS_TYPES.find(t => t.value === fraisType)?.label || fraisType;
-                
+
                 Alert.alert(
                     'Frais Enregistré',
                     `${typeLabel} de ${formatCurrency(parseFloat(montant))} soumis avec succès`,
@@ -751,7 +780,7 @@ const OperationsFraisScreen = ({ navigation }) => {
                     type: 'image/jpeg',
                     fileType: 'image'
                 }));
-                
+
                 setJustificatifs([...justificatifs, ...newFiles]);
                 setFraisErrors(prev => ({ ...prev, justificatifs: null }));
             }
@@ -777,7 +806,7 @@ const OperationsFraisScreen = ({ navigation }) => {
             }
 
             setUploadingFiles(true);
-            const result = await ImagePicker.launchCameraAsync({ 
+            const result = await ImagePicker.launchCameraAsync({
                 quality: 0.8,
                 maxHeight: 1920,
                 maxWidth: 1920,
@@ -790,7 +819,7 @@ const OperationsFraisScreen = ({ navigation }) => {
                     type: 'image/jpeg',
                     fileType: 'image'
                 };
-                
+
                 setJustificatifs([...justificatifs, newFile]);
                 setFraisErrors(prev => ({ ...prev, justificatifs: null }));
             }
@@ -822,7 +851,7 @@ const OperationsFraisScreen = ({ navigation }) => {
                     type: asset.mimeType,
                     fileType: asset.mimeType?.includes('pdf') ? 'pdf' : 'image'
                 }));
-                
+
                 setJustificatifs([...justificatifs, ...newFiles]);
                 setFraisErrors(prev => ({ ...prev, justificatifs: null }));
             }
@@ -975,8 +1004,8 @@ const OperationsFraisScreen = ({ navigation }) => {
                         ))}
                     </View>
 
-                    <ScrollView 
-                        showsVerticalScrollIndicator={false} 
+                    <ScrollView
+                        showsVerticalScrollIndicator={false}
                         style={styles.panelContent}
                         contentContainerStyle={{ paddingBottom: 20 }}
                     >
@@ -1369,12 +1398,12 @@ const OperationsFraisScreen = ({ navigation }) => {
                     {showCodeInput && (
                         <View style={styles.codeInputContainer}>
                             <Text style={[styles.codeInputLabel, { fontSize: fontSize.body }]}>
-                                Code de vérification (optionnel)
+                                Code de vérification
                             </Text>
                             <Text style={[styles.codeInputHint, { fontSize: fontSize.tiny }]}>
-                                Si vous avez reçu un code par email, entrez-le ci-dessous
+                                Veuillez entrer le code de vérification envoyé sur votre email
                             </Text>
-                            
+
                             <TextInput
                                 label="Code de vérification"
                                 value={verificationCode}
@@ -1503,8 +1532,8 @@ const OperationsFraisScreen = ({ navigation }) => {
                     💰 Frais et Dépenses
                 </Text>
 
-                <ScrollView 
-                    showsVerticalScrollIndicator={false} 
+                <ScrollView
+                    showsVerticalScrollIndicator={false}
                     style={styles.panelContent}
                     contentContainerStyle={{ paddingBottom: 20 }}
                 >
@@ -1699,7 +1728,7 @@ const OperationsFraisScreen = ({ navigation }) => {
                             <Text style={[styles.sectionLabel, { fontSize: fontSize.subtitle }]}>
                                 Justificatifs ({justificatifs.length}) *
                             </Text>
-                            
+
                             <View style={[
                                 styles.justificatifsButtons,
                                 { flexDirection: isMobile ? 'column' : 'row' }
@@ -1955,7 +1984,7 @@ const styles = StyleSheet.create({
     panelContent: {
         flex: 1,
     },
-    
+
     // Loading
     loadingContainer: {
         flex: 1,
@@ -1967,7 +1996,7 @@ const styles = StyleSheet.create({
         marginTop: 10,
         color: '#7F8C8D',
     },
-    
+
     // Type selector
     typeSelector: {
         gap: 10,
@@ -1985,7 +2014,7 @@ const styles = StyleSheet.create({
         marginLeft: 8,
         fontWeight: '600',
     },
-    
+
     // Vehicle info
     vehicleInfo: {
         flexDirection: 'row',
@@ -2007,13 +2036,13 @@ const styles = StyleSheet.create({
         color: '#424242',
         marginTop: 2,
     },
-    
+
     // Input
     input: {
         marginBottom: 12,
         backgroundColor: '#FFF',
     },
-    
+
     // Mission info
     missionInfo: {
         backgroundColor: '#E8F5E9',
@@ -2047,7 +2076,7 @@ const styles = StyleSheet.create({
         marginLeft: 10,
         color: '#424242',
     },
-    
+
     // KM Info
     kmInfo: {
         flexDirection: 'row',
@@ -2069,7 +2098,7 @@ const styles = StyleSheet.create({
         color: '#1B5E20',
         marginTop: 2,
     },
-    
+
     // No mission warning
     noMissionWarning: {
         flexDirection: 'row',
@@ -2084,7 +2113,7 @@ const styles = StyleSheet.create({
         color: '#856404',
         flex: 1,
     },
-    
+
     // Location
     locationLoading: {
         flexDirection: 'row',
@@ -2111,7 +2140,7 @@ const styles = StyleSheet.create({
         color: '#2E7D32',
         flex: 1,
     },
-    
+
     // Frais
     sectionLabel: {
         fontWeight: '600',
@@ -2143,7 +2172,7 @@ const styles = StyleSheet.create({
         marginTop: 5,
         textAlign: 'center',
     },
-    
+
     // Info box
     infoBox: {
         flexDirection: 'row',
@@ -2159,7 +2188,7 @@ const styles = StyleSheet.create({
         flex: 1,
         lineHeight: 18,
     },
-    
+
     // Calculation
     calculationBox: {
         flexDirection: 'row',
@@ -2177,7 +2206,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#2C3E50',
     },
-    
+
     // Payment
     paymentMethodContainer: {
         flexDirection: 'row',
@@ -2188,7 +2217,7 @@ const styles = StyleSheet.create({
     paymentChip: {
         marginRight: 5,
     },
-    
+
     // Justificatifs
     justificatifsButtons: {
         gap: 8,
@@ -2251,21 +2280,21 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    
+
     // Submit
     submitButton: {
         marginTop: 15,
         marginBottom: 10,
         borderRadius: 8,
     },
-    
+
     // Error
     errorText: {
         color: '#E74C3C',
         marginTop: -8,
         marginBottom: 8,
     },
-    
+
     // Modals
     modal: {
         backgroundColor: '#FFF',
@@ -2403,7 +2432,7 @@ const styles = StyleSheet.create({
         color: '#2E7D32',
         flex: 1,
     },
-    
+
     // Code input
     codeInputContainer: {
         backgroundColor: '#F8F9FA',
@@ -2425,7 +2454,7 @@ const styles = StyleSheet.create({
         gap: 10,
         marginTop: 10,
     },
-    
+
     // Requests
     requestCard: {
         borderRadius: 8,
@@ -2449,44 +2478,44 @@ const styles = StyleSheet.create({
         alignSelf: 'flex-start',
     },
     requestAmount: {
-    fontWeight: '700',
-    color: '#2C3E50',
-    marginBottom: 8,
-},
-requestReject: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#FFEBEE',
-    padding: 8,
-    borderRadius: 6,
-    marginTop: 8,
-},
-requestRejectText: {
-    marginLeft: 8,
-    color: '#C62828',
-    flex: 1,
-},
-requestProcessed: {
-    color: '#7F8C8D',
-    marginTop: 8,
-},
+        fontWeight: '700',
+        color: '#2C3E50',
+        marginBottom: 8,
+    },
+    requestReject: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        backgroundColor: '#FFEBEE',
+        padding: 8,
+        borderRadius: 6,
+        marginTop: 8,
+    },
+    requestRejectText: {
+        marginLeft: 8,
+        color: '#C62828',
+        flex: 1,
+    },
+    requestProcessed: {
+        color: '#7F8C8D',
+        marginTop: 8,
+    },
 
-// No salary
-noSalaryContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 60,
-},
-noSalaryText: {
-    color: '#7F8C8D',
-    marginTop: 20,
-    fontWeight: '600',
-},
-noSalaryHint: {
-    color: '#BDC3C7',
-    marginTop: 8,
-    textAlign: 'center',
-},
+    // No salary
+    noSalaryContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 60,
+    },
+    noSalaryText: {
+        color: '#7F8C8D',
+        marginTop: 20,
+        fontWeight: '600',
+    },
+    noSalaryHint: {
+        color: '#BDC3C7',
+        marginTop: 8,
+        textAlign: 'center',
+    },
 });
 export default OperationsFraisScreen;

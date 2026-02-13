@@ -28,7 +28,8 @@ import {
   Divider,
   Avatar,
   Badge,
-  IconButton
+  IconButton,
+  Snackbar
 } from 'react-native-paper';
 import { MaterialIcons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -36,17 +37,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 
 // Configuration de l'API
-const API_BASE_URL = __DEV__ 
+const API_BASE_URL = __DEV__
   ? Platform.select({
-      ios: 'http://localhost:5000',
-      android: 'http://localhost:5000',
-      default: 'http://localhost:5000'
-    })
-  : 'https://your-production-api.com';
+    ios: 'https://nutrifix-1-twdf.onrender.com',
+    android: 'https://nutrifix-1-twdf.onrender.com',
+    default: 'https://nutrifix-1-twdf.onrender.com'
+  })
+  : 'https://nutrifix-1-twdf.onrender.com';
 
 const AnimauxScreen = ({ route, navigation }) => {
   const { width: windowWidth } = useWindowDimensions();
-  
+
   // États
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -60,6 +61,17 @@ const AnimauxScreen = ({ route, navigation }) => {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [totalAnimaux, setTotalAnimaux] = useState(0);
+
+  // Snackbar
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarType, setSnackbarType] = useState('info'); // 'info', 'error', 'success'
+
+  const showSnackbar = (message, type = 'info') => {
+    setSnackbarMessage(message);
+    setSnackbarType(type);
+    setSnackbarVisible(true);
+  };
 
   // Responsive
   const isLargeScreen = windowWidth >= 768;
@@ -145,8 +157,14 @@ const AnimauxScreen = ({ route, navigation }) => {
       );
 
       if (response.data.success) {
-        const newAnimaux = response.data.data;
+        let newAnimaux = response.data.data;
         const pagination = response.data.pagination;
+
+        // Ensure newAnimaux is an array
+        if (!Array.isArray(newAnimaux)) {
+          console.warn('API did not return an array for animaux:', newAnimaux);
+          newAnimaux = [];
+        }
 
         if (reset) {
           setAnimaux(newAnimaux);
@@ -154,18 +172,16 @@ const AnimauxScreen = ({ route, navigation }) => {
           setAnimaux(prev => [...prev, ...newAnimaux]);
         }
 
-        setTotalAnimaux(pagination.total);
-        setHasMore(pagination.page < pagination.pages);
+        setTotalAnimaux(pagination?.total || 0);
+        setHasMore(pagination && pagination.page < pagination.pages);
         if (!reset) {
           setPage(currentPage + 1);
         }
       }
     } catch (error) {
       console.error('Erreur chargement animaux:', error);
-      Alert.alert(
-        'Erreur',
-        'Impossible de charger la liste des animaux. Veuillez réessayer.'
-      );
+      console.error('Erreur chargement animaux:', error);
+      showSnackbar('Impossible de charger la liste des animaux.', 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -176,7 +192,7 @@ const AnimauxScreen = ({ route, navigation }) => {
   const loadAnimalDetails = async (animalId) => {
     try {
       const config = await getAxiosConfig();
-      
+
       const response = await axios.get(
         `${API_BASE_URL}/api/veterinaire/animaux/${animalId}`,
         config
@@ -188,10 +204,8 @@ const AnimauxScreen = ({ route, navigation }) => {
       }
     } catch (error) {
       console.error('Erreur chargement détails animal:', error);
-      Alert.alert(
-        'Erreur',
-        'Impossible de charger les détails de l\'animal.'
-      );
+      console.error('Erreur chargement détails animal:', error);
+      showSnackbar("Impossible de charger les détails de l'animal.", 'error');
     }
   };
 
@@ -231,17 +245,17 @@ const AnimauxScreen = ({ route, navigation }) => {
             </Text>
           </View>
         </View>
-        
+
         <View style={styles.headerActions}>
           <IconButton
             icon="filter-variant"
             size={24}
-            onPress={() => {/* Ouvrir panneau filtres avancés */}}
+            onPress={() => {/* Ouvrir panneau filtres avancés */ }}
           />
           <IconButton
             icon="sort"
             size={24}
-            onPress={() => {/* Ouvrir options de tri */}}
+            onPress={() => {/* Ouvrir options de tri */ }}
           />
         </View>
       </View>
@@ -264,9 +278,9 @@ const AnimauxScreen = ({ route, navigation }) => {
         <View style={styles.statItem}>
           <MaterialCommunityIcons name="alert-circle" size={24} color="#E74C3C" />
           <Text style={styles.statValue}>
-            {animaux.filter(a => 
-              a.statut_sante === 'moyen' || 
-              a.statut_sante === 'malade' || 
+            {animaux.filter(a =>
+              a.statut_sante === 'moyen' ||
+              a.statut_sante === 'malade' ||
               a.statut_sante === 'en_traitement'
             ).length}
           </Text>
@@ -313,8 +327,8 @@ const AnimauxScreen = ({ route, navigation }) => {
   const renderFilters = () => (
     <View style={styles.filtersContainer}>
       {/* Filtres par espèce */}
-      <ScrollView 
-        horizontal 
+      <ScrollView
+        horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.filterScroll}
       >
@@ -340,8 +354,8 @@ const AnimauxScreen = ({ route, navigation }) => {
       </ScrollView>
 
       {/* Filtres par statut de santé */}
-      <ScrollView 
-        horizontal 
+      <ScrollView
+        horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.filterScroll}
       >
@@ -372,8 +386,8 @@ const AnimauxScreen = ({ route, navigation }) => {
 
       {/* Filtres par type d'animal */}
       {isLargeScreen && (
-        <ScrollView 
-          horizontal 
+        <ScrollView
+          horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.filterScroll}
         >
@@ -402,9 +416,9 @@ const AnimauxScreen = ({ route, navigation }) => {
 
   // Carte animal (liste)
   const renderAnimalItem = ({ item, index }) => {
-    const cardWidth = isExtraLargeScreen 
+    const cardWidth = isExtraLargeScreen
       ? (windowWidth - 80) / 3 - 20
-      : isLargeScreen 
+      : isLargeScreen
         ? (windowWidth - 60) / 2 - 15
         : windowWidth - 30;
 
@@ -420,9 +434,9 @@ const AnimauxScreen = ({ route, navigation }) => {
       >
         {/* Image de l'animal */}
         <View style={styles.animalImageContainer}>
-          <Image 
-            source={{ 
-              uri: item.photo || 'https://via.placeholder.com/150?text=Animal' 
+          <Image
+            source={{
+              uri: item.photo || 'https://via.placeholder.com/150?text=Animal'
             }}
             style={[
               styles.animalPhoto,
@@ -430,21 +444,21 @@ const AnimauxScreen = ({ route, navigation }) => {
             ]}
             resizeMode="cover"
           />
-          
+
           {/* Badge de santé */}
           <View style={[
             styles.healthBadge,
             { backgroundColor: getHealthColor(item.statut_sante) }
           ]}>
-            <MaterialCommunityIcons 
-              name={getHealthIcon(item.statut_sante)} 
-              size={16} 
-              color="#FFF" 
+            <MaterialCommunityIcons
+              name={getHealthIcon(item.statut_sante)}
+              size={16}
+              color="#FFF"
             />
           </View>
 
           {/* Badge espèce */}
-          <Chip 
+          <Chip
             style={styles.especeChip}
             textStyle={styles.especeChipText}
             compact
@@ -457,20 +471,20 @@ const AnimauxScreen = ({ route, navigation }) => {
         <View style={styles.animalInfo}>
           {/* Nom et numéro */}
           <View style={styles.animalHeader}>
-            <Text 
+            <Text
               style={[
                 styles.animalName,
                 isLargeScreen && styles.animalNameLarge
-              ]} 
+              ]}
               numberOfLines={1}
             >
               {item.nom_animal || item.numero_identification}
             </Text>
             <View style={styles.genderIcon}>
-              <MaterialCommunityIcons 
-                name={item.sexe === 'male' ? 'gender-male' : 'gender-female'} 
-                size={20} 
-                color={item.sexe === 'male' ? '#3498DB' : '#E91E63'} 
+              <MaterialCommunityIcons
+                name={item.sexe === 'male' ? 'gender-male' : 'gender-female'}
+                size={20}
+                color={item.sexe === 'male' ? '#3498DB' : '#E91E63'}
               />
             </View>
           </View>
@@ -488,7 +502,7 @@ const AnimauxScreen = ({ route, navigation }) => {
                 {calculateAge(item.date_naissance)}
               </Text>
             </View>
-            
+
             {item.poids_actuel && (
               <View style={styles.metaItem}>
                 <MaterialCommunityIcons name="weight" size={14} color="#7F8C8D" />
@@ -499,7 +513,7 @@ const AnimauxScreen = ({ route, navigation }) => {
 
           {/* Statut de santé */}
           <View style={styles.animalFooter}>
-            <Chip 
+            <Chip
               style={[
                 styles.statusChip,
                 { backgroundColor: getHealthColor(item.statut_sante) + '20' }
@@ -515,7 +529,7 @@ const AnimauxScreen = ({ route, navigation }) => {
 
             {/* Badge intervention récente */}
             {item.nb_interventions > 0 && (
-              <Badge 
+              <Badge
                 style={styles.interventionBadge}
                 size={20}
               >
@@ -525,23 +539,23 @@ const AnimauxScreen = ({ route, navigation }) => {
           </View>
 
           {/* Alerte si nécessaire */}
-          {(item.statut_sante === 'malade' || 
+          {(item.statut_sante === 'malade' ||
             item.statut_sante === 'en_traitement' ||
             item.raison_surveillance) && (
-            <View style={styles.alertBanner}>
-              <MaterialIcons name="warning" size={14} color="#E74C3C" />
-              <Text style={styles.alertText} numberOfLines={2}>
-                {item.raison_surveillance || 'Nécessite une surveillance'}
-              </Text>
-            </View>
-          )}
+              <View style={styles.alertBanner}>
+                <MaterialIcons name="warning" size={14} color="#E74C3C" />
+                <Text style={styles.alertText} numberOfLines={2}>
+                  {item.raison_surveillance || 'Nécessite une surveillance'}
+                </Text>
+              </View>
+            )}
 
           {/* Vaccination à venir */}
           {item.prochaine_vaccination && (() => {
             const date = new Date(item.prochaine_vaccination);
             const today = new Date();
             const diffDays = Math.ceil((date - today) / (1000 * 60 * 60 * 24));
-            
+
             if (diffDays <= 7 && diffDays >= 0) {
               return (
                 <View style={styles.vaccinationAlert}>
@@ -576,35 +590,35 @@ const AnimauxScreen = ({ route, navigation }) => {
             styles.modalHeader,
             isLargeScreen && styles.modalHeaderLarge
           ]}>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setFicheModalVisible(false)}
               style={styles.modalCloseButton}
             >
               <MaterialIcons name="close" size={28} color="#2C3E50" />
             </TouchableOpacity>
-            
+
             <Text style={[
               styles.modalTitle,
               isLargeScreen && styles.modalTitleLarge
             ]}>
               Fiche Animal
             </Text>
-            
+
             <View style={styles.modalHeaderActions}>
               <IconButton
                 icon="share-variant"
                 size={24}
-                onPress={() => {/* Partager la fiche */}}
+                onPress={() => {/* Partager la fiche */ }}
               />
               <IconButton
                 icon="printer"
                 size={24}
-                onPress={() => {/* Imprimer la fiche */}}
+                onPress={() => {/* Imprimer la fiche */ }}
               />
             </View>
           </View>
 
-          <ScrollView 
+          <ScrollView
             style={styles.modalContent}
             showsVerticalScrollIndicator={false}
           >
@@ -613,10 +627,10 @@ const AnimauxScreen = ({ route, navigation }) => {
               styles.animalMainInfo,
               isLargeScreen && styles.animalMainInfoLarge
             ]}>
-              <Image 
-                source={{ 
-                  uri: selectedAnimal.photo || 
-                    'https://via.placeholder.com/200?text=Animal' 
+              <Image
+                source={{
+                  uri: selectedAnimal.photo ||
+                    'https://via.placeholder.com/200?text=Animal'
                 }}
                 style={[
                   styles.animalPhotoModal,
@@ -624,7 +638,7 @@ const AnimauxScreen = ({ route, navigation }) => {
                 ]}
                 resizeMode="cover"
               />
-              
+
               <View style={styles.animalMainDetails}>
                 <Text style={[
                   styles.animalNameModal,
@@ -632,13 +646,13 @@ const AnimauxScreen = ({ route, navigation }) => {
                 ]}>
                   {selectedAnimal.nom_animal || selectedAnimal.numero_identification}
                 </Text>
-                
+
                 <Text style={styles.animalSpecies}>
                   {selectedAnimal.espece} - {selectedAnimal.race}
                 </Text>
-                
+
                 <View style={styles.animalTags}>
-                  <Chip 
+                  <Chip
                     style={[
                       styles.statusChipModal,
                       { backgroundColor: getHealthColor(selectedAnimal.statut_sante) }
@@ -647,14 +661,14 @@ const AnimauxScreen = ({ route, navigation }) => {
                   >
                     {getHealthLabel(selectedAnimal.statut_sante)}
                   </Chip>
-                  
-                  <Chip 
+
+                  <Chip
                     style={styles.genderChipModal}
                     icon={selectedAnimal.sexe === 'male' ? 'gender-male' : 'gender-female'}
                   >
                     {selectedAnimal.sexe === 'male' ? 'Mâle' : 'Femelle'}
                   </Chip>
-                  
+
                   {selectedAnimal.type_animal && (
                     <Chip style={styles.typeChipModal}>
                       {selectedAnimal.type_animal}
@@ -676,70 +690,70 @@ const AnimauxScreen = ({ route, navigation }) => {
               ]}>
                 <Card.Content>
                   <View style={styles.cardTitleRow}>
-                    <MaterialCommunityIcons 
-                      name="information" 
-                      size={24} 
-                      color="#3498DB" 
+                    <MaterialCommunityIcons
+                      name="information"
+                      size={24}
+                      color="#3498DB"
                     />
                     <Title style={styles.sectionTitle}>
                       Informations générales
                     </Title>
                   </View>
-                  
+
                   <Divider style={styles.sectionDivider} />
-                  
+
                   <View style={styles.infoRow}>
                     <Text style={styles.infoLabel}>N° Identification</Text>
                     <Text style={styles.infoValue}>
                       {selectedAnimal.numero_identification}
                     </Text>
                   </View>
-                  
+
                   <Divider style={styles.divider} />
-                  
+
                   <View style={styles.infoRow}>
                     <Text style={styles.infoLabel}>Date de naissance</Text>
                     <Text style={styles.infoValue}>
                       {formatDate(selectedAnimal.date_naissance)}
                     </Text>
                   </View>
-                  
+
                   <Divider style={styles.divider} />
-                  
+
                   <View style={styles.infoRow}>
                     <Text style={styles.infoLabel}>Âge</Text>
                     <Text style={styles.infoValue}>
                       {calculateAge(selectedAnimal.date_naissance)}
                     </Text>
                   </View>
-                  
+
                   <Divider style={styles.divider} />
-                  
+
                   <View style={styles.infoRow}>
                     <Text style={styles.infoLabel}>Poids actuel</Text>
                     <Text style={styles.infoValue}>
                       {selectedAnimal.poids_actuel || '-'} kg
                     </Text>
                   </View>
-                  
+
                   <Divider style={styles.divider} />
-                  
+
                   <View style={styles.infoRow}>
                     <Text style={styles.infoLabel}>Origine</Text>
                     <Text style={styles.infoValue}>
                       {selectedAnimal.origine || '-'}
                     </Text>
                   </View>
-                  
+
                   <Divider style={styles.divider} />
-                  
+
                   <View style={styles.infoRow}>
                     <Text style={styles.infoLabel}>Date d'acquisition</Text>
                     <Text style={styles.infoValue}>
                       {formatDate(selectedAnimal.date_acquisition)}
                     </Text>
                   </View>
-                  
+
                   {selectedAnimal.marques_distinctives && (
                     <>
                       <Divider style={styles.divider} />
@@ -761,26 +775,26 @@ const AnimauxScreen = ({ route, navigation }) => {
               ]}>
                 <Card.Content>
                   <View style={styles.cardTitleRow}>
-                    <MaterialCommunityIcons 
-                      name="heart-pulse" 
-                      size={24} 
-                      color="#E74C3C" 
+                    <MaterialCommunityIcons
+                      name="heart-pulse"
+                      size={24}
+                      color="#E74C3C"
                     />
                     <Title style={styles.sectionTitle}>État de santé</Title>
                   </View>
-                  
+
                   <Divider style={styles.sectionDivider} />
-                  
+
                   {/* Statut sanitaire */}
                   <View style={styles.healthStatus}>
                     <View style={[
                       styles.healthIconContainer,
                       { backgroundColor: getHealthColor(selectedAnimal.statut_sante) + '20' }
                     ]}>
-                      <MaterialCommunityIcons 
-                        name={getHealthIcon(selectedAnimal.statut_sante)} 
-                        size={40} 
-                        color={getHealthColor(selectedAnimal.statut_sante)} 
+                      <MaterialCommunityIcons
+                        name={getHealthIcon(selectedAnimal.statut_sante)}
+                        size={40}
+                        color={getHealthColor(selectedAnimal.statut_sante)}
                       />
                     </View>
                     <View style={styles.healthInfo}>
@@ -793,7 +807,7 @@ const AnimauxScreen = ({ route, navigation }) => {
                       </Text>
                     </View>
                   </View>
-                  
+
                   {/* Alerte surveillance */}
                   {selectedAnimal.raison_surveillance && (
                     <View style={styles.surveillanceAlert}>
@@ -812,31 +826,31 @@ const AnimauxScreen = ({ route, navigation }) => {
                   {/* Informations vaccination */}
                   <View style={styles.vaccinationInfo}>
                     <View style={styles.vaccinationRow}>
-                      <MaterialCommunityIcons 
-                        name="needle" 
-                        size={24} 
-                        color="#F39C12" 
+                      <MaterialCommunityIcons
+                        name="needle"
+                        size={24}
+                        color="#F39C12"
                       />
                       <View style={styles.vaccinationDetails}>
                         <Text style={styles.vaccinationLabel}>
                           Dernière vaccination
                         </Text>
                         <Text style={styles.vaccinationDate}>
-                          {selectedAnimal.derniere_vaccination 
+                          {selectedAnimal.derniere_vaccination
                             ? formatDate(selectedAnimal.derniere_vaccination)
                             : 'Aucune vaccination enregistrée'}
                         </Text>
                       </View>
                     </View>
-                    
+
                     {selectedAnimal.prochaine_vaccination && (
                       <>
                         <Divider style={styles.divider} />
                         <View style={styles.vaccinationRow}>
-                          <MaterialCommunityIcons 
-                            name="calendar-clock" 
-                            size={24} 
-                            color="#3498DB" 
+                          <MaterialCommunityIcons
+                            name="calendar-clock"
+                            size={24}
+                            color="#3498DB"
                           />
                           <View style={styles.vaccinationDetails}>
                             <Text style={styles.vaccinationLabel}>
@@ -844,13 +858,14 @@ const AnimauxScreen = ({ route, navigation }) => {
                             </Text>
                             <Text style={[
                               styles.vaccinationDate,
-                              { color: isVaccinationDue(selectedAnimal.prochaine_vaccination) 
-                                ? '#E74C3C' 
-                                : '#2C3E50' 
+                              {
+                                color: isVaccinationDue(selectedAnimal.prochaine_vaccination)
+                                  ? '#E74C3C'
+                                  : '#2C3E50'
                               }
                             ]}>
                               {formatDate(selectedAnimal.prochaine_vaccination)}
-                              {isVaccinationDue(selectedAnimal.prochaine_vaccination) && 
+                              {isVaccinationDue(selectedAnimal.prochaine_vaccination) &&
                                 ' (À faire bientôt!)'}
                             </Text>
                           </View>
@@ -862,45 +877,45 @@ const AnimauxScreen = ({ route, navigation }) => {
               </Card>
 
               {/* Production (si applicable) */}
-              {selectedAnimal.statut_production && 
-               selectedAnimal.statut_production !== 'non_productif' && (
-                <Card style={[
-                  styles.infoCard,
-                  isLargeScreen && styles.infoCardLarge
-                ]}>
-                  <Card.Content>
-                    <View style={styles.cardTitleRow}>
-                      <MaterialCommunityIcons 
-                        name="truck-delivery" 
-                        size={24} 
-                        color="#2ECC71" 
-                      />
-                      <Title style={styles.sectionTitle}>Production</Title>
-                    </View>
-                    
-                    <Divider style={styles.sectionDivider} />
-                    
-                    <View style={styles.infoRow}>
-                      <Text style={styles.infoLabel}>Statut de production</Text>
-                      <Text style={styles.infoValue}>
-                        {selectedAnimal.statut_production}
-                      </Text>
-                    </View>
-                    
-                    {selectedAnimal.debut_production && (
-                      <>
-                        <Divider style={styles.divider} />
-                        <View style={styles.infoRow}>
-                          <Text style={styles.infoLabel}>Début de production</Text>
-                          <Text style={styles.infoValue}>
-                            {formatDate(selectedAnimal.debut_production)}
-                          </Text>
-                        </View>
-                      </>
-                    )}
-                  </Card.Content>
-                </Card>
-              )}
+              {selectedAnimal.statut_production &&
+                selectedAnimal.statut_production !== 'non_productif' && (
+                  <Card style={[
+                    styles.infoCard,
+                    isLargeScreen && styles.infoCardLarge
+                  ]}>
+                    <Card.Content>
+                      <View style={styles.cardTitleRow}>
+                        <MaterialCommunityIcons
+                          name="truck-delivery"
+                          size={24}
+                          color="#2ECC71"
+                        />
+                        <Title style={styles.sectionTitle}>Production</Title>
+                      </View>
+
+                      <Divider style={styles.sectionDivider} />
+
+                      <View style={styles.infoRow}>
+                        <Text style={styles.infoLabel}>Statut de production</Text>
+                        <Text style={styles.infoValue}>
+                          {selectedAnimal.statut_production}
+                        </Text>
+                      </View>
+
+                      {selectedAnimal.debut_production && (
+                        <>
+                          <Divider style={styles.divider} />
+                          <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Début de production</Text>
+                            <Text style={styles.infoValue}>
+                              {formatDate(selectedAnimal.debut_production)}
+                            </Text>
+                          </View>
+                        </>
+                      )}
+                    </Card.Content>
+                  </Card>
+                )}
 
               {/* Généalogie */}
               {(selectedAnimal.mere_numero || selectedAnimal.pere_numero) && (
@@ -910,16 +925,16 @@ const AnimauxScreen = ({ route, navigation }) => {
                 ]}>
                   <Card.Content>
                     <View style={styles.cardTitleRow}>
-                      <MaterialCommunityIcons 
-                        name="family-tree" 
-                        size={24} 
-                        color="#9B59B6" 
+                      <MaterialCommunityIcons
+                        name="family-tree"
+                        size={24}
+                        color="#9B59B6"
                       />
                       <Title style={styles.sectionTitle}>Généalogie</Title>
                     </View>
-                    
+
                     <Divider style={styles.sectionDivider} />
-                    
+
                     {selectedAnimal.mere_numero && (
                       <>
                         <View style={styles.infoRow}>
@@ -931,7 +946,7 @@ const AnimauxScreen = ({ route, navigation }) => {
                         <Divider style={styles.divider} />
                       </>
                     )}
-                    
+
                     {selectedAnimal.pere_numero && (
                       <View style={styles.infoRow}>
                         <Text style={styles.infoLabel}>Père</Text>
@@ -953,10 +968,10 @@ const AnimauxScreen = ({ route, navigation }) => {
                 <Card.Content>
                   <View style={styles.historyHeader}>
                     <View style={styles.cardTitleRow}>
-                      <MaterialCommunityIcons 
-                        name="history" 
-                        size={24} 
-                        color="#1ABC9C" 
+                      <MaterialCommunityIcons
+                        name="history"
+                        size={24}
+                        color="#1ABC9C"
                       />
                       <Title style={styles.sectionTitle}>
                         Historique médical
@@ -966,9 +981,9 @@ const AnimauxScreen = ({ route, navigation }) => {
                       mode="text"
                       onPress={() => {
                         setFicheModalVisible(false);
-                        navigation.navigate('HistoriqueMedical', { 
+                        navigation.navigate('HistoriqueMedical', {
                           animalId: selectedAnimal.id,
-                          animalNom: selectedAnimal.nom_animal || 
+                          animalNom: selectedAnimal.nom_animal ||
                             selectedAnimal.numero_identification
                         });
                       }}
@@ -977,19 +992,19 @@ const AnimauxScreen = ({ route, navigation }) => {
                       Voir tout
                     </Button>
                   </View>
-                  
+
                   <Divider style={styles.sectionDivider} />
-                  
-                  {selectedAnimal.historique_recent && 
-                   selectedAnimal.historique_recent.length > 0 ? (
+
+                  {selectedAnimal.historique_recent &&
+                    selectedAnimal.historique_recent.length > 0 ? (
                     selectedAnimal.historique_recent.slice(0, 5).map((item, index) => (
                       <TouchableOpacity
                         key={item.id || index}
                         style={styles.historyItem}
                         onPress={() => {
                           setFicheModalVisible(false);
-                          navigation.navigate('InterventionDetails', { 
-                            interventionId: item.id 
+                          navigation.navigate('InterventionDetails', {
+                            interventionId: item.id
                           });
                         }}
                       >
@@ -997,13 +1012,13 @@ const AnimauxScreen = ({ route, navigation }) => {
                           styles.historyIcon,
                           { backgroundColor: getInterventionColor(item.type_intervention) + '20' }
                         ]}>
-                          <MaterialCommunityIcons 
-                            name={getInterventionIcon(item.type_intervention)} 
-                            size={24} 
-                            color={getInterventionColor(item.type_intervention)} 
+                          <MaterialCommunityIcons
+                            name={getInterventionIcon(item.type_intervention)}
+                            size={24}
+                            color={getInterventionColor(item.type_intervention)}
                           />
                         </View>
-                        
+
                         <View style={styles.historyInfo}>
                           <Text style={styles.historyType}>
                             {item.type_label || item.type_intervention}
@@ -1025,16 +1040,16 @@ const AnimauxScreen = ({ route, navigation }) => {
                             )}
                           </View>
                         </View>
-                        
+
                         <MaterialIcons name="chevron-right" size={24} color="#BDC3C7" />
                       </TouchableOpacity>
                     ))
                   ) : (
                     <View style={styles.emptyHistory}>
-                      <MaterialCommunityIcons 
-                        name="clipboard-text-off" 
-                        size={48} 
-                        color="#BDC3C7" 
+                      <MaterialCommunityIcons
+                        name="clipboard-text-off"
+                        size={48}
+                        color="#BDC3C7"
                       />
                       <Text style={styles.noHistoryText}>
                         Aucun historique médical enregistré
@@ -1055,10 +1070,10 @@ const AnimauxScreen = ({ route, navigation }) => {
                 icon="medical-bag"
                 onPress={() => {
                   setFicheModalVisible(false);
-                  navigation.navigate('Interventions', { 
+                  navigation.navigate('Interventions', {
                     action: 'create',
                     animalId: selectedAnimal.id,
-                    animalNom: selectedAnimal.nom_animal || 
+                    animalNom: selectedAnimal.nom_animal ||
                       selectedAnimal.numero_identification
                   });
                 }}
@@ -1067,16 +1082,16 @@ const AnimauxScreen = ({ route, navigation }) => {
               >
                 Nouvelle intervention
               </Button>
-              
+
               <Button
                 mode="contained"
                 icon="needle"
                 onPress={() => {
                   setFicheModalVisible(false);
-                  navigation.navigate('Interventions', { 
+                  navigation.navigate('Interventions', {
                     action: 'vaccination',
                     animalId: selectedAnimal.id,
-                    animalNom: selectedAnimal.nom_animal || 
+                    animalNom: selectedAnimal.nom_animal ||
                       selectedAnimal.numero_identification
                   });
                 }}
@@ -1092,9 +1107,9 @@ const AnimauxScreen = ({ route, navigation }) => {
                   icon="history"
                   onPress={() => {
                     setFicheModalVisible(false);
-                    navigation.navigate('HistoriqueMedical', { 
+                    navigation.navigate('HistoriqueMedical', {
                       animalId: selectedAnimal.id,
-                      animalNom: selectedAnimal.nom_animal || 
+                      animalNom: selectedAnimal.nom_animal ||
                         selectedAnimal.numero_identification
                     });
                   }}
@@ -1109,8 +1124,8 @@ const AnimauxScreen = ({ route, navigation }) => {
                   icon="pencil"
                   onPress={() => {
                     setFicheModalVisible(false);
-                    navigation.navigate('EditerAnimal', { 
-                      animalId: selectedAnimal.id 
+                    navigation.navigate('EditerAnimal', {
+                      animalId: selectedAnimal.id
                     });
                   }}
                   style={[styles.actionButton, styles.actionButtonOutlined]}
@@ -1131,10 +1146,10 @@ const AnimauxScreen = ({ route, navigation }) => {
   // Liste vide
   const renderEmptyList = () => (
     <View style={styles.emptyContainer}>
-      <MaterialCommunityIcons 
-        name="cow-off" 
-        size={isLargeScreen ? 80 : 60} 
-        color="#BDC3C7" 
+      <MaterialCommunityIcons
+        name="cow-off"
+        size={isLargeScreen ? 80 : 60}
+        color="#BDC3C7"
       />
       <Text style={[
         styles.emptyText,
@@ -1143,7 +1158,7 @@ const AnimauxScreen = ({ route, navigation }) => {
         Aucun animal trouvé
       </Text>
       <Text style={styles.emptySubtext}>
-        {searchQuery 
+        {searchQuery
           ? 'Essayez avec d\'autres critères de recherche'
           : 'Ajustez vos filtres ou ajoutez un nouvel animal'}
       </Text>
@@ -1153,7 +1168,7 @@ const AnimauxScreen = ({ route, navigation }) => {
   // Footer de la liste (chargement)
   const renderFooter = () => {
     if (!loading || refreshing) return null;
-    
+
     return (
       <View style={styles.footerLoader}>
         <ActivityIndicator size="small" color="#3498DB" />
@@ -1226,18 +1241,18 @@ const AnimauxScreen = ({ route, navigation }) => {
 
   const calculateAge = (dateNaissance) => {
     if (!dateNaissance) return '-';
-    
+
     const birth = new Date(dateNaissance);
     const today = new Date();
-    const ageMonths = (today.getFullYear() - birth.getFullYear()) * 12 + 
-                      (today.getMonth() - birth.getMonth());
-    
+    const ageMonths = (today.getFullYear() - birth.getFullYear()) * 12 +
+      (today.getMonth() - birth.getMonth());
+
     if (ageMonths < 1) return 'Moins d\'1 mois';
     if (ageMonths < 12) return `${ageMonths} mois`;
-    
+
     const years = Math.floor(ageMonths / 12);
     const months = ageMonths % 12;
-    
+
     if (months === 0) {
       return `${years} an${years > 1 ? 's' : ''}`;
     }
@@ -1246,7 +1261,7 @@ const AnimauxScreen = ({ route, navigation }) => {
 
   const formatDate = (dateString) => {
     if (!dateString) return '-';
-    
+
     const date = new Date(dateString);
     return date.toLocaleDateString('fr-FR', {
       day: '2-digit',
@@ -1257,11 +1272,11 @@ const AnimauxScreen = ({ route, navigation }) => {
 
   const isVaccinationDue = (dateString) => {
     if (!dateString) return false;
-    
+
     const date = new Date(dateString);
     const today = new Date();
     const diffDays = Math.ceil((date - today) / (1000 * 60 * 60 * 24));
-    
+
     return diffDays <= 7 && diffDays >= 0;
   };
 
@@ -1307,6 +1322,15 @@ const AnimauxScreen = ({ route, navigation }) => {
       />
 
       {renderFicheAnimal()}
+
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={3000}
+        style={{ backgroundColor: snackbarType === 'error' ? '#E74C3C' : '#2ECC71' }}
+      >
+        {snackbarMessage}
+      </Snackbar>
     </View>
   );
 };

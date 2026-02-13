@@ -25,7 +25,9 @@ import {
   Divider,
   Modal,
   Portal,
-  TextInput
+  TextInput,
+  Snackbar,
+  Button
 } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { MaterialIcons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -37,11 +39,11 @@ import { io } from 'socket.io-client';
 // Configuration de l'API
 const API_BASE_URL = __DEV__
   ? Platform.select({
-    ios: 'http://localhost:5000',
-    android: 'http://10.0.2.2:5000',
-    default: 'http://localhost:5000'
+    ios: 'https://nutrifix-1-twdf.onrender.com',
+    android: 'https://nutrifix-1-twdf.onrender.com',
+    default: 'https://nutrifix-1-twdf.onrender.com'
   })
-  : 'https://your-production-api.com';
+  : 'https://nutrifix-1-twdf.onrender.com';
 
 const DashboardScreen = () => {
   const navigation = useNavigation();
@@ -62,6 +64,17 @@ const DashboardScreen = () => {
   const [vaccinationsDues, setVaccinationsDues] = useState([]);
   const [animauxSurveillance, setAnimauxSurveillance] = useState([]);
   const [alertes, setAlertes] = useState([]);
+
+  // Snackbar
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarType, setSnackbarType] = useState('info');
+
+  const showSnackbar = (message, type = 'info') => {
+    setSnackbarMessage(message);
+    setSnackbarType(type);
+    setSnackbarVisible(true);
+  };
 
   // États pour la communication
   const [communicationModalVisible, setCommunicationModalVisible] = useState(false);
@@ -169,10 +182,8 @@ const DashboardScreen = () => {
       }
     } catch (error) {
       console.error('Erreur chargement dashboard:', error);
-      Alert.alert(
-        'Erreur',
-        'Impossible de charger les données du dashboard. Veuillez réessayer.'
-      );
+      console.error('Erreur chargement dashboard:', error);
+      showSnackbar('Impossible de charger les données. Veuillez réessayer.', 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -211,7 +222,7 @@ const DashboardScreen = () => {
 
   const handleSendMessage = async () => {
     if (!messageSubject.trim() || !messageBody.trim()) {
-      Alert.alert('Erreur', 'Veuillez remplir le sujet et le message');
+      showSnackbar('Veuillez remplir le sujet et le message', 'error');
       return;
     }
 
@@ -225,16 +236,16 @@ const DashboardScreen = () => {
       }, config);
 
       if (response.data.success) {
-        Alert.alert('Succès', 'Votre message a été envoyé à l\'administration');
+        showSnackbar('Votre message a été envoyé à l\'administration', 'success');
         setCommunicationModalVisible(false);
         setMessageSubject('');
         setMessageBody('');
       } else {
-        Alert.alert('Erreur', response.data.message || 'Impossible d\'envoyer le message');
+        showSnackbar(response.data.message || 'Impossible d\'envoyer le message', 'error');
       }
     } catch (error) {
       console.error('❌ Erreur envoi message:', error);
-      Alert.alert('Erreur', 'Une erreur est survenue lors de l\'envoi');
+      showSnackbar('Une erreur est survenue lors de l\'envoi', 'error');
     } finally {
       setIsSending(false);
     }
@@ -1048,6 +1059,15 @@ const DashboardScreen = () => {
         </View>
 
         <View style={styles.bottomSpacing} />
+
+        <Snackbar
+          visible={snackbarVisible}
+          onDismiss={() => setSnackbarVisible(false)}
+          duration={3000}
+          style={{ backgroundColor: snackbarType === 'error' ? '#E74C3C' : '#2ECC71' }}
+        >
+          {snackbarMessage}
+        </Snackbar>
       </ScrollView>
     );
   }
@@ -1139,6 +1159,15 @@ const DashboardScreen = () => {
           </View>
         </Modal>
       </Portal>
+
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={3000}
+        style={{ backgroundColor: snackbarType === 'error' ? '#E74C3C' : '#2ECC71' }}
+      >
+        {snackbarMessage}
+      </Snackbar>
     </ScrollView>
   );
 };

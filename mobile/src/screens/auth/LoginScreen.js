@@ -979,7 +979,7 @@ const LoginScreen = ({ navigation: navigationProp, onLogin }) => {
                 >
                     <Animated.View style={[webDynamicStyles.welcomeContainer, { opacity: fadeAnim }]}>
                         <Text style={webDynamicStyles.welcomeTitle}>Welcome</Text>
-                        <Text style={webDynamicStyles.welcomeSubtitle}>back . . .</Text>
+                        <Text style={webDynamicStyles.welcomeSubtitle}>back . . . NUTRIFIX</Text>
                     </Animated.View>
 
                     {/* Decorative Grid Pattern */}
