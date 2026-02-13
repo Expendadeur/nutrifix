@@ -7,7 +7,6 @@ const db = require('../../database/db');
 const bcrypt = require('bcryptjs');
 const QRCode = require('qrcode');
 const emailService = require('../emailService');
-
 // ============================================
 // MIDDLEWARE DE LOGGING
 // ============================================
@@ -18,7 +17,15 @@ const logAction = async (userId, module, action, description, details = null) =>
                 id_utilisateur, module, type_action, action_details,
                 donnees_avant, donnees_apres, ip_address, date_action
             ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
-        `, [userId, module, action, description, null, details ? JSON.stringify(details) : null, null]);
+        `, [
+            userId,
+            module,
+            action,
+            description,
+            null,
+            details ? JSON.stringify(details) : null,
+            null
+        ]);
     } catch (error) {
         console.error('Erreur logging:', error);
     }
@@ -30,111 +37,107 @@ const logAction = async (userId, module, action, description, details = null) =>
 
 /**
  * GET /api/admin/historique
- * Récupérer l'historique complet avec filtres avancés
  */
-
 router.get('/historique', authenticate, async (req, res) => {
-  try {
-    // Désactiver le cache (évite 304)
-    res.set({
-      'Cache-Control': 'no-store, no-cache, must-revalidate, private',
-      'Pragma': 'no-cache',
-      'Expires': '0'
-    });
+    try {
+        // Anti-cache (évite HTTP 304)
+        res.set({
+            'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+        });
 
-    const startDate = req.query.startDate || null;
-    const endDate = req.query.endDate || null;
+        const startDate = req.query.startDate || null;
+        const endDate = req.query.endDate || null;
 
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 20;
-    const offset = (page - 1) * limit;
+        const page = Number(req.query.page) || 1;
+        const limit = Number(req.query.limit) || 20;
+        const offset = (page - 1) * limit;
 
-    const whereConditions = [];
-    const params = [];
+        if (limit <= 0 || limit > 100) {
+            return res.status(400).json({ success: false, message: 'Limit invalide' });
+        }
 
-    if (startDate) {
-      whereConditions.push('DATE(t.date_action) >= ?');
-      params.push(startDate);
+        const whereConditions = [];
+        const params = [];
+
+        if (startDate) {
+            whereConditions.push('DATE(t.date_action) >= ?');
+            params.push(startDate);
+        }
+
+        if (endDate) {
+            whereConditions.push('DATE(t.date_action) <= ?');
+            params.push(endDate);
+        }
+
+        const whereClause =
+            whereConditions.length > 0
+                ? 'AND ' + whereConditions.join(' AND ')
+                : '';
+
+        // ⚠️ LIMIT / OFFSET injectés directement (MySQL ne les accepte pas en ?)
+        const sql = `
+            SELECT 
+                t.*,
+                u.nom_complet AS utilisateur_nom,
+                u.role AS utilisateur_role,
+                u.photo_identite AS utilisateur_photo
+            FROM traces t
+            LEFT JOIN utilisateurs u ON t.id_utilisateur = u.id
+            WHERE 1=1
+            ${whereClause}
+            ORDER BY t.date_action DESC
+            LIMIT ${limit} OFFSET ${offset}
+        `;
+
+        const [rows] = await db.query(sql, params);
+
+        // Total pour pagination
+        const countSql = `
+            SELECT COUNT(*) AS total
+            FROM traces t
+            WHERE 1=1
+            ${whereClause}
+        `;
+
+        const [[countResult]] = await db.query(countSql, params);
+
+        res.status(200).json({
+            success: true,
+            data: rows,
+            pagination: {
+                total: countResult.total,
+                page,
+                limit,
+                pages: Math.ceil(countResult.total / limit)
+            }
+        });
+
+    } catch (error) {
+        console.error('Get historique error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors de la récupération de l’historique',
+            error: error.message
+        });
     }
-
-    if (endDate) {
-      whereConditions.push('DATE(t.date_action) <= ?');
-      params.push(endDate);
-    }
-
-    const whereClause =
-      whereConditions.length > 0
-        ? 'AND ' + whereConditions.join(' AND ')
-        : '';
-
-    const sql = `
-      SELECT 
-        t.*,
-        u.nom_complet AS utilisateur_nom,
-        u.role AS utilisateur_role,
-        u.photo_identite AS utilisateur_photo
-      FROM traces t
-      LEFT JOIN utilisateurs u ON t.id_utilisateur = u.id
-      WHERE 1=1
-      ${whereClause}
-      ORDER BY t.date_action DESC
-      LIMIT ? OFFSET ?
-    `;
-
-    const queryParams = [
-      ...params,
-      limit,   // OBLIGATOIREMENT Number
-      offset   // OBLIGATOIREMENT Number
-    ];
-
-    const [rows] = await db.query(sql, queryParams);
-
-    // Total pour pagination
-    const countSql = `
-      SELECT COUNT(*) AS total
-      FROM traces t
-      WHERE 1=1
-      ${whereClause}
-    `;
-
-    const [[countResult]] = await db.query(countSql, params);
-
-    res.json({
-      success: true,
-      data: rows,
-      pagination: {
-        total: countResult.total,
-        page,
-        limit,
-        pages: Math.ceil(countResult.total / limit)
-      }
-    });
-
-  } catch (error) {
-    console.error('Get historique error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Erreur lors de la récupération de l’historique',
-      message: error.message
-    });
-  }
 });
-
 
 /**
  * GET /api/admin/historique/:id
- * Détails d'une entrée d'historique
  */
 router.get('/historique/:id', authenticate, authorize(['admin']), async (req, res) => {
     try {
         const { id } = req.params;
 
-        const [trace] = await db.query(`
-            SELECT t.*,
-                   u.nom_complet as utilisateur_nom,
-                   u.email as utilisateur_email,
-                   u.role as utilisateur_role,
-                   u.photo_identite as utilisateur_photo
+        const [[trace]] = await db.query(`
+            SELECT 
+                t.*,
+                u.nom_complet AS utilisateur_nom,
+                u.email AS utilisateur_email,
+                u.role AS utilisateur_role,
+                u.photo_identite AS utilisateur_photo
             FROM traces t
             LEFT JOIN utilisateurs u ON t.id_utilisateur = u.id
             WHERE t.id = ?
@@ -143,14 +146,11 @@ router.get('/historique/:id', authenticate, authorize(['admin']), async (req, re
         if (!trace) {
             return res.status(404).json({
                 success: false,
-                message: 'Entrée d\'historique non trouvée.'
+                message: 'Entrée d’historique non trouvée.'
             });
         }
 
-        res.status(200).json({
-            success: true,
-            data: trace
-        });
+        res.status(200).json({ success: true, data: trace });
     } catch (error) {
         console.error('Get historique detail error:', error);
         res.status(500).json({
@@ -159,7 +159,6 @@ router.get('/historique/:id', authenticate, authorize(['admin']), async (req, re
         });
     }
 });
-
 /**
  * GET /api/admin/historique/stats/resume
  * Statistiques résumées de l'historique
