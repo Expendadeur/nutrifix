@@ -55,7 +55,7 @@ const PAYMENT_METHODS = [
 ];
 
 const OperationsFraisScreen = ({ navigation }) => {
-    const windowDimensions = useWindowDimensions();
+    const windowDimensions = useWindowDimensions()
 
     // ============================================
     // ÉTATS OPÉRATIONS

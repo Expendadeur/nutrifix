@@ -195,40 +195,64 @@ app.use(helmet({
     crossOriginEmbedderPolicy: false,
     crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
+// ============================================
+// CORS CONFIGURATION ULTRA PRO
+// ============================================
 
-// CORS Configuration avancée
-app.use(cors({
+const corsOptions = {
     origin: (origin, callback) => {
-        // Autoriser les requêtes sans origine (mobile apps, Postman, curl)
+
+        // ✅ Autoriser apps mobiles / Postman / curl (pas d'origin)
         if (!origin) {
             return callback(null, true);
         }
 
-        // En développement, autoriser toutes les origines
+        // ✅ En développement → tout autoriser
         if (process.env.NODE_ENV === 'development') {
             return callback(null, true);
         }
 
-        // En production, vérifier les origines autorisées
+        // ✅ Autoriser automatiquement TOUS les projets Vercel
+        if (origin.endsWith('.vercel.app')) {
+            return callback(null, true);
+        }
+
+        // ✅ Autoriser Expo (web + tunnel)
+        if (origin.includes('expo.dev') || origin.includes('exp.direct')) {
+            return callback(null, true);
+        }
+
+        // ✅ Origines définies dans .env
         if (allowedOrigins.includes(origin)) {
             return callback(null, true);
         }
 
-        // Autoriser les sous-domaines en production
-        const isSubdomain = allowedOrigins.some(allowed => {
+        // ✅ Autoriser sous-domaines
+        const isSubdomainAllowed = allowedOrigins.some(allowed => {
             const domain = allowed.replace(/^https?:\/\//, '');
             return origin.endsWith(domain);
         });
 
-        if (isSubdomain) {
+        if (isSubdomainAllowed) {
             return callback(null, true);
         }
 
+        // ❌ Bloquer le reste
         console.warn('⚠️ Origine CORS refusée:', origin);
-        callback(new Error('Not allowed by CORS'));
+        return callback(new Error('Not allowed by CORS'));
     },
+
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+
+    methods: [
+        'GET',
+        'POST',
+        'PUT',
+        'PATCH',
+        'DELETE',
+        'OPTIONS'
+    ],
+
     allowedHeaders: [
         'Content-Type',
         'Authorization',
@@ -237,12 +261,20 @@ app.use(cors({
         'Origin',
         'Cache-Control'
     ],
-    exposedHeaders: ['X-Total-Count', 'X-Auth-Token'],
-    maxAge: 86400 // 24 heures
-}));
 
-// Preflight pour toutes les routes
-app.options('*', cors());
+    exposedHeaders: [
+        'X-Total-Count',
+        'X-Auth-Token'
+    ],
+
+    maxAge: 86400 // cache preflight 24h
+};
+
+// 🔥 IMPORTANT : mettre AVANT les routes
+app.use(cors(corsOptions));
+
+// Préflight
+app.options('*', cors(corsOptions));
 
 // Rate limiting global - Configuration de base
 const globalLimiter = rateLimit({
